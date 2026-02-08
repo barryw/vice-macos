@@ -139,6 +139,7 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/printerdrv \
 	-I$(top_srcdir)/src/fsdevice \
 	-I$(top_srcdir)/src/monitor \
+	-I$(top_srcdir)/src/mcp \
 	-I$(top_srcdir)/src/plus4 \
 	-I$(top_srcdir)/src/vic20 \
 	-I$(top_srcdir)/src/vdrive \
@@ -630,6 +631,12 @@ xcbm5x0_lib = $(top_builddir)/src/cbm2/libcbm5x0.a
 xcbm5x0stubs_lib = $(top_builddir)/src/cbm2/libcbm5x0stubs.a
 zmbv_lib = $(top_builddir)/src/lib/libzmbv/libzmbv.a
 
+if HAVE_MCP_SERVER
+mcp_lib = $(top_builddir)/src/mcp/libmcp.a
+else
+mcp_lib =
+endif
+
 common_libs = @ARCH_LIBS@ @LIBOBJS@
 resid_libs = @RESID_LIBS@
 resid_dtv_libs = @RESID_DTV_LIBS@
@@ -739,6 +746,7 @@ x64_libs =  \
 	$(vdrive_lib) \
 	$(sid_lib) \
 	$(monitor_lib) \
+	$(mcp_lib) \
 	$(driver_libs) \
 	$(rs232drv_lib) \
 	$(vicii_lib) \
@@ -797,6 +805,7 @@ x64sc_libs =  \
 	$(vdrive_lib) \
 	$(sid_lib) \
 	$(monitor_lib) \
+	$(mcp_lib) \
 	$(driver_libs) \
 	$(rs232drv_lib) \
 	$(viciisc_lib) \
@@ -860,6 +869,7 @@ x64dtv_libs =  \
 	$(vdrive_lib) \
 	$(sid_dtv_lib) \
 	$(monitor_lib) \
+	$(mcp_lib) \
 	$(driver_libs) \
 	$(viciidtv_lib) \
 	$(raster_lib) \
@@ -920,6 +930,7 @@ xscpu64_libs =  \
 	$(vdrive_lib) \
 	$(sid_lib) \
 	$(monitor_lib) \
+	$(mcp_lib) \
 	$(driver_libs) \
 	$(rs232drv_lib) \
 	$(viciisc_lib) \
@@ -980,6 +991,7 @@ x128_libs =  \
 	$(vdrive_lib) \
 	$(sid_lib) \
 	$(monitor_lib) \
+	$(mcp_lib) \
 	$(driver_libs) \
 	$(rs232drv_lib) \
 	$(vicii_lib) \
@@ -1037,6 +1049,7 @@ xvic_libs =  \
 	$(parallel_lib) \
 	$(vdrive_lib) \
 	$(monitor_lib) \
+	$(mcp_lib) \
 	$(sid_lib) \
 	$(driver_libs) \
 	$(rs232drv_lib) \
@@ -1090,6 +1103,7 @@ xpet_libs =  \
 	$(parallel_lib) \
 	$(vdrive_lib) \
 	$(monitor_lib) \
+	$(mcp_lib) \
 	$(sid_lib) \
 	$(driver_libs) \
 	$(rs232drvpet_lib) \
@@ -1150,6 +1164,7 @@ xplus4_libs =  \
 	$(iecbus_lib) \
 	$(vdrive_lib) \
 	$(monitor_lib) \
+	$(mcp_lib) \
 	$(sid_lib) \
 	$(driver_libs) \
 	$(rs232drv_lib) \
@@ -1209,6 +1224,7 @@ xcbm2_libs = \
 	$(parallel_lib) \
 	$(vdrive_lib) \
 	$(monitor_lib) \
+	$(mcp_lib) \
 	$(sid_lib) \
 	$(driver_libs) \
 	$(rs232drvpet_lib) \
@@ -1265,6 +1281,7 @@ xcbm5x0_libs = \
 	$(parallel_lib) \
 	$(vdrive_lib) \
 	$(monitor_lib) \
+	$(mcp_lib) \
 	$(xcbm5x0_lib) \
 	$(sid_lib) \
 	$(driver_libs) \
