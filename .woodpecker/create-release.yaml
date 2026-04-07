@@ -27,6 +27,12 @@ steps:
         if [ -z "$${NOTES}" ]; then
           NOTES="No changes since last release."
         fi
+      # Delete any orphaned draft releases from previous failed pipelines
+      - |
+        for tag in $$(gh release list --repo "$${CI_REPO}" --json tagName,isDraft --jq '.[] | select(.isDraft) | .tagName'); do
+          echo "Deleting orphaned draft: $${tag}"
+          gh release delete "$${tag}" --repo "$${CI_REPO}" --yes 2>/dev/null || true
+        done
       - |
         if gh release view "$${VERSION}" --repo "$${CI_REPO}" >/dev/null 2>&1; then
           echo "Release $${VERSION} already exists, skipping creation"
