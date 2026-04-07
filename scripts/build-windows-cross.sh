@@ -83,6 +83,8 @@ do_regenerate_autotools() {
     sleep 1 && find . -name aclocal.m4 -exec touch {} +
     sleep 1 && find . -name configure -exec touch {} + && find . -name config.h.in -exec touch {} +
     find . -name Makefile.in -exec touch {} +
+    # Regenerate bison-generated parsers to avoid stale .c files
+    bison -d -o src/monitor/mon_parse.c src/monitor/mon_parse.y
 }
 
 case "$ACTION" in

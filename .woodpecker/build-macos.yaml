@@ -17,6 +17,7 @@ steps:
         brew install
         autoconf
         automake
+        bison
         pkg-config
         xa
         dos2unix
@@ -51,6 +52,8 @@ steps:
       - sleep 1 && find . -name aclocal.m4 -exec touch {} +
       - sleep 1 && find . -name configure -exec touch {} + && find . -name config.h.in -exec touch {} +
       - find . -name Makefile.in -exec touch {} +
+      # Regenerate bison-generated parsers to avoid stale .c files
+      - bison -d -o src/monitor/mon_parse.c src/monitor/mon_parse.y
       - mkdir -p build-gui && cd build-gui
       - >-
         ../configure

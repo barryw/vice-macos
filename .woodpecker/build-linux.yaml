@@ -23,6 +23,7 @@ steps:
         automake
         build-essential
         ca-certificates
+        bison
         byacc
         dos2unix
         flex
@@ -61,6 +62,8 @@ steps:
       - sleep 1 && find . -name aclocal.m4 -exec touch {} +
       - sleep 1 && find . -name configure -exec touch {} + && find . -name config.h.in -exec touch {} +
       - find . -name Makefile.in -exec touch {} +
+      # Regenerate bison-generated parsers to avoid stale .c files
+      - bison -d -o src/monitor/mon_parse.c src/monitor/mon_parse.y
       - cd ..
       - git fetch --tags
       - VERSION=$$(bash scripts/compute-version.sh --current)
