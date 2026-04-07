@@ -420,6 +420,7 @@ jobs:
                               texlive-latex-extra \
                               xa65
           sudo apt install -y ${{ matrix.ui.deps }}
+          sudo apt upgrade
 
       - name: Build
         shell: bash

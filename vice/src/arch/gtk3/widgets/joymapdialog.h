@@ -1,9 +1,11 @@
+/** \file   joymapdialog.h
+ * \brief   Widget to set joystick mappings - header
+ *
+ * \author  Bas Wassink <b.wassink@ziggo.nl>
+ * \author  groepaz <groepaz@gmx.net>
+ */
+
 /*
- * snespad.h
- *
- * Written by
- *  Marco van den Heuvel <blackystardust68@yahoo.com>
- *
  * This file is part of VICE, the Versatile Commodore Emulator.
  * See README for copyright notice.
  *
@@ -24,32 +26,12 @@
  *
  */
 
-#ifndef VICE_SNESPAD_H
-#define VICE_SNESPAD_H
+#ifndef VICE_JOYMAPDIALOG_H
+#define VICE_JOYMAPDIALOG_H
 
-#include "types.h"
+#include "vice.h"
+#include <gtk/gtk.h>
 
-/* this is the bit order as delivered by the SNES Pad hardware interface */
-enum {
-    SNESPAD_BUTTON_B = 0,
-    SNESPAD_BUTTON_Y,
-    SNESPAD_BUTTON_SELECT,
-    SNESPAD_BUTTON_START,
-    SNESPAD_UP,
-    SNESPAD_DOWN,
-    SNESPAD_LEFT,
-    SNESPAD_RIGHT,
-    SNESPAD_BUTTON_A,
-    SNESPAD_BUTTON_X,
-    SNESPAD_BUMPER_LEFT,
-    SNESPAD_BUMPER_RIGHT,
-    SNESPAD_BIT_12_1,
-    SNESPAD_BIT_13_1,
-    SNESPAD_BIT_14_1,
-    SNESPAD_BIT_15_1,
-
-    /* This item always needs to be at the end */
-    SNESPAD_EOS
-};
+void joymap_dialog_show(joystick_device_t *joydev, joystick_mapping_t *mapping, const char *input, const char *name, void (*callback)(joystick_device_t*));
 
 #endif

@@ -462,6 +462,7 @@ jobs:
                               texlive-latex-extra \
                               xa65
           sudo apt install -y ${{ matrix.ui.deps }}
+          sudo apt upgrade
 
       - name: Build
         shell: bash
@@ -530,7 +531,7 @@ jobs:
   build_mac:
     name: Build macOS Binaries
     env:
-      SHARED_DEPS: "autoconf automake pkg-config xa lame dos2unix giflib libpng giflib libvorbis flac"
+      SHARED_DEPS: "autoconf automake pkg-config xa lame dos2unix giflib libpng giflib libvorbis flac libusb"
     needs: [create_release, build_doc]
     strategy:
       fail-fast: false

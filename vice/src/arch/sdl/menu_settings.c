@@ -393,7 +393,7 @@ static UI_MENU_CALLBACK(save_joymap_callback)
             return NULL;
         }
 
-        if (joy_arch_mapping_dump(file)) {
+        if (joy_arch_mapping_dump(file, NULL)) {
             ui_error("Cannot save joymap.");
         } else {
             ui_message("Joymap saved.");
@@ -402,6 +402,7 @@ static UI_MENU_CALLBACK(save_joymap_callback)
     return NULL;
 }
 
+#if 0
 static UI_MENU_CALLBACK(save_joymap_to_callback)
 {
     if (activated) {
@@ -410,7 +411,7 @@ static UI_MENU_CALLBACK(save_joymap_to_callback)
         name = sdl_ui_file_selection_dialog("Choose joystick map file", FILEREQ_MODE_SAVE_FILE);
 
         if (name != NULL) {
-            if (joy_arch_mapping_dump(name) < 0) {
+            if (joy_arch_mapping_dump(name, NULL) < 0) {
                 ui_error("Cannot save joymap.");
             } else {
                 ui_message("Joymap saved.");
@@ -420,6 +421,7 @@ static UI_MENU_CALLBACK(save_joymap_to_callback)
     }
     return NULL;
 }
+#endif
 
 static UI_MENU_CALLBACK(load_joymap_callback)
 {
@@ -430,7 +432,7 @@ static UI_MENU_CALLBACK(load_joymap_callback)
             return NULL;
         }
 
-        if (joy_arch_mapping_load(file)) {
+        if (joy_arch_mapping_load(file, NULL)) {
             ui_error("Cannot load joymap.");
         } else {
             ui_message("Joymap loaded.");
@@ -439,6 +441,7 @@ static UI_MENU_CALLBACK(load_joymap_callback)
     return NULL;
 }
 
+#if 0
 static UI_MENU_CALLBACK(load_joymap_from_callback)
 {
     if (activated) {
@@ -457,6 +460,7 @@ static UI_MENU_CALLBACK(load_joymap_from_callback)
     }
     return NULL;
 }
+#endif
 #endif
 
 UI_MENU_DEFINE_TOGGLE(SaveResourcesOnExit)
@@ -654,10 +658,11 @@ ui_menu_entry_t settings_manager_menu[] = {
 #ifdef HAVE_SDL_NUMJOYSTICKS
     SDL_MENU_ITEM_SEPARATOR,
 
-    {   .string   = "Save joystick map",
+    {   .string   = "Save default joystick map",
         .type     = MENU_ENTRY_OTHER,
         .callback = save_joymap_callback,
     },
+#if 0
     {   .string   = "Save joystick map to",
         .type     = MENU_ENTRY_OTHER,
         .callback = save_joymap_to_callback
@@ -666,7 +671,8 @@ ui_menu_entry_t settings_manager_menu[] = {
         .type     = MENU_ENTRY_OTHER,
         .callback = load_joymap_from_callback
     },
-    {   .string   = "Load joystick map",
+#endif
+    {   .string   = "Load default joystick map",
         .type     = MENU_ENTRY_OTHER,
         .callback = load_joymap_callback
     },
