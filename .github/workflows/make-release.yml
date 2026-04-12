@@ -17,7 +17,7 @@ jobs:
     steps:
       - name: Create Release
         id: create_release
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           TAG_NAME: ${{ github.ref }}
           RELEASE_NAME: ${{ github.ref }}
@@ -48,7 +48,7 @@ jobs:
         run: git config --global core.autocrlf input
 
       - name: Checkout Source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install Dependencies
         shell: bash
@@ -70,7 +70,7 @@ jobs:
           echo "tarball_name=${TARBALL}"        >> $GITHUB_OUTPUT
 
       - name: Upload Artifact Tarball
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: vice-tarball
           path: ${{ steps.build.outputs.tarball_path }}
@@ -78,7 +78,7 @@ jobs:
 
       - name: Upload Release Tarball
         id: upload
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           UPLOAD_URL: ${{ needs.create_release.outputs.upload_url }}
           ASSET_PATH: ${{ steps.build.outputs.tarball_path }}
@@ -110,7 +110,7 @@ jobs:
         run: git config --global core.autocrlf input
 
       - name: Download Tarball
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: vice-tarball
 
@@ -155,7 +155,7 @@ jobs:
           echo "pdf_path=$(echo $(pwd)/doc/vice.pdf)" >> $GITHUB_OUTPUT
 
       - name: Upload
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: vice-pdf
           path: ${{ steps.build.outputs.pdf_path }}
@@ -177,7 +177,7 @@ jobs:
         shell: bash
 
       - name: Checkout Source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Extract Github Actions Build Script
         shell: bash
@@ -187,12 +187,12 @@ jobs:
           ls -A1 | grep -v 'build-.*\.sh' | xargs rm -rf
 
       - name: Download Documentation
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: vice-pdf
 
       - name: Download Tarball
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: vice-tarball
 
@@ -308,7 +308,7 @@ jobs:
 
       - name: Upload Zip
         id: upload-zip
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           UPLOAD_URL: ${{ needs.create_release.outputs.upload_url }}
           ASSET_PATH: ${{ steps.build.outputs.zip_path }}
@@ -332,7 +332,7 @@ jobs:
 
       - name: Upload 7Zip
         id: upload-7zip
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           UPLOAD_URL: ${{ needs.create_release.outputs.upload_url }}
           ASSET_PATH: ${{ steps.build.outputs.seven_zip_path }}
@@ -379,10 +379,10 @@ jobs:
         run: git config --global core.autocrlf input
 
       - name: Checkout Source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Download Documentation
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: vice-pdf
           path: vice/doc/
@@ -421,7 +421,7 @@ jobs:
                               texlive-latex-extra \
                               xa65
           sudo apt install -y ${{ matrix.ui.deps }}
-          sudo apt upgrade
+          sudo apt upgrade -y
 
       - name: Build
         shell: bash
@@ -465,7 +465,7 @@ jobs:
 
       - name: Upload Deb
         id: upload_deb
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           UPLOAD_URL: ${{ needs.create_release.outputs.upload_url }}
           ASSET_PATH: ${{ steps.make_deb.outputs.deb_path }}
@@ -492,7 +492,7 @@ jobs:
     needs: [create_release, build]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/github-script@v7
+      - uses: actions/github-script@v8
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
           retries: 3
