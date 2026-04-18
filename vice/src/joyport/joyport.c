@@ -47,10 +47,13 @@
 #include "log.h"
 #include "machine.h"
 #include "maincpu.h"
+
 #include "mouse_1351.h"
+#include "mouse_digital.h"
 #include "mouse_neos.h"
 #include "mouse_paddle.h"
 #include "mouse_quadrature.h"
+
 #include "multijoy.h"
 #include "ninja_snespad.h"
 #include "paperclip2.h"
@@ -1029,6 +1032,7 @@ void joystick_adapter_deactivate(void)
     }
 }
 
+/* enable extra joystick ports */
 void joystick_adapter_set_ports(int ports, int has_5vdc)
 {
     int i;
@@ -1047,6 +1051,7 @@ int joystick_adapter_get_ports(void)
     return joystick_adapter_ports + joystick_adapter_additional_ports;
 }
 
+/* enable even more joystick ports (eg internal expansion) */
 void joystick_adapter_set_add_ports(int ports)
 {
     joystick_adapter_additional_ports = ports;
@@ -1213,6 +1218,12 @@ static joyport_init_t joyport_devices_init[] = {
       NULL                             /* cmdline options init function */
     },
 #ifdef HAVE_MOUSE
+    { JOYPORT_ID_MOUSE_DIGITAL,        /* device id */
+      VICE_MACHINE_NATIVE_5V_JOYPORTS, /* emulators this device works on */
+      mouse_digital_register,          /* resources init function */
+      NULL,                            /* resources shutdown function */
+      NULL                             /* cmdline options init function */
+    },
     { JOYPORT_ID_MOUSE_1351,           /* device id */
       VICE_MACHINE_NATIVE_5V_JOYPORTS, /* emulators this device works on */
       mouse_1351_register,             /* resources init function */
@@ -2069,6 +2080,7 @@ int joyport_snapshot_write_module(struct snapshot_s *s, int port)
     char snapshot_name[16];
 
     sprintf(snapshot_name, "JOYPORT%d", port);
+    DBG(("joyport_snapshot_write_module %s", snapshot_name));
 
     m = snapshot_module_create(s, snapshot_name, DUMP_VER_MAJOR, DUMP_VER_MINOR);
 
@@ -2085,6 +2097,7 @@ int joyport_snapshot_write_module(struct snapshot_s *s, int port)
     snapshot_module_close(m);
 
     /* save seperate joyport device module */
+    DBG(("joyport_snapshot_write_module device id %d", joy_port[port]));
     switch (joy_port[port]) {
         case JOYPORT_ID_NONE:
             break;
@@ -2108,6 +2121,7 @@ int joyport_snapshot_read_module(struct snapshot_s *s, int port)
     char snapshot_name[16];
 
     sprintf(snapshot_name, "JOYPORT%d", port);
+    DBG(("joyport_snapshot_read_module %s", snapshot_name));
 
     m = snapshot_module_open(s, snapshot_name, &major_version, &minor_version);
     if (m == NULL) {
@@ -2131,6 +2145,7 @@ int joyport_snapshot_read_module(struct snapshot_s *s, int port)
     joyport_set_device(port, temp_joy_port);
 
     /* load device snapshot */
+    DBG(("joyport_snapshot_read_module device id %d (=%d)", joy_port[port], temp_joy_port));
     switch (joy_port[port]) {
         case JOYPORT_ID_NONE:
             break;
