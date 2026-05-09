@@ -596,6 +596,9 @@ plus4stubs_lib = $(top_builddir)/src/plus4/libplus4stubs.a
 printerdrv_lib = $(top_builddir)/src/printerdrv/libprinterdrv.a
 resid_lib = $(top_builddir)/src/resid/libresid.a
 resid_dtv_lib = $(top_builddir)/src/resid-dtv/libresiddtv.a
+if HAVE_RESIDFP
+residfp_lib = $(top_builddir)/src/lib/libresidfp/src/.libs/libresidfp.a
+endif
 rs232drv_lib = $(top_builddir)/src/rs232drv/librs232drv.a
 rs232drvpet_lib = $(top_builddir)/src/rs232drv/librs232drvpet.a
 raster_lib = $(top_builddir)/src/raster/libraster.a
@@ -637,6 +640,7 @@ endif
 common_libs = @ARCH_LIBS@ @LIBOBJS@
 resid_libs = @RESID_LIBS@
 resid_dtv_libs = @RESID_DTV_LIBS@
+#residfp_libs = @RESIDFP_LIBS@
 
 # external libraries required for all emulators
 emu_extlibs = @UI_LIBS@ @SDL_EXTRA_LIBS@ @SOUND_LIBS@ @JOY_LIBS@ @GFXOUTPUT_LIBS@ @ZLIB_LIBS@ @DYNLIB_LIBS@ @ARCH_LIBS@ $(archdep_lib) $(linenoise_ng_lib)
@@ -645,6 +649,10 @@ driver_libs = $(joyport_lib) $(samplerdrv_lib) $(sounddrv_lib) $(mididrv_lib) $(
 
 if HAVE_USBSID
 driver_libs += $(usbsiddrv_lib)
+endif
+
+if HAVE_RESIDFP
+driver_libs += $(residfp_lib)
 endif
 
 if SUPPORT_X64
@@ -688,6 +696,11 @@ vsid_libs =  \
 
 if HAVE_USBSID
 vsid_libs += $(usbsiddrv_lib)
+endif
+
+if HAVE_RESIDFP
+#vsid_libs += $(residfp_libs)
+vsid_libs += $(residfp_lib)
 endif
 
 vsid_SOURCES = $(base_sources) $(midi_sources)
@@ -1373,7 +1386,7 @@ c1541-program: \
 DISTCLEANFILES = $(BUILT_SOURCES) $(GENFILES)
 
 # Special targets to build libraries in subdirectories.
-.PHONY: @RESID_DEP@ @RESID_DTV_DEP@
+.PHONY: @RESID_DEP@ @RESID_DTV_DEP@ @RESIDFP_DEP@
 
 info.c: infocontrib.h
 
@@ -1665,6 +1678,9 @@ $(vsidstubs_lib):
 $(zmbv_lib):
 	@echo "making all in lib/libzmbv"
 	@(cd lib/libzmbv && $(MAKE))
+$(residfp_lib):
+	@echo "making all in lib/libresidfp"
+	@(cd lib/libresidfp && $(MAKE))
 
 
 clean: clean-recursive

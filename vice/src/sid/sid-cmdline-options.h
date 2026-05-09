@@ -29,7 +29,6 @@
 #define VICE_SID_CMDLINE_OPTIONS_H
 
 int sid_cmdline_options_init(int sid_type);
-int sid_common_set_engine_model(const char *param, void *extra_param);
 
 #ifdef HAVE_USBSID
 int us_setparam(const char *param, void *extra_param);
