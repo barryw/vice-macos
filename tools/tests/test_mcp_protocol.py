@@ -1115,6 +1115,20 @@ class TestKeyboard:
         assert error["code"] == ERROR_INVALID_PARAMS
 
     @pytest.mark.stateful
+    def test_keyboard_petscii(self, mcp):
+        """Raw PETSCII feed should succeed."""
+        result = mcp.call_tool_result("vice.keyboard.petscii", {
+            "data": [13],
+        })
+        assert result.get("status") == "ok"
+        assert result.get("bytes_queued") == 1
+
+    def test_keyboard_petscii_missing_data(self, mcp):
+        """Raw PETSCII feed without data should fail."""
+        error = mcp.call_tool_error("vice.keyboard.petscii", {})
+        assert error["code"] == ERROR_INVALID_PARAMS
+
+    @pytest.mark.stateful
     def test_keyboard_key_press(self, mcp):
         """Press a key should succeed."""
         result = mcp.call_tool_result("vice.keyboard.key_press", {
@@ -1192,13 +1206,23 @@ class TestKeyboard:
         })
         assert result.get("status") == "ok"
 
+    @pytest.mark.stateful
+    def test_keyboard_chord(self, mcp):
+        """Matrix chord control should press multiple keys together."""
+        result = mcp.call_tool_result("vice.keyboard.chord", {
+            "keys": ["LSHIFT", "G"],
+            "hold_frames": 2,
+        })
+        assert result.get("status") == "ok"
+        assert result.get("auto_release_scheduled") is True
+
 
 # ---------------------------------------------------------------------------
 # Test: Joystick
 # ---------------------------------------------------------------------------
 
 class TestJoystick:
-    """Tests for vice.joystick.set."""
+    """Tests for joystick input tools."""
 
     @pytest.mark.stateful
     def test_joystick_set_direction(self, mcp):
@@ -1225,6 +1249,17 @@ class TestJoystick:
         """Joystick set with no params uses defaults."""
         result = mcp.call_tool_result("vice.joystick.set")
         assert result.get("status") == "ok"
+
+    @pytest.mark.stateful
+    def test_joystick_tap(self, mcp):
+        """Joystick tap should auto-center after the requested duration."""
+        result = mcp.call_tool_result("vice.joystick.tap", {
+            "port": 2,
+            "direction": "right",
+            "duration_frames": 2,
+        })
+        assert result.get("status") == "ok"
+        assert result.get("auto_center_scheduled") is True
 
 
 # ---------------------------------------------------------------------------
@@ -1489,12 +1524,12 @@ class TestInterruptLogging:
 
 # Expected schemas for all tools, based on C source code analysis.
 # Maps tool_name -> {properties: {name: type, ...}, required: [name, ...]}
-# type values: "number", "string", "boolean", "array"
+# type values: "number", "string", "boolean", "array", "unknown"
 
 EXPECTED_SCHEMAS = {
     "initialize": {
-        "properties": {"protocolVersion": "string", "capabilities": "object",
-                        "clientInfo": "object"},
+        "properties": {"protocolVersion": "string", "capabilities": "unknown",
+                        "clientInfo": "unknown"},
         "required": [],
     },
     "notifications/initialized": {"properties": {}, "required": []},
@@ -1568,7 +1603,10 @@ EXPECTED_SCHEMAS = {
         "properties": {"registers": "array"},
         "required": [],
     },
-    "vice.cia.get_state": {"properties": {}, "required": []},
+    "vice.cia.get_state": {
+        "properties": {"cia": "number"},
+        "required": [],
+    },
     "vice.cia.set_state": {
         "properties": {"cia1_registers": "array", "cia2_registers": "array"},
         "required": [],
@@ -1608,6 +1646,10 @@ EXPECTED_SCHEMAS = {
         "properties": {"text": "string", "petscii_upper": "boolean"},
         "required": ["text"],
     },
+    "vice.keyboard.petscii": {
+        "properties": {"data": "array"},
+        "required": ["data"],
+    },
     "vice.keyboard.key_press": {
         "properties": {"key": "string", "modifiers": "array",
                         "hold_frames": "number", "hold_ms": "number"},
@@ -1627,9 +1669,20 @@ EXPECTED_SCHEMAS = {
                         "hold_ms": "number"},
         "required": [],
     },
+    "vice.keyboard.chord": {
+        "properties": {"keys": "array", "hold_frames": "number",
+                        "hold_ms": "number"},
+        "required": ["keys"],
+    },
     "vice.joystick.set": {
         "properties": {"port": "number", "direction": "string",
                         "fire": "boolean"},
+        "required": [],
+    },
+    "vice.joystick.tap": {
+        "properties": {"port": "number", "direction": "string",
+                        "fire": "boolean", "duration_frames": "number",
+                        "duration_ms": "number"},
         "required": [],
     },
     "vice.disassemble": {
@@ -1683,11 +1736,6 @@ EXPECTED_SCHEMAS = {
                         "end": "string", "max_differences": "number"},
         "required": ["mode"],
     },
-    "vice.memory.map": {
-        "properties": {"start": "string", "end": "string",
-                        "granularity": "number"},
-        "required": [],
-    },
     "vice.checkpoint.group.create": {
         "properties": {"name": "string", "checkpoint_ids": "array"},
         "required": ["name"],
@@ -1731,6 +1779,11 @@ EXPECTED_SCHEMAS = {
     "vice.interrupt.log.read": {
         "properties": {"log_id": "string", "since_index": "number"},
         "required": ["log_id"],
+    },
+    "vice.machine.config.get": {"properties": {}, "required": []},
+    "vice.machine.config.set": {
+        "properties": {"resources": "string"},
+        "required": ["resources"],
     },
     "vice.sprite.inspect": {
         "properties": {"sprite_number": "number", "format": "string"},

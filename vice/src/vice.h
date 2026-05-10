@@ -31,7 +31,11 @@
 #ifndef VICE_VICE_H
 #define VICE_VICE_H
 
-#include "config.h" /* Automagically created by the `configure' script.  */
+#ifdef HAVE_CONFIG_H
+#include <config.h> /* Automagically created by the `configure' script.  */
+#else
+#include "config.h"
+#endif
 
 /* ------------------------------------------------------------------------- */
 

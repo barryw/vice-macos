@@ -101,10 +101,12 @@ const mcp_tool_t tool_registry[] = {
 
     /* Phase 3.1: Input Control */
     { "vice.keyboard.type", "Type text (uppercase ASCII displays as uppercase on C64 by default)", mcp_tool_keyboard_type },
+    { "vice.keyboard.petscii", "Feed exact PETSCII bytes into the KERNAL keyboard buffer", mcp_tool_keyboard_petscii },
     { "vice.keyboard.key_press", "Press a specific key", mcp_tool_keyboard_key_press },
     { "vice.keyboard.key_release", "Release a specific key", mcp_tool_keyboard_key_release },
     { "vice.keyboard.restore", "Press/release RESTORE key (triggers NMI, not in matrix)", mcp_tool_keyboard_restore },
     { "vice.joystick.set", "Set joystick state", mcp_tool_joystick_set },
+    { "vice.joystick.tap", "Tap joystick direction/fire for a fixed number of frames, then center", mcp_tool_joystick_tap },
 
     /* Phase 4: Advanced Debugging */
     { "vice.disassemble", "Disassemble memory to 6502 instructions", mcp_tool_disassemble },
@@ -114,6 +116,7 @@ const mcp_tool_t tool_registry[] = {
     { "vice.backtrace", "Show call stack (JSR return addresses)", mcp_tool_backtrace },
     { "vice.run_until", "Run until address or for N cycles (with timeout)", mcp_tool_run_until },
     { "vice.keyboard.matrix", "Direct keyboard matrix control (for games that scan keyboard directly)", mcp_tool_keyboard_matrix },
+    { "vice.keyboard.chord", "Press multiple C64 keyboard matrix keys together for a fixed number of frames", mcp_tool_keyboard_chord },
 
     /* Snapshot Management */
     { "vice.snapshot.save",
