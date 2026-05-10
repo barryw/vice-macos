@@ -1,0 +1,30 @@
+# Local Python/tooling caches
+.pytest_cache/
+__pycache__/
+*.py[cod]
+
+# Editor/OS noise
+*~
+.DS_Store
+
+# Local VICE build trees
+/vice/build-*/
+/vice/build-test-*/
+
+# Autotools and compiler outputs
+autom4te.cache/
+config.log
+config.status
+*.o
+*.a
+*.lo
+*.la
+*.map
+*.Po
+*.Plo
+.deps/
+.libs/
+
+# Local MCP test binaries
+/vice/src/mcp/tests/test_mcp_tools
+/vice/src/mcp/tests/test_mcp_transport

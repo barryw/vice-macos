@@ -1,5 +1,0 @@
-c128memlimit.o: ../../../src/c128/c128memlimit.c ../../../src/vice.h \
-  ../../src/config.h ../../../src/c128/c128memlimit.h
-../../../src/vice.h:
-../../src/config.h:
-../../../src/c128/c128memlimit.h:

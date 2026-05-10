@@ -1,5 +1,0 @@
-extfilt.o: ../../../src/resid/extfilt.cc ../../../src/resid/extfilt.h \
-  ../../../src/resid/resid-config.h siddefs.h
-../../../src/resid/extfilt.h:
-../../../src/resid/resid-config.h:
-siddefs.h:
