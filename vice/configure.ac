@@ -2055,7 +2055,7 @@ else
     AX_SUBDIRS_CONFIGURE([src/lib/libresidfp], [[--disable-option-checking],[--disable-tests]])
     RESIDFP_DIR=lib/libresidfp
     RESIDFP_LIBS="\$(top_builddir)/src/lib/libresidfp/libresidfp.a"
-    RESIDFP_INCLUDES="-I\$(top_srcdir)/src/lib/libresidfp -I\$(top_builddir)/src/lib/libresidfp/src"
+    RESIDFP_INCLUDES="-I\$(top_builddir)/src/lib/libresidfp/src -I\$(top_srcdir)/src/lib/libresidfp"
     RESIDFP_DEP=libresidfp
     RESIDFPSUB=lib/libresidfp
   fi
