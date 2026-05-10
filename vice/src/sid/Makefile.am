@@ -16,7 +16,6 @@ AM_CPPFLAGS = \
 	@RESID_DTV_INCLUDES@ \
 	-I$(top_builddir)/src \
 	-I$(top_srcdir)/src \
-	-I$(top_srcdir)/src/lib/libresidfp/src/ \
 	-I$(top_srcdir)/src/joyport
 
 AM_CFLAGS = @VICE_CFLAGS@
