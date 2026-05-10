@@ -151,10 +151,14 @@ extern cJSON* mcp_tool_display_get_dimensions(cJSON *params);
 
 /* Tool handlers - Phase 3.1: Input Control */
 extern cJSON* mcp_tool_keyboard_type(cJSON *params);
+extern cJSON* mcp_tool_keyboard_petscii(cJSON *params);
 extern cJSON* mcp_tool_keyboard_key_press(cJSON *params);
 extern cJSON* mcp_tool_keyboard_key_release(cJSON *params);
 extern cJSON* mcp_tool_keyboard_restore(cJSON *params);
+extern cJSON* mcp_tool_keyboard_chord(cJSON *params);
+extern cJSON* mcp_tool_keyboard_matrix(cJSON *params);
 extern cJSON* mcp_tool_joystick_set(cJSON *params);
+extern cJSON* mcp_tool_joystick_tap(cJSON *params);
 
 /* Tool handlers - Snapshot Management */
 extern cJSON* mcp_tool_snapshot_save(cJSON *params);

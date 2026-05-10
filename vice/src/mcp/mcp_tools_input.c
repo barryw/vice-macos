@@ -38,6 +38,7 @@
 static void mcp_keyboard_vsync_callback(void *unused);
 static void mcp_keyboard_schedule_vsync_check(void);
 static int add_pending_vhk_key_release(signed long key_code, int modifiers, int frames);
+static int add_pending_joystick_center(unsigned int port, int frames);
 
 /* =============================================================================
  * Phase 3.1: Input Control
@@ -127,6 +128,72 @@ cJSON* mcp_tool_keyboard_type(cJSON *params)
 
     cJSON_AddStringToObject(response, "status", "ok");
     cJSON_AddNumberToObject(response, "characters_queued", (int)strlen(text_item->valuestring));
+
+    return response;
+}
+
+cJSON* mcp_tool_keyboard_petscii(cJSON *params)
+{
+    cJSON *response;
+    cJSON *data_item;
+    char *bytes;
+    int i;
+    int count;
+    int result;
+
+    log_message(mcp_tools_log, "Keyboard PETSCII feed request");
+
+    if (params == NULL) {
+        return mcp_error(MCP_ERROR_INVALID_PARAMS, "Missing parameters");
+    }
+
+    data_item = cJSON_GetObjectItem(params, "data");
+    if (data_item == NULL || !cJSON_IsArray(data_item)) {
+        return mcp_error(MCP_ERROR_INVALID_PARAMS, "Missing or invalid 'data' parameter");
+    }
+
+    count = cJSON_GetArraySize(data_item);
+    if (count < 1 || count > 4096) {
+        return mcp_error(MCP_ERROR_INVALID_PARAMS, "data length must be 1-4096 bytes");
+    }
+
+    bytes = lib_malloc((size_t)count + 1);
+    if (bytes == NULL) {
+        return mcp_error(MCP_ERROR_INTERNAL_ERROR, "Out of memory");
+    }
+
+    for (i = 0; i < count; i++) {
+        cJSON *value_item = cJSON_GetArrayItem(data_item, i);
+        int value;
+
+        if (value_item == NULL || !cJSON_IsNumber(value_item)) {
+            lib_free(bytes);
+            return mcp_error(MCP_ERROR_INVALID_PARAMS, "data must contain only numbers");
+        }
+
+        value = value_item->valueint;
+        if (value <= 0 || value > 255) {
+            lib_free(bytes);
+            return mcp_error(MCP_ERROR_INVALID_PARAMS, "PETSCII byte values must be 1-255");
+        }
+        bytes[i] = (char)(value & 0xff);
+    }
+    bytes[count] = '\0';
+
+    result = kbdbuf_feed(bytes);
+    lib_free(bytes);
+
+    if (result < 0) {
+        return mcp_error(MCP_ERROR_INTERNAL_ERROR, "Failed to queue PETSCII input (buffer full or disabled)");
+    }
+
+    response = cJSON_CreateObject();
+    if (response == NULL) {
+        return mcp_error(MCP_ERROR_INTERNAL_ERROR, "Out of memory");
+    }
+
+    cJSON_AddStringToObject(response, "status", "ok");
+    cJSON_AddNumberToObject(response, "bytes_queued", count);
 
     return response;
 }
@@ -409,39 +476,38 @@ cJSON* mcp_tool_keyboard_restore(cJSON *params)
     return response;
 }
 
-cJSON* mcp_tool_joystick_set(cJSON *params)
+static int parse_joystick_value(cJSON *params, unsigned int *port, uint16_t *value, const char **error_msg)
 {
-    cJSON *response;
     cJSON *port_item, *dir_item, *fire_item;
-    unsigned int port = 1;  /* Default to port 1 */
-    uint16_t value = 0;
-
-    log_message(mcp_tools_log, "Joystick set request");
+    unsigned int parsed_port = 1;  /* Default to port 1 */
+    uint16_t parsed_value = 0;
 
     /* Get optional port parameter (1 or 2) */
-    port_item = cJSON_GetObjectItem(params, "port");
+    port_item = params ? cJSON_GetObjectItem(params, "port") : NULL;
     if (port_item != NULL && cJSON_IsNumber(port_item)) {
-        port = (unsigned int)port_item->valueint;
-        if (port < 1 || port > 2) {
-            return mcp_error(MCP_ERROR_INVALID_PARAMS, "Port must be 1 or 2");
+        parsed_port = (unsigned int)port_item->valueint;
+        if (parsed_port < 1 || parsed_port > 2) {
+            *error_msg = "Port must be 1 or 2";
+            return -1;
         }
     }
 
     /* Get optional direction parameter (string or array) */
-    dir_item = cJSON_GetObjectItem(params, "direction");
+    dir_item = params ? cJSON_GetObjectItem(params, "direction") : NULL;
     if (dir_item != NULL) {
         if (cJSON_IsString(dir_item)) {
             const char *dir = dir_item->valuestring;
             if (strcmp(dir, "up") == 0) {
-                value |= JOYSTICK_DIRECTION_UP;
+                parsed_value |= JOYSTICK_DIRECTION_UP;
             } else if (strcmp(dir, "down") == 0) {
-                value |= JOYSTICK_DIRECTION_DOWN;
+                parsed_value |= JOYSTICK_DIRECTION_DOWN;
             } else if (strcmp(dir, "left") == 0) {
-                value |= JOYSTICK_DIRECTION_LEFT;
+                parsed_value |= JOYSTICK_DIRECTION_LEFT;
             } else if (strcmp(dir, "right") == 0) {
-                value |= JOYSTICK_DIRECTION_RIGHT;
+                parsed_value |= JOYSTICK_DIRECTION_RIGHT;
             } else if (strcmp(dir, "none") != 0 && strcmp(dir, "center") != 0) {
-                return mcp_error(MCP_ERROR_INVALID_PARAMS, "Invalid direction");
+                *error_msg = "Invalid direction";
+                return -1;
             }
         } else if (cJSON_IsArray(dir_item)) {
             int i;
@@ -450,25 +516,50 @@ cJSON* mcp_tool_joystick_set(cJSON *params)
                 if (cJSON_IsString(d)) {
                     const char *dir = d->valuestring;
                     if (strcmp(dir, "up") == 0) {
-                        value |= JOYSTICK_DIRECTION_UP;
+                        parsed_value |= JOYSTICK_DIRECTION_UP;
                     } else if (strcmp(dir, "down") == 0) {
-                        value |= JOYSTICK_DIRECTION_DOWN;
+                        parsed_value |= JOYSTICK_DIRECTION_DOWN;
                     } else if (strcmp(dir, "left") == 0) {
-                        value |= JOYSTICK_DIRECTION_LEFT;
+                        parsed_value |= JOYSTICK_DIRECTION_LEFT;
                     } else if (strcmp(dir, "right") == 0) {
-                        value |= JOYSTICK_DIRECTION_RIGHT;
+                        parsed_value |= JOYSTICK_DIRECTION_RIGHT;
+                    } else if (strcmp(dir, "none") != 0 && strcmp(dir, "center") != 0) {
+                        *error_msg = "Invalid direction";
+                        return -1;
                     }
                 }
             }
+        } else {
+            *error_msg = "direction must be a string or array";
+            return -1;
         }
     }
 
     /* Get optional fire button parameter */
-    fire_item = cJSON_GetObjectItem(params, "fire");
+    fire_item = params ? cJSON_GetObjectItem(params, "fire") : NULL;
     if (fire_item != NULL && cJSON_IsBool(fire_item)) {
         if (cJSON_IsTrue(fire_item)) {
-            value |= 16;  /* Fire button bit */
+            parsed_value |= 16;  /* Fire button bit */
         }
+    }
+
+    *port = parsed_port;
+    *value = parsed_value;
+    *error_msg = NULL;
+    return 0;
+}
+
+cJSON* mcp_tool_joystick_set(cJSON *params)
+{
+    cJSON *response;
+    unsigned int port;
+    uint16_t value;
+    const char *error_msg;
+
+    log_message(mcp_tools_log, "Joystick set request");
+
+    if (parse_joystick_value(params, &port, &value, &error_msg) < 0) {
+        return mcp_error(MCP_ERROR_INVALID_PARAMS, error_msg ? error_msg : "Invalid joystick parameters");
     }
 
     log_message(mcp_tools_log, "Setting joystick port %u to value 0x%04x", port, value);
@@ -484,6 +575,66 @@ cJSON* mcp_tool_joystick_set(cJSON *params)
     cJSON_AddStringToObject(response, "status", "ok");
     cJSON_AddNumberToObject(response, "port", port);
     cJSON_AddNumberToObject(response, "value", value);
+
+    return response;
+}
+
+cJSON* mcp_tool_joystick_tap(cJSON *params)
+{
+    cJSON *response;
+    cJSON *duration_frames_item, *duration_ms_item;
+    unsigned int port;
+    uint16_t value;
+    int duration_frames = 3;
+    int duration_ms = 0;
+    const char *error_msg;
+
+    log_message(mcp_tools_log, "Joystick tap request");
+
+    if (parse_joystick_value(params, &port, &value, &error_msg) < 0) {
+        return mcp_error(MCP_ERROR_INVALID_PARAMS, error_msg ? error_msg : "Invalid joystick parameters");
+    }
+
+    duration_frames_item = params ? cJSON_GetObjectItem(params, "duration_frames") : NULL;
+    duration_ms_item = params ? cJSON_GetObjectItem(params, "duration_ms") : NULL;
+
+    if (duration_frames_item != NULL && cJSON_IsNumber(duration_frames_item)) {
+        duration_frames = duration_frames_item->valueint;
+        if (duration_frames < 1 || duration_frames > 300) {
+            return mcp_error(MCP_ERROR_INVALID_PARAMS, "duration_frames must be 1-300");
+        }
+    }
+
+    if (duration_ms_item != NULL && cJSON_IsNumber(duration_ms_item)) {
+        duration_ms = duration_ms_item->valueint;
+        if (duration_ms < 1 || duration_ms > 5000) {
+            return mcp_error(MCP_ERROR_INVALID_PARAMS, "duration_ms must be 1-5000");
+        }
+        duration_frames = (duration_ms + 19) / 20;
+        if (duration_frames < 1) {
+            duration_frames = 1;
+        }
+    }
+
+    joystick_set_value_absolute(port, value);
+    if (add_pending_joystick_center(port, duration_frames) < 0) {
+        joystick_set_value_absolute(port, 0);
+        return mcp_error(MCP_ERROR_INTERNAL_ERROR, "Failed to schedule joystick auto-center");
+    }
+
+    response = cJSON_CreateObject();
+    if (response == NULL) {
+        return mcp_error(MCP_ERROR_INTERNAL_ERROR, "Out of memory");
+    }
+
+    cJSON_AddStringToObject(response, "status", "ok");
+    cJSON_AddNumberToObject(response, "port", port);
+    cJSON_AddNumberToObject(response, "value", value);
+    cJSON_AddNumberToObject(response, "duration_frames", duration_frames);
+    if (duration_ms > 0) {
+        cJSON_AddNumberToObject(response, "duration_ms", duration_ms);
+    }
+    cJSON_AddBoolToObject(response, "auto_center_scheduled", 1);
 
     return response;
 }
@@ -515,8 +666,16 @@ typedef struct pending_vhk_key_release_s {
     int active;
 } pending_vhk_key_release_t;
 
+/* Structure to track pending joystick auto-centers */
+typedef struct pending_joystick_center_s {
+    unsigned int port;
+    int frames_remaining;  /* Frames until joystick returns to center */
+    int active;
+} pending_joystick_center_t;
+
 static pending_key_release_t pending_key_releases[MAX_PENDING_KEY_RELEASES];
 static pending_vhk_key_release_t pending_vhk_releases[MAX_PENDING_KEY_RELEASES];
+static pending_joystick_center_t pending_joystick_centers[MAX_PENDING_KEY_RELEASES];
 static int keyboard_pending_releases_initialized = 0;
 static int vsync_callback_registered = 0;
 
@@ -576,6 +735,21 @@ static void mcp_keyboard_vsync_callback(void *unused)
         }
     }
 
+    /* Center all joysticks whose tap duration has elapsed */
+    for (i = 0; i < MAX_PENDING_KEY_RELEASES; i++) {
+        if (pending_joystick_centers[i].active) {
+            pending_joystick_centers[i].frames_remaining--;
+            if (pending_joystick_centers[i].frames_remaining <= 0) {
+                joystick_set_value_absolute(pending_joystick_centers[i].port, 0);
+                log_message(mcp_tools_log, "Auto-centered joystick port %u",
+                           pending_joystick_centers[i].port);
+                pending_joystick_centers[i].active = 0;
+            } else {
+                still_pending = 1;
+            }
+        }
+    }
+
     /* Clear the flag - we've processed this vsync */
     vsync_callback_registered = 0;
 
@@ -607,6 +781,7 @@ static void mcp_keyboard_init_pending_releases(void)
     if (!keyboard_pending_releases_initialized) {
         memset(pending_key_releases, 0, sizeof(pending_key_releases));
         memset(pending_vhk_releases, 0, sizeof(pending_vhk_releases));
+        memset(pending_joystick_centers, 0, sizeof(pending_joystick_centers));
         vsync_callback_registered = 0;
         keyboard_pending_releases_initialized = 1;
         log_message(mcp_tools_log, "Keyboard pending releases initialized (vsync-based)");
@@ -655,6 +830,148 @@ static int add_pending_vhk_key_release(signed long key_code, int modifiers, int 
         }
     }
     return -1;  /* No free slots */
+}
+
+/* Add a pending joystick center with frame count */
+static int add_pending_joystick_center(unsigned int port, int frames)
+{
+    int i;
+
+    mcp_keyboard_init_pending_releases();
+
+    for (i = 0; i < MAX_PENDING_KEY_RELEASES; i++) {
+        if (!pending_joystick_centers[i].active) {
+            pending_joystick_centers[i].port = port;
+            pending_joystick_centers[i].frames_remaining = frames;
+            pending_joystick_centers[i].active = 1;
+            mcp_keyboard_schedule_vsync_check();
+            log_message(mcp_tools_log, "Scheduled joystick center: port=%u, frames=%d",
+                       port, frames);
+            return 0;
+        }
+    }
+    return -1;
+}
+
+static int matrix_key_name_to_row_col(const char *key, int *row, int *col)
+{
+    char normalized[16];
+    size_t len;
+    size_t i;
+
+    if (key == NULL || row == NULL || col == NULL) {
+        return -1;
+    }
+
+    len = strlen(key);
+    if (len == 0 || len >= sizeof(normalized)) {
+        return -1;
+    }
+
+    for (i = 0; i < len; i++) {
+        normalized[i] = (char)toupper((unsigned char)key[i]);
+    }
+    normalized[len] = '\0';
+
+    if (strcmp(normalized, "SPACE") == 0)       { *row = 7; *col = 4; return 0; }
+    if (strcmp(normalized, "RETURN") == 0)      { *row = 0; *col = 1; return 0; }
+    if (strcmp(normalized, "ENTER") == 0)       { *row = 0; *col = 1; return 0; }
+    if (strcmp(normalized, "STOP") == 0)        { *row = 7; *col = 7; return 0; }
+    if (strcmp(normalized, "RUNSTOP") == 0)     { *row = 7; *col = 7; return 0; }
+    if (strcmp(normalized, "F1") == 0)          { *row = 0; *col = 4; return 0; }
+    if (strcmp(normalized, "F3") == 0)          { *row = 0; *col = 5; return 0; }
+    if (strcmp(normalized, "F5") == 0)          { *row = 0; *col = 6; return 0; }
+    if (strcmp(normalized, "F7") == 0)          { *row = 0; *col = 3; return 0; }
+    if (strcmp(normalized, "UP") == 0)          { *row = 0; *col = 7; return 0; }
+    if (strcmp(normalized, "DOWN") == 0)        { *row = 0; *col = 7; return 0; }
+    if (strcmp(normalized, "LEFT") == 0)        { *row = 0; *col = 2; return 0; }
+    if (strcmp(normalized, "RIGHT") == 0)       { *row = 0; *col = 2; return 0; }
+    if (strcmp(normalized, "LSHIFT") == 0)      { *row = 1; *col = 7; return 0; }
+    if (strcmp(normalized, "RSHIFT") == 0)      { *row = 6; *col = 4; return 0; }
+    if (strcmp(normalized, "SHIFT") == 0)       { *row = 1; *col = 7; return 0; }
+    if (strcmp(normalized, "CTRL") == 0)        { *row = 7; *col = 2; return 0; }
+    if (strcmp(normalized, "CONTROL") == 0)     { *row = 7; *col = 2; return 0; }
+    if (strcmp(normalized, "CBM") == 0)         { *row = 7; *col = 5; return 0; }
+    if (strcmp(normalized, "C=") == 0)          { *row = 7; *col = 5; return 0; }
+    if (strcmp(normalized, "HOME") == 0)        { *row = 6; *col = 3; return 0; }
+    if (strcmp(normalized, "CLR") == 0)         { *row = 6; *col = 3; return 0; }
+    if (strcmp(normalized, "DEL") == 0)         { *row = 0; *col = 0; return 0; }
+    if (strcmp(normalized, "INST") == 0)        { *row = 0; *col = 0; return 0; }
+    if (strcmp(normalized, "POUND") == 0)       { *row = 6; *col = 0; return 0; }
+    if (strcmp(normalized, "ARROWUP") == 0)     { *row = 6; *col = 6; return 0; }
+    if (strcmp(normalized, "ARROWLEFT") == 0)   { *row = 7; *col = 1; return 0; }
+    if (strcmp(normalized, "PLUS") == 0)        { *row = 5; *col = 0; return 0; }
+    if (strcmp(normalized, "MINUS") == 0)       { *row = 5; *col = 3; return 0; }
+    if (strcmp(normalized, "ASTERISK") == 0)    { *row = 6; *col = 1; return 0; }
+    if (strcmp(normalized, "AT") == 0)          { *row = 5; *col = 6; return 0; }
+    if (strcmp(normalized, "COLON") == 0)       { *row = 5; *col = 5; return 0; }
+    if (strcmp(normalized, "SEMICOLON") == 0)   { *row = 6; *col = 2; return 0; }
+    if (strcmp(normalized, "EQUALS") == 0)      { *row = 6; *col = 5; return 0; }
+    if (strcmp(normalized, "COMMA") == 0)       { *row = 5; *col = 7; return 0; }
+    if (strcmp(normalized, "PERIOD") == 0)      { *row = 5; *col = 4; return 0; }
+    if (strcmp(normalized, "SLASH") == 0)       { *row = 6; *col = 7; return 0; }
+
+    if (len == 1 && normalized[0] >= 'A' && normalized[0] <= 'Z') {
+        static const int letter_map[26][2] = {
+            {1,2}, /* A */ {3,4}, /* B */ {2,4}, /* C */ {2,2}, /* D */
+            {1,6}, /* E */ {2,5}, /* F */ {3,2}, /* G */ {3,5}, /* H */
+            {4,1}, /* I */ {4,2}, /* J */ {4,5}, /* K */ {5,2}, /* L */
+            {4,4}, /* M */ {4,7}, /* N */ {4,6}, /* O */ {5,1}, /* P */
+            {7,6}, /* Q */ {2,1}, /* R */ {1,5}, /* S */ {2,6}, /* T */
+            {3,6}, /* U */ {3,7}, /* V */ {1,1}, /* W */ {2,7}, /* X */
+            {3,1}, /* Y */ {1,4}, /* Z */
+        };
+        int idx = normalized[0] - 'A';
+        *row = letter_map[idx][0];
+        *col = letter_map[idx][1];
+        return 0;
+    }
+
+    if (len == 1 && normalized[0] >= '0' && normalized[0] <= '9') {
+        static const int num_map[10][2] = {
+            {4,3}, /* 0 */ {7,0}, /* 1 */ {7,3}, /* 2 */ {1,0}, /* 3 */
+            {1,3}, /* 4 */ {2,0}, /* 5 */ {2,3}, /* 6 */ {3,0}, /* 7 */
+            {3,3}, /* 8 */ {4,0}, /* 9 */
+        };
+        int idx = normalized[0] - '0';
+        *row = num_map[idx][0];
+        *col = num_map[idx][1];
+        return 0;
+    }
+
+    return -1;
+}
+
+static int matrix_key_item_to_row_col(cJSON *item, int *row, int *col)
+{
+    if (item == NULL) {
+        return -1;
+    }
+
+    if (cJSON_IsString(item)) {
+        return matrix_key_name_to_row_col(item->valuestring, row, col);
+    }
+
+    if (cJSON_IsObject(item)) {
+        cJSON *key_item = cJSON_GetObjectItem(item, "key");
+        cJSON *row_item = cJSON_GetObjectItem(item, "row");
+        cJSON *col_item = cJSON_GetObjectItem(item, "col");
+
+        if (key_item != NULL && cJSON_IsString(key_item)) {
+            return matrix_key_name_to_row_col(key_item->valuestring, row, col);
+        }
+
+        if (row_item != NULL && col_item != NULL && cJSON_IsNumber(row_item) && cJSON_IsNumber(col_item)) {
+            *row = row_item->valueint;
+            *col = col_item->valueint;
+            if (*row < 0 || *row > 7 || *col < 0 || *col > 7) {
+                return -1;
+            }
+            return 0;
+        }
+    }
+
+    return -1;
 }
 
 cJSON* mcp_tool_keyboard_matrix(cJSON *params)
@@ -823,6 +1140,103 @@ cJSON* mcp_tool_keyboard_matrix(cJSON *params)
         }
         cJSON_AddBoolToObject(response, "auto_release_scheduled", 1);
     }
+
+    return response;
+}
+
+cJSON* mcp_tool_keyboard_chord(cJSON *params)
+{
+    cJSON *response;
+    cJSON *keys_item, *hold_frames_item, *hold_ms_item;
+    cJSON *pressed_array;
+    int rows[MAX_PENDING_KEY_RELEASES];
+    int cols[MAX_PENDING_KEY_RELEASES];
+    int key_count;
+    int hold_frames = 3;
+    int hold_ms = 0;
+    int i;
+
+    log_message(mcp_tools_log, "Handling vice.keyboard.chord");
+
+    if (params == NULL) {
+        return mcp_error(MCP_ERROR_INVALID_PARAMS, "Missing parameters");
+    }
+
+    keys_item = cJSON_GetObjectItem(params, "keys");
+    if (keys_item == NULL || !cJSON_IsArray(keys_item)) {
+        return mcp_error(MCP_ERROR_INVALID_PARAMS, "Missing or invalid keys array");
+    }
+
+    key_count = cJSON_GetArraySize(keys_item);
+    if (key_count < 1 || key_count > MAX_PENDING_KEY_RELEASES) {
+        return mcp_error(MCP_ERROR_INVALID_PARAMS, "keys length must be 1-16");
+    }
+
+    for (i = 0; i < key_count; i++) {
+        cJSON *key_item = cJSON_GetArrayItem(keys_item, i);
+        if (matrix_key_item_to_row_col(key_item, &rows[i], &cols[i]) < 0) {
+            return mcp_error(MCP_ERROR_INVALID_PARAMS, "Invalid key entry in keys array");
+        }
+    }
+
+    hold_frames_item = cJSON_GetObjectItem(params, "hold_frames");
+    hold_ms_item = cJSON_GetObjectItem(params, "hold_ms");
+
+    if (hold_frames_item != NULL && cJSON_IsNumber(hold_frames_item)) {
+        hold_frames = hold_frames_item->valueint;
+        if (hold_frames < 1 || hold_frames > 300) {
+            return mcp_error(MCP_ERROR_INVALID_PARAMS, "hold_frames must be 1-300");
+        }
+    }
+
+    if (hold_ms_item != NULL && cJSON_IsNumber(hold_ms_item)) {
+        hold_ms = hold_ms_item->valueint;
+        if (hold_ms < 1 || hold_ms > 5000) {
+            return mcp_error(MCP_ERROR_INVALID_PARAMS, "hold_ms must be 1-5000");
+        }
+        hold_frames = (hold_ms + 19) / 20;
+        if (hold_frames < 1) {
+            hold_frames = 1;
+        }
+    }
+
+    for (i = 0; i < key_count; i++) {
+        keyboard_set_keyarr(rows[i], cols[i], 1);
+    }
+
+    for (i = 0; i < key_count; i++) {
+        if (add_pending_key_release(rows[i], cols[i], hold_frames) < 0) {
+            int j;
+            for (j = 0; j < key_count; j++) {
+                keyboard_set_keyarr(rows[j], cols[j], 0);
+            }
+            return mcp_error(MCP_ERROR_INTERNAL_ERROR, "Failed to schedule chord key releases");
+        }
+    }
+
+    response = cJSON_CreateObject();
+    if (response == NULL) {
+        return mcp_error(MCP_ERROR_INTERNAL_ERROR, "Out of memory");
+    }
+
+    cJSON_AddStringToObject(response, "status", "ok");
+    cJSON_AddNumberToObject(response, "hold_frames", hold_frames);
+    if (hold_ms > 0) {
+        cJSON_AddNumberToObject(response, "hold_ms", hold_ms);
+    }
+    pressed_array = cJSON_CreateArray();
+    if (pressed_array != NULL) {
+        for (i = 0; i < key_count; i++) {
+            cJSON *entry = cJSON_CreateObject();
+            if (entry != NULL) {
+                cJSON_AddNumberToObject(entry, "row", rows[i]);
+                cJSON_AddNumberToObject(entry, "col", cols[i]);
+                cJSON_AddItemToArray(pressed_array, entry);
+            }
+        }
+        cJSON_AddItemToObject(response, "keys", pressed_array);
+    }
+    cJSON_AddBoolToObject(response, "auto_release_scheduled", 1);
 
     return response;
 }

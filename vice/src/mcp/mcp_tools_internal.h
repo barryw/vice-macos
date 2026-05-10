@@ -162,6 +162,7 @@ extern cJSON *mcp_tool_machine_reset(cJSON *params);
  * Handler prototypes - Input (mcp_tools_input.c)
  * ------------------------------------------------------------------------- */
 extern cJSON *mcp_tool_keyboard_matrix(cJSON *params);
+extern cJSON *mcp_tool_keyboard_chord(cJSON *params);
 
 /* -------------------------------------------------------------------------
  * Handler prototypes - Debug (mcp_tools_debug.c)

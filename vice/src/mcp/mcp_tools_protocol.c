@@ -589,6 +589,13 @@ cJSON* mcp_tool_tools_list(cJSON *params)
             cJSON_AddItemToArray(required, cJSON_CreateString("text"));
             schema = mcp_schema_object(props, required);
 
+        } else if (strcmp(name, "vice.keyboard.petscii") == 0) {
+            props = cJSON_CreateObject();
+            cJSON_AddItemToObject(props, "data", mcp_prop_array("number", "Exact PETSCII bytes to feed to the KERNAL keyboard buffer (1-255 each; 13 is Return)"));
+            required = cJSON_CreateArray();
+            cJSON_AddItemToArray(required, cJSON_CreateString("data"));
+            schema = mcp_schema_object(props, required);
+
         } else if (strcmp(name, "vice.keyboard.key_press") == 0) {
             props = cJSON_CreateObject();
             cJSON_AddItemToObject(props, "key", mcp_prop_string("Key name or VHK code. Names: Return, Space, BackSpace, Delete, Escape, Tab, Up, Down, Left, Right, Home, End, F1-F8, or single char"));
@@ -612,6 +619,15 @@ cJSON* mcp_tool_tools_list(cJSON *params)
             cJSON_AddItemToObject(props, "port", mcp_prop_number("Joystick port 1 or 2 (default=1)"));
             cJSON_AddItemToObject(props, "direction", mcp_prop_string("Direction: up, down, left, right, center, or array for diagonals"));
             cJSON_AddItemToObject(props, "fire", mcp_prop_boolean("Fire button state (default=false)"));
+            schema = mcp_schema_object(props, NULL);
+
+        } else if (strcmp(name, "vice.joystick.tap") == 0) {
+            props = cJSON_CreateObject();
+            cJSON_AddItemToObject(props, "port", mcp_prop_number("Joystick port 1 or 2 (default=1)"));
+            cJSON_AddItemToObject(props, "direction", mcp_prop_string("Direction: up, down, left, right, center, or array for diagonals"));
+            cJSON_AddItemToObject(props, "fire", mcp_prop_boolean("Fire button state (default=false)"));
+            cJSON_AddItemToObject(props, "duration_frames", mcp_prop_number("Tap duration in frames (1-300, default=3)"));
+            cJSON_AddItemToObject(props, "duration_ms", mcp_prop_number("Tap duration in milliseconds (1-5000). Overrides duration_frames if both specified"));
             schema = mcp_schema_object(props, NULL);
 
         /* Phase 4: Advanced Debugging schemas */
@@ -672,6 +688,15 @@ cJSON* mcp_tool_tools_list(cJSON *params)
             cJSON_AddItemToObject(props, "hold_frames", mcp_prop_number("Hold duration in frames (1-300). Key auto-releases after this many frames (~16.7ms each at 60Hz)"));
             cJSON_AddItemToObject(props, "hold_ms", mcp_prop_number("Hold duration in milliseconds (1-5000). Key auto-releases after this time. Overrides hold_frames if both specified"));
             schema = mcp_schema_object(props, NULL);
+
+        } else if (strcmp(name, "vice.keyboard.chord") == 0) {
+            props = cJSON_CreateObject();
+            cJSON_AddItemToObject(props, "keys", mcp_prop_array("string", "Keys to press simultaneously. Entries may be key names or {row,col} objects."));
+            cJSON_AddItemToObject(props, "hold_frames", mcp_prop_number("Hold duration in frames (1-300, default=3)"));
+            cJSON_AddItemToObject(props, "hold_ms", mcp_prop_number("Hold duration in milliseconds (1-5000). Overrides hold_frames if both specified"));
+            required = cJSON_CreateArray();
+            cJSON_AddItemToArray(required, cJSON_CreateString("keys"));
+            schema = mcp_schema_object(props, required);
 
         /* Snapshot tools */
         } else if (strcmp(name, "vice.snapshot.save") == 0) {
