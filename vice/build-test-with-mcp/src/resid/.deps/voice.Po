@@ -1,8 +1,0 @@
-voice.o: ../../../src/resid/voice.cc ../../../src/resid/voice.h \
-  ../../../src/resid/resid-config.h siddefs.h ../../../src/resid/wave.h \
-  ../../../src/resid/envelope.h
-../../../src/resid/voice.h:
-../../../src/resid/resid-config.h:
-siddefs.h:
-../../../src/resid/wave.h:
-../../../src/resid/envelope.h:

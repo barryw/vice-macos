@@ -1,4 +1,0 @@
-settings_midi.o: ../../../../../src/arch/gtk3/widgets/settings_midi.c \
-  ../../../../../src/vice.h ../../../../src/config.h
-../../../../../src/vice.h:
-../../../../src/config.h:

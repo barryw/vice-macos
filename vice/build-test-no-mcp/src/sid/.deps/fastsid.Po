@@ -1,4 +1,0 @@
-fastsid.o: ../../../src/sid/fastsid.c ../../../src/vice.h \
-  ../../src/config.h
-../../../src/vice.h:
-../../src/config.h:

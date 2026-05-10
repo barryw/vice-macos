@@ -1,7 +1,0 @@
-wave.o: ../../../src/resid-dtv/wave.cc ../../../src/resid-dtv/wave.h \
-  ../../../src/resid-dtv/residdtv-config.h siddtvdefs.h \
-  ../../../src/resid-dtv/bittrain.h
-../../../src/resid-dtv/wave.h:
-../../../src/resid-dtv/residdtv-config.h:
-siddtvdefs.h:
-../../../src/resid-dtv/bittrain.h:

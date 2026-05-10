@@ -1,4 +1,0 @@
-archdep_glob.o: ../../../../src/arch/shared/archdep_glob.c \
-  ../../../../src/vice.h ../../../src/config.h
-../../../../src/vice.h:
-../../../src/config.h:
