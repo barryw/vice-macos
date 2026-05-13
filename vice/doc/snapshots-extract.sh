@@ -1,7 +1,7 @@
 #! /bin/bash
 
 SCRIPTDIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-echo SCRIPTDIR: $SCRIPTDIR
+#echo SCRIPTDIR: $SCRIPTDIR
 
 #SOURCE=$1
 SOURCE=$SCRIPTDIR/../src
@@ -299,7 +299,7 @@ for F in `find $SOURCE -iname "*.c" -exec grep -lin snapshot {} \;`; do
         FULL=`grep -i -A 50 "snapshot module.*format" $F`
 
         # extract only the part until next closing comment
-        TAB=`echo "$FULL" | awk '/*\// {exit} {print}'`
+        TAB=$(echo "$FULL" | awk '/\*\// {exit} {print}')
 
         if  [ -z "$__MODULE__" ]; then
             # FIXME: what other formats are in the source?
@@ -350,7 +350,7 @@ for F in `find $SOURCE -iname "*.c" -exec grep -lin snapshot {} \;`; do
 #            echo FULL:"$FULL" >> $LOGFILE
 
             # extract only the part until next closing comment
-            TAB=`echo "$FULL" | awk '/*\// {exit} {print}'`
+            TAB=$(echo "$FULL" | awk '/\*\// {exit} {print}')
 #            echo TAB:"$TAB" >> $LOGFILE
 
             TABLE3=""
