@@ -1164,3 +1164,36 @@ void mainlock_release(void)
 {
     /* No-op in test environment */
 }
+
+/* archdep stubs */
+char *archdep_tmpnam(void)
+{
+    return strdup("/tmp/vice_mcp_test_tmpfile");
+}
+
+typedef struct archdep_dir_s archdep_dir_t;
+
+archdep_dir_t *archdep_opendir(const char *path, int mode)
+{
+    (void)path;
+    (void)mode;
+    return NULL;
+}
+
+const char *archdep_readdir(archdep_dir_t *dir)
+{
+    (void)dir;
+    return NULL;
+}
+
+void archdep_closedir(archdep_dir_t *dir)
+{
+    (void)dir;
+}
+
+/* Keyboard buffer stub */
+int kbdbuf_feed(const char *s)
+{
+    (void)s;
+    return 0;
+}
