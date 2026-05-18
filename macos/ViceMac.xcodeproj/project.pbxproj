@@ -14,6 +14,11 @@
 		A10000000000000000000014 /* EmulatorRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000024 /* EmulatorRenderer.swift */; };
 		A10000000000000000000015 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000025 /* SettingsView.swift */; };
 		A10000000000000000000016 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000026 /* Assets.xcassets */; };
+		A10000000000000000000017 /* EmulatorFrameSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000028 /* EmulatorFrameSource.swift */; };
+		A10000000000000000000019 /* x64sc-ready.png in Resources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002A /* x64sc-ready.png */; };
+		A1000000000000000000001A /* VideoFilterSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002B /* VideoFilterSettings.swift */; };
+		A1000000000000000000001B /* VideoFilterControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002C /* VideoFilterControls.swift */; };
+		A1000000000000000000001C /* ViceEngineBridge.c in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002E /* ViceEngineBridge.c */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -25,6 +30,14 @@
 		A10000000000000000000025 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		A10000000000000000000026 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Resources/Assets.xcassets; sourceTree = "<group>"; };
 		A10000000000000000000027 /* ViceMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ViceMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000000000000000000028 /* EmulatorFrameSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmulatorFrameSource.swift; sourceTree = "<group>"; };
+		A10000000000000000000029 /* EmulatorShaders.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = EmulatorShaders.metal; sourceTree = "<group>"; };
+		A1000000000000000000002A /* x64sc-ready.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "x64sc-ready.png"; sourceTree = "<group>"; };
+		A1000000000000000000002B /* VideoFilterSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoFilterSettings.swift; sourceTree = "<group>"; };
+		A1000000000000000000002C /* VideoFilterControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoFilterControls.swift; sourceTree = "<group>"; };
+		A1000000000000000000002D /* ViceEngineBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ViceEngineBridge.h; sourceTree = "<group>"; };
+		A1000000000000000000002E /* ViceEngineBridge.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = ViceEngineBridge.c; sourceTree = "<group>"; };
+		A1000000000000000000002F /* ViceMac-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "ViceMac-Bridging-Header.h"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -51,9 +64,14 @@
 			children = (
 				A10000000000000000000020 /* ViceMacApp.swift */,
 				A10000000000000000000021 /* EmulatorSession.swift */,
+				A10000000000000000000028 /* EmulatorFrameSource.swift */,
+				A1000000000000000000002B /* VideoFilterSettings.swift */,
+				A1000000000000000000002C /* VideoFilterControls.swift */,
 				A10000000000000000000022 /* ContentView.swift */,
+				A10000000000000000000036 /* Engine */,
 				A10000000000000000000032 /* Metal */,
 				A10000000000000000000033 /* Settings */,
+				A10000000000000000000034 /* BootFrames */,
 				A10000000000000000000026 /* Assets.xcassets */,
 			);
 			path = ViceMac;
@@ -64,6 +82,7 @@
 			children = (
 				A10000000000000000000023 /* EmulatorMetalView.swift */,
 				A10000000000000000000024 /* EmulatorRenderer.swift */,
+				A10000000000000000000029 /* EmulatorShaders.metal */,
 			);
 			path = Metal;
 			sourceTree = "<group>";
@@ -76,12 +95,30 @@
 			path = Settings;
 			sourceTree = "<group>";
 		};
+		A10000000000000000000034 /* BootFrames */ = {
+			isa = PBXGroup;
+			children = (
+				A1000000000000000000002A /* x64sc-ready.png */,
+			);
+			path = Resources/BootFrames;
+			sourceTree = "<group>";
+		};
 		A10000000000000000000035 /* Products */ = {
 			isa = PBXGroup;
 			children = (
 				A10000000000000000000027 /* ViceMac.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000036 /* Engine */ = {
+			isa = PBXGroup;
+			children = (
+				A1000000000000000000002D /* ViceEngineBridge.h */,
+				A1000000000000000000002E /* ViceEngineBridge.c */,
+				A1000000000000000000002F /* ViceMac-Bridging-Header.h */,
+			);
+			path = Engine;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -91,6 +128,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = A10000000000000000000080 /* Build configuration list for PBXNativeTarget "ViceMac" */;
 			buildPhases = (
+				A10000000000000000000043 /* Prepare VICE Runtime */,
 				A10000000000000000000041 /* Sources */,
 				A10000000000000000000040 /* Frameworks */,
 				A10000000000000000000042 /* Resources */,
@@ -143,10 +181,36 @@
 			buildActionMask = 2147483647;
 			files = (
 				A10000000000000000000016 /* Assets.xcassets in Resources */,
+				A10000000000000000000019 /* x64sc-ready.png in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		A10000000000000000000043 /* Prepare VICE Runtime */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Prepare VICE Runtime";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(SRCROOT)/BuildProducts/libvicemacx64sc.dylib",
+				"$(TARGET_BUILD_DIR)/$(FRAMEWORKS_FOLDER_PATH)/libvicemacx64sc.dylib",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/VICEData",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "/bin/bash \"$SRCROOT/scripts/prepare-vicemac-runtime.sh\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		A10000000000000000000041 /* Sources */ = {
@@ -158,6 +222,10 @@
 				A10000000000000000000012 /* ContentView.swift in Sources */,
 				A10000000000000000000013 /* EmulatorMetalView.swift in Sources */,
 				A10000000000000000000014 /* EmulatorRenderer.swift in Sources */,
+				A10000000000000000000017 /* EmulatorFrameSource.swift in Sources */,
+				A1000000000000000000001A /* VideoFilterSettings.swift in Sources */,
+				A1000000000000000000001B /* VideoFilterControls.swift in Sources */,
+				A1000000000000000000001C /* ViceEngineBridge.c in Sources */,
 				A10000000000000000000015 /* SettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -215,7 +283,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MACOSX_DEPLOYMENT_TARGET = 26.4;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -269,7 +337,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MACOSX_DEPLOYMENT_TARGET = 26.4;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = macosx;
@@ -290,6 +358,11 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/ViceMac/Engine",
+					"$(SRCROOT)/../vice/src/arch/macos",
+				);
 				INFOPLIST_KEY_CFBundleDisplayName = "VICE Mac";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -297,10 +370,15 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"$(SRCROOT)/BuildProducts/libvicemacx64sc.dylib",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.barrywalker.vicemac;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
 				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_OBJC_BRIDGING_HEADER = "ViceMac/Engine/ViceMac-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 			};
 			name = Debug;
@@ -316,6 +394,11 @@
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/ViceMac/Engine",
+					"$(SRCROOT)/../vice/src/arch/macos",
+				);
 				INFOPLIST_KEY_CFBundleDisplayName = "VICE Mac";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -323,10 +406,15 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"$(SRCROOT)/BuildProducts/libvicemacx64sc.dylib",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.barrywalker.vicemac;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
 				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_OBJC_BRIDGING_HEADER = "ViceMac/Engine/ViceMac-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				VALIDATE_PRODUCT = YES;
 			};

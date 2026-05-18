@@ -154,6 +154,9 @@ endif
 if USE_GTK3UI
 libarchdep_a_SOURCES += uiactions.c
 endif
+if USE_MACOSUI
+libarchdep_a_SOURCES += uiactions.c
+endif
 
 if UNIX_COMPILE
 libarchdep_a_SOURCES += \

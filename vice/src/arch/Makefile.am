@@ -27,3 +27,9 @@ SUBDIRS = shared headless
 libarch:
 	(cd headless; $(MAKE) libarch.a)
 endif
+
+if USE_MACOSUI
+SUBDIRS = shared macos
+libarch:
+	(cd macos; $(MAKE) libarch.a)
+endif

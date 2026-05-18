@@ -145,6 +145,7 @@ dnl
 dnl UI options
 dnl
 VICE_ARG_ENABLE_LIST(headlessui,            [  --enable-headlessui     enables building without a UI])
+VICE_ARG_ENABLE_LIST(macosui,               [  --enable-macosui        enables native macOS engine bridge support])
 VICE_ARG_ENABLE_LIST(sdl1ui,                [  --enable-sdl1ui         enables SDL 1.2 UI support])
 VICE_ARG_ENABLE_LIST(sdl2ui,                [  --enable-sdl2ui         enables SDL 2.x UI support])
 VICE_ARG_ENABLE_LIST(gtk3ui,                [  --enable-gtk3ui         enables GTK3 UI support])
@@ -178,8 +179,8 @@ AC_ARG_VAR(FW_DIR, [Location of support frameworks (macOS only)])
 
 
 dnl check for conflicting options
-VICE_ARG_LIST_AT_MOST_ONE([--enable-sdlui --enable-sdlui2 --enable-gtk3ui --enable-headlessui], [UI])
-AS_IF([test x"$enable_gtk3ui" = "xno" -a x"$enable_sdl1ui" = "xno" -a x"$enable_sdl2ui" = "xno" -a x"$enable_headlessui" = "xno"],
+VICE_ARG_LIST_AT_MOST_ONE([--enable-sdlui --enable-sdlui2 --enable-gtk3ui --enable-headlessui --enable-macosui], [UI])
+AS_IF([test x"$enable_gtk3ui" = "xno" -a x"$enable_sdl1ui" = "xno" -a x"$enable_sdl2ui" = "xno" -a x"$enable_headlessui" = "xno" -a x"$enable_macosui" = "xno"],
       [AC_MSG_ERROR([You cannot disable all GUIs])])
 
 dnl Try to find out which system we are on...
@@ -545,7 +546,7 @@ fi
 SOUND_DRIVERS=""
 
 dnl Check if a GUI order check needs to be done
-AS_IF([test x"$enable_gtk3ui" != "xyes" -a x"$enable_sdl1ui" != "xyes" -a x"$enable_sdl2ui" != "xyes" -a x"$enable_headlessui" != "xyes"],
+AS_IF([test x"$enable_gtk3ui" != "xyes" -a x"$enable_sdl1ui" != "xyes" -a x"$enable_sdl2ui" != "xyes" -a x"$enable_headlessui" != "xyes" -a x"$enable_macosui" != "xyes"],
       [check_guis=yes])
 
 dnl Check if gtk3 ui should be checked
@@ -1341,6 +1342,7 @@ if test x"$check_gtk3" = "xyes"; then
     enable_sdl1ui=no
     enable_sdl2ui=no
     enable_headlessui=no
+    enable_macosui=no
     found_gui=gtk3
 
 
@@ -1444,6 +1446,7 @@ if test x"$check_sdl2" = "xyes"; then
         enable_sdl1ui=no
         enable_sdl2ui=yes
         enable_headlessui=no
+        enable_macosui=no
         found_gui=sdl2
       fi
 
@@ -1694,6 +1697,7 @@ if test x"$check_sdl1" = "xyes"; then
           enable_sdl1ui=yes
           enable_sdl2ui=no
           enable_headlessui=no
+          enable_macosui=no
           found_gui=sdl1
         fi
       fi
@@ -1701,11 +1705,21 @@ if test x"$check_sdl1" = "xyes"; then
   fi
 fi
 
+if test x"$enable_macosui" = "xyes"; then
+  AC_DEFINE(USE_MACOSUI,,[Enable native macOS engine bridge support.])
+  enable_gtk3ui=no
+  enable_sdl1ui=no
+  enable_sdl2ui=no
+  enable_headlessui=no
+  found_gui=macos
+fi
+
 if test x"$enable_headlessui" = "xyes"; then
   AC_DEFINE(USE_HEADLESSUI,,[Enable Headless UI support.])
   enable_gtk3ui=no
   enable_sdl1ui=no
   enable_sdl2ui=no
+  enable_macosui=no
   found_gui=headless
 fi
 
@@ -3415,6 +3429,21 @@ else
   AM_CONDITIONAL(USE_HEADLESSUI, false)
 fi
 
+if test x"$enable_macosui" = "xyes"; then
+  ARCH_DIR="\$(top_builddir)/src/arch/macos"
+  ARCH_SRC_DIR="\$(top_srcdir)/src/arch/macos"
+  ARCH_LIBS="$ARCH_DIR/libarch.a"
+  ARCH_INCLUDES="-I$ARCH_SRC_DIR -I\$(top_srcdir)/src/arch/headless -I\$(top_srcdir)/src/arch/shared -I\$(top_srcdir)/src/arch"
+  AC_DEFINE(HAVE_MOUSE,,[Enable 1351 mouse support])
+  HAVE_MOUSE_SUPPORT="yes"
+  AC_DEFINE(HAVE_LIGHTPEN,,[Enable lightpen support])
+  HAVE_LIGHTPEN_SUPPORT="yes"
+
+  AM_CONDITIONAL(USE_MACOSUI, true)
+else
+  AM_CONDITIONAL(USE_MACOSUI, false)
+fi
+
 if test x"$is_unix" = "xyes"; then
 
   if test x"$is_win32_gtk3" = "xyes"; then
@@ -3590,6 +3619,7 @@ AC_OUTPUT([Makefile
            src/arch/gtk3/widgets/base/Makefile
            src/arch/sdl/Makefile
            src/arch/headless/Makefile
+           src/arch/macos/Makefile
            src/arch/shared/Makefile
            src/arch/shared/hotkeys/Makefile
            src/arch/shared/hwsiddrv/Makefile
@@ -3712,6 +3742,10 @@ fi
 
 if test x"$enable_headlessui" = "xyes"; then
     show_gui="Headless"
+fi
+
+if test x"$enable_macosui" = "xyes"; then
+    show_gui="macOS native bridge"
 fi
 
 if test "x$ac_cv_header_sys_audio_h" = xyes; then

@@ -1369,7 +1369,7 @@ DISTCLEANFILES = $(BUILT_SOURCES) $(GENFILES)
 # Special targets to build libraries in subdirectories.
 .PHONY: @RESID_DEP@ @RESID_DTV_DEP@ @RESIDFP_DEP@
 
-info.c: infocontrib.h
+info.$(OBJEXT): infocontrib.h
 
 
 # The following rules are not used during `make all`, but *are* used for single
