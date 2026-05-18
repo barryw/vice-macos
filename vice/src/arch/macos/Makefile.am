@@ -49,7 +49,7 @@ libarch_a_SOURCES = \
 	kbd.c \
 	../headless/console.c \
 	../headless/uimon.c \
-	../headless/uistatusbar.c \
+	uistatusbar.c \
 	hotkeys.c \
 	joystick.c \
 	main.c \

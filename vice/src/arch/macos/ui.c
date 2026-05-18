@@ -11,6 +11,7 @@
 #include <stdbool.h>
 
 #include "archdep.h"
+#include "archdep_usleep.h"
 #include "cmdline.h"
 #include "fullscreen.h"
 #include "interrupt.h"
@@ -18,10 +19,12 @@
 #include "log.h"
 #include "machine.h"
 #include "resources.h"
+#include "sound.h"
 #include "ui.h"
 #include "uiapi.h"
 #include "vicemacbridge.h"
 #include "videoarch.h"
+#include "vsync.h"
 
 static const cmdline_option_t cmdline_options_common[] =
 {
@@ -119,7 +122,7 @@ void ui_shutdown(void)
 
 void ui_dispatch_events(void)
 {
-    vicemac_dispatch_queued_input();
+    vicemac_dispatch_queued_events();
 }
 
 int ui_extend_image_dialog(void)
@@ -155,6 +158,9 @@ void ui_message(const char *format, ...)
 
 bool ui_pause_loop_iteration(void)
 {
+    ui_dispatch_events();
+    archdep_usleep(10000);
+
     return is_paused;
 }
 
@@ -162,6 +168,12 @@ static void pause_trap(uint16_t addr, void *data)
 {
     (void)addr;
     (void)data;
+
+    vsync_suspend_speed_eval();
+    sound_suspend();
+
+    while (ui_pause_loop_iteration()) {
+    }
 }
 
 int ui_pause_active(void)

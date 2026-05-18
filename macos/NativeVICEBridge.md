@@ -60,6 +60,16 @@ not an ad hoc display stream bolted onto headless mode.
 - `video_canvas_refresh` publishes RGBA frames through `vicemacbridge`.
 - Swift `EmulatorFrameSource` can accept live frames and the Metal renderer can
   upload them into the existing filter pipeline.
-- The remaining integration step is an embedded x64sc engine target that starts
-  `main_program` on a dedicated thread from the Swift app and registers the
-  frame callback before emulation starts.
+- The embedded x64sc engine target starts `main_program` on a dedicated thread
+  from the Swift app and registers the frame callback before emulation starts.
+- CoreAudio is selected through VICE's own sound resources and driver path; the
+  native runtime build fails if VICE does not configure `soundcoreaudio.o` with
+  the CoreAudio, AudioToolbox, and AudioUnit frameworks.
+- Settings writes are queued through `vicemacbridge` and applied by the macOS UI
+  event pump on the emulator thread.
+- The first machine setting exposed by SwiftUI is `SidModel` for 6581/8580
+  selection; VICE owns the SID model implementation and reconfiguration.
+- Drive settings are exposed as VICE resources for units 8-11, including drive
+  type, attachment, per-drive sound enablement, and per-drive sound volume.
+- Drive LED status is published by the native macOS `uistatusbar` hook so the
+  Swift bottom bar can show VICE's real activity/error state.

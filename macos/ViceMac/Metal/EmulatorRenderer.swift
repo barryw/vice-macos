@@ -27,15 +27,21 @@ final class EmulatorRenderer: NSObject, MTKViewDelegate {
     private var filterStageTexture: MTLTexture?
     private var stageTextureSize = CGSize.zero
     private var filterSettings: VideoFilterSettings
+    private var preservesAspectRatio: Bool
 
-    init(frameSource: EmulatorFrameSource, filterSettings: VideoFilterSettings) {
+    init(frameSource: EmulatorFrameSource,
+         filterSettings: VideoFilterSettings,
+         preservesAspectRatio: Bool) {
         self.frameSource = frameSource
         self.filterSettings = filterSettings
+        self.preservesAspectRatio = preservesAspectRatio
         super.init()
     }
 
-    func update(filterSettings: VideoFilterSettings) {
+    func update(filterSettings: VideoFilterSettings,
+                preservesAspectRatio: Bool) {
         self.filterSettings = filterSettings
+        self.preservesAspectRatio = preservesAspectRatio
     }
 
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
@@ -60,9 +66,11 @@ final class EmulatorRenderer: NSObject, MTKViewDelegate {
             return
         }
 
-        let sourceVertices = makeVertices(drawableSize: view.drawableSize,
-                                          textureSize: frameTextureSize)
         let fullscreenVertices = makeFullscreenVertices()
+        let sourceVertices = preservesAspectRatio
+            ? makeVertices(drawableSize: view.drawableSize,
+                           textureSize: frameTextureSize)
+            : fullscreenVertices
         guard sourceVertices.count == 4, fullscreenVertices.count == 4 else {
             return
         }

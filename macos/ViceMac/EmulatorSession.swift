@@ -2,11 +2,223 @@ import AppKit
 import Combine
 import Foundation
 
+struct DriveConfiguration: Identifiable, Codable, Equatable {
+    let unit: Int
+    var isAttached: Bool
+    var driveType: DriveType
+    var soundEnabled: Bool
+    var soundVolume: Int
+
+    var id: Int { unit }
+}
+
+enum DriveType: Int32, CaseIterable, Codable, Identifiable {
+    case c1540 = 1540
+    case c1541 = 1541
+    case c1541II = 1542
+    case c1570 = 1570
+    case c1571 = 1571
+    case c1581 = 1581
+    case fd2000 = 2000
+    case fd4000 = 4000
+    case cmdHD = 4844
+
+    var id: Int32 { rawValue }
+
+    var title: String {
+        switch self {
+        case .c1540:
+            return "1540"
+        case .c1541:
+            return "1541"
+        case .c1541II:
+            return "1541-II"
+        case .c1570:
+            return "1570"
+        case .c1571:
+            return "1571"
+        case .c1581:
+            return "1581"
+        case .fd2000:
+            return "FD-2000"
+        case .fd4000:
+            return "FD-4000"
+        case .cmdHD:
+            return "CMD HD"
+        }
+    }
+
+    var defaultLEDColor: DriveLEDColor {
+        switch self {
+        case .c1540, .c1541, .c1570:
+            return .red
+        case .c1541II, .c1571, .c1581, .fd2000, .fd4000, .cmdHD:
+            return .green
+        }
+    }
+}
+
+enum DriveLEDColor: Equatable {
+    case red
+    case green
+
+    init(viceColor: UInt32) {
+        self = (viceColor & 1) == 1 ? .green : .red
+    }
+}
+
+struct DriveActivity: Identifiable, Equatable {
+    let unit: Int
+    var isConfigured: Bool
+    var driveType: DriveType
+    var ledColor: DriveLEDColor
+    var ledIntensity: UInt32
+    var errorIntensity: UInt32
+    var driveStatusCode: Int32
+    var driveStatusText: String?
+    var imagePath: String?
+
+    var id: Int { unit }
+    var isActive: Bool { ledIntensity > 0 }
+    var hasErrorStatus: Bool {
+        errorIntensity > 0 || (driveStatusCode != DriveStatusCode.ok
+            && driveStatusCode != DriveStatusCode.dosVersion)
+    }
+}
+
+struct CartridgeStatus: Equatable {
+    var isAttached: Bool
+    var cartridgeID: Int32
+    var cartridgeFlags: UInt32
+    var romSize: UInt32
+    var chipCount: UInt32
+    var bankCount: UInt32
+    var cartridgeName: String?
+    var imagePath: String?
+
+    static let detached = CartridgeStatus(isAttached: false,
+                                          cartridgeID: -1,
+                                          cartridgeFlags: 0,
+                                          romSize: 0,
+                                          chipCount: 0,
+                                          bankCount: 0,
+                                          cartridgeName: nil,
+                                          imagePath: nil)
+}
+
+private enum DriveStatusCode {
+    static let ok: Int32 = 0
+    static let dosVersion: Int32 = 73
+}
+
+enum MachineResetKind {
+    case soft
+    case hard
+
+    var title: String {
+        switch self {
+        case .soft:
+            return "Soft Reset"
+        case .hard:
+            return "Hard Reset"
+        }
+    }
+
+    var statusText: String {
+        switch self {
+        case .soft:
+            return "Soft reset queued"
+        case .hard:
+            return "Hard reset queued"
+        }
+    }
+}
+
 @MainActor
 final class EmulatorSession: ObservableObject {
-    @Published var isPaused = false
-    @Published var warpMode = false
-    @Published var videoStandard: VideoStandard = .ntsc
+    @Published var isPaused = false {
+        didSet {
+            guard isPaused != oldValue else {
+                return
+            }
+
+            applyPauseState()
+        }
+    }
+    @Published var emulationSpeed: EmulationSpeed {
+        didSet {
+            guard emulationSpeed != oldValue else {
+                return
+            }
+
+            EmulatorDefaults.saveEmulationSpeed(emulationSpeed)
+            applyEmulationSpeed()
+        }
+    }
+    @Published var displayMode: DisplayMode {
+        didSet {
+            guard displayMode != oldValue else {
+                return
+            }
+
+            EmulatorDefaults.saveDisplayMode(displayMode)
+            statusText = "Display \(displayMode.title)"
+        }
+    }
+    @Published var videoStandard: VideoStandard {
+        didSet {
+            guard videoStandard != oldValue else {
+                return
+            }
+
+            EmulatorDefaults.saveVideoStandard(videoStandard)
+            applyVideoStandard()
+        }
+    }
+    @Published var sidModel: SIDModel {
+        didSet {
+            guard sidModel != oldValue else {
+                return
+            }
+
+            EmulatorDefaults.saveSIDModel(sidModel)
+            applySIDModel()
+        }
+    }
+    @Published var soundEnabled: Bool {
+        didSet {
+            guard soundEnabled != oldValue else {
+                return
+            }
+
+            EmulatorDefaults.saveSoundEnabled(soundEnabled)
+            applySoundSettings()
+        }
+    }
+    @Published var soundVolume: Int {
+        didSet {
+            let clampedVolume = min(max(soundVolume, 0), 100)
+            guard soundVolume == clampedVolume else {
+                soundVolume = clampedVolume
+                return
+            }
+
+            guard soundVolume != oldValue else {
+                return
+            }
+
+            EmulatorDefaults.saveSoundVolume(soundVolume)
+            applySoundSettings()
+        }
+    }
+    @Published var driveConfigurations: [DriveConfiguration] {
+        didSet {
+            EmulatorDefaults.saveDriveConfigurations(driveConfigurations)
+            applyDriveConfigurations()
+        }
+    }
+    @Published private var driveActivities: [Int: DriveActivity] = [:]
+    @Published var cartridgeStatus = CartridgeStatus.detached
     @Published var filterSettings = VideoFilterSettings()
     @Published var statusText = "Starting x64sc"
 
@@ -14,11 +226,174 @@ final class EmulatorSession: ObservableObject {
     private var didStartEngine = false
     private var pressedKeys: [UInt16: PressedEmulatorKey] = [:]
 
+    enum DisplayMode: String, CaseIterable, Identifiable {
+        case native
+        case fit
+        case stretch
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .native:
+                return "Actual Size"
+            case .fit:
+                return "Fit to Window"
+            case .stretch:
+                return "Stretch to Window"
+            }
+        }
+
+        var toolbarTitle: String {
+            switch self {
+            case .native:
+                return "Actual"
+            case .fit:
+                return "Fit"
+            case .stretch:
+                return "Stretch"
+            }
+        }
+
+        var systemImage: String {
+            switch self {
+            case .native:
+                return "rectangle.center.inset.filled"
+            case .fit:
+                return "arrow.up.left.and.arrow.down.right"
+            case .stretch:
+                return "arrow.left.and.right"
+            }
+        }
+
+        var preservesAspectRatio: Bool {
+            self != .stretch
+        }
+    }
+
     enum VideoStandard: String, CaseIterable, Identifiable {
         case ntsc = "NTSC"
         case pal = "PAL"
 
         var id: String { rawValue }
+
+        var viciiModelResourceValue: Int32 {
+            switch self {
+            case .ntsc:
+                return ViceVICIIModel.mos8562
+            case .pal:
+                return ViceVICIIModel.mos8565
+            }
+        }
+
+        var powerFrequency: Int32 {
+            switch self {
+            case .ntsc:
+                return 60
+            case .pal:
+                return 50
+            }
+        }
+    }
+
+    enum SIDModel: Int32, CaseIterable, Identifiable {
+        case mos6581 = 0
+        case mos8580 = 1
+
+        var id: Int32 { rawValue }
+
+        var title: String {
+            switch self {
+            case .mos6581:
+                return "6581"
+            case .mos8580:
+                return "8580"
+            }
+        }
+    }
+
+    enum EmulationSpeed: String, CaseIterable, Identifiable {
+        case normal
+        case double
+        case quadruple
+        case octuple
+        case uncapped
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .normal:
+                return "100%"
+            case .double:
+                return "200%"
+            case .quadruple:
+                return "400%"
+            case .octuple:
+                return "800%"
+            case .uncapped:
+                return "Uncapped"
+            }
+        }
+
+        var toolbarTitle: String {
+            switch self {
+            case .uncapped:
+                return "Warp"
+            default:
+                return title
+            }
+        }
+
+        var speedPercent: Int32 {
+            switch self {
+            case .normal, .uncapped:
+                return 100
+            case .double:
+                return 200
+            case .quadruple:
+                return 400
+            case .octuple:
+                return 800
+            }
+        }
+
+        var isWarpEnabled: Bool {
+            self == .uncapped
+        }
+    }
+
+    init() {
+        videoStandard = EmulatorDefaults.loadVideoStandard()
+        emulationSpeed = EmulatorDefaults.loadEmulationSpeed()
+        displayMode = EmulatorDefaults.loadDisplayMode()
+        sidModel = EmulatorDefaults.loadSIDModel()
+        soundEnabled = EmulatorDefaults.loadSoundEnabled()
+        soundVolume = EmulatorDefaults.loadSoundVolume()
+        driveConfigurations = EmulatorDefaults.loadDriveConfigurations()
+    }
+
+    var visibleDriveActivities: [DriveActivity] {
+        driveConfigurations.compactMap { configuration in
+            guard configuration.isAttached else {
+                return nil
+            }
+
+            if let activity = driveActivities[configuration.unit],
+               activity.isConfigured {
+                return activity
+            }
+
+            return DriveActivity(unit: configuration.unit,
+                                 isConfigured: true,
+                                 driveType: configuration.driveType,
+                                 ledColor: configuration.driveType.defaultLEDColor,
+                                 ledIntensity: 0,
+                                 errorIntensity: 0,
+                                 driveStatusCode: 0,
+                                 driveStatusText: nil,
+                                 imagePath: nil)
+        }
     }
 
     func start() {
@@ -35,23 +410,45 @@ final class EmulatorSession: ObservableObject {
         didStartEngine = true
         ViceEngineSetVideoFrameCallback(viceFrameCallback,
                                         Unmanaged.passUnretained(frameSource).toOpaque())
+        ViceEngineSetDriveStatusCallback(viceDriveStatusCallback,
+                                         Unmanaged.passUnretained(self).toOpaque())
+        ViceEngineSetCartridgeStatusCallback(viceCartridgeStatusCallback,
+                                             Unmanaged.passUnretained(self).toOpaque())
 
         let started = executablePath.withCString { executablePathPointer in
             dataDirectory.withCString { dataDirectoryPointer in
-                ViceEngineStartX64SC(executablePathPointer, dataDirectoryPointer)
+                ViceEngineStartX64SC(executablePathPointer,
+                                      dataDirectoryPointer,
+                                      sidModel.rawValue,
+                                      soundEnabled,
+                                      Int32(soundVolume),
+                                      emulationSpeed.speedPercent,
+                                      emulationSpeed.isWarpEnabled)
             }
+        }
+
+        if started || ViceEngineIsRunning() {
+            applyRuntimeConfiguration()
         }
 
         statusText = started ? "x64sc running" : "x64sc already running"
     }
 
-    func reset() {
-        statusText = "Reset queued"
+    func reset(kind: MachineResetKind = .soft) {
+        guard ViceEngineIsRunning() else {
+            return
+        }
+
+        if isPaused {
+            isPaused = false
+        }
+
+        _ = ViceEngineTriggerMachineReset(kind == .hard)
+        statusText = kind.statusText
     }
 
     func togglePause() {
         isPaused.toggle()
-        statusText = isPaused ? "Paused" : "Running"
     }
 
     func applyFilterPreset(_ preset: VideoFilterPreset) {
@@ -124,6 +521,162 @@ final class EmulatorSession: ObservableObject {
         pressedKeys.removeAll()
         ViceEngineReleaseAllKeys()
     }
+
+    func handleDriveStatus(_ status: DriveStatusSnapshot) {
+        guard let driveType = DriveType(rawValue: status.driveType) else {
+            driveActivities.removeValue(forKey: status.unit)
+            return
+        }
+
+        driveActivities[status.unit] = DriveActivity(unit: status.unit,
+                                                          isConfigured: status.enabled,
+                                                          driveType: driveType,
+                                                          ledColor: DriveLEDColor(viceColor: status.ledColor),
+                                                          ledIntensity: status.ledIntensity,
+                                                          errorIntensity: status.errorIntensity,
+                                                          driveStatusCode: status.driveStatusCode,
+                                                          driveStatusText: status.driveStatusText,
+                                                          imagePath: status.imagePath)
+    }
+
+    func handleCartridgeStatus(_ status: CartridgeStatusSnapshot) {
+        cartridgeStatus = CartridgeStatus(isAttached: status.isAttached,
+                                          cartridgeID: status.cartridgeID,
+                                          cartridgeFlags: status.cartridgeFlags,
+                                          romSize: status.romSize,
+                                          chipCount: status.chipCount,
+                                          bankCount: status.bankCount,
+                                          cartridgeName: status.cartridgeName,
+                                          imagePath: status.imagePath)
+    }
+
+    func resetDrive(_ unit: Int) {
+        guard unit >= 8 && unit <= 11 else {
+            return
+        }
+
+        _ = ViceEngineResetDrive(UInt32(unit))
+    }
+
+    func attachDisk(to unit: Int, url: URL, autorun: Bool) {
+        guard unit >= 8 && unit <= 11 else {
+            return
+        }
+
+        url.path.withCString { path in
+            _ = ViceEngineAttachDisk(UInt32(unit), path, autorun)
+        }
+    }
+
+    func attachCartridge(url: URL) {
+        url.path.withCString { path in
+            _ = ViceEngineAttachCartridge(path)
+        }
+    }
+
+    func detachCartridge() {
+        _ = ViceEngineDetachCartridge()
+    }
+
+    private func applyRuntimeConfiguration() {
+        applyVideoStandard(updateStatus: false)
+        applySIDModel(updateStatus: false)
+        applySoundSettings(updateStatus: false)
+        applyEmulationSpeed(updateStatus: false)
+        applyPauseState(updateStatus: false)
+        applyDriveConfigurations(updateStatus: false)
+    }
+
+    private func applyPauseState(updateStatus: Bool = true) {
+        guard ViceEngineIsRunning() else {
+            return
+        }
+
+        _ = ViceEngineSetPauseEnabled(isPaused)
+
+        if updateStatus {
+            statusText = isPaused ? "Paused" : "Running"
+        }
+    }
+
+    private func applyVideoStandard(updateStatus: Bool = true) {
+        guard ViceEngineIsRunning() else {
+            return
+        }
+
+        setVICEIntResource(ViceResource.viciiModel, value: videoStandard.viciiModelResourceValue)
+        setVICEIntResource(ViceResource.machinePowerFrequency, value: videoStandard.powerFrequency)
+
+        if updateStatus {
+            statusText = "Video \(videoStandard.rawValue)"
+        }
+    }
+
+    private func applySIDModel(updateStatus: Bool = true) {
+        guard ViceEngineIsRunning() else {
+            return
+        }
+
+        ViceResource.sidModel.withCString { resourceName in
+            _ = ViceEngineSetIntResource(resourceName, sidModel.rawValue)
+        }
+
+        if updateStatus {
+            statusText = "SID \(sidModel.title)"
+        }
+    }
+
+    private func applyEmulationSpeed(updateStatus: Bool = true) {
+        guard ViceEngineIsRunning() else {
+            return
+        }
+
+        setVICEIntResource(ViceResource.speed, value: emulationSpeed.speedPercent)
+        _ = ViceEngineSetWarpMode(emulationSpeed.isWarpEnabled)
+
+        if updateStatus {
+            statusText = emulationSpeed.isWarpEnabled ? "Warp enabled" : "Speed \(emulationSpeed.title)"
+        }
+    }
+
+    private func applySoundSettings(updateStatus: Bool = true) {
+        guard ViceEngineIsRunning() else {
+            return
+        }
+
+        setVICEIntResource(ViceResource.sound, value: soundEnabled ? 1 : 0)
+        setVICEIntResource(ViceResource.soundVolume, value: Int32(soundVolume))
+
+        if updateStatus {
+            statusText = soundEnabled ? "Volume \(soundVolume)" : "Muted"
+        }
+    }
+
+    private func applyDriveConfigurations(updateStatus: Bool = true) {
+        guard ViceEngineIsRunning() else {
+            return
+        }
+
+        let driveSoundEnabled = driveConfigurations.contains { $0.soundEnabled }
+        setVICEIntResource("DriveSoundEmulation", value: driveSoundEnabled ? 1 : 0)
+
+        for configuration in driveConfigurations {
+            let driveType = configuration.isAttached ? configuration.driveType.rawValue : 0
+            setVICEIntResource("Drive\(configuration.unit)Type", value: driveType)
+            setVICEIntResource("Drive\(configuration.unit)SoundEmulation", value: configuration.soundEnabled ? 1 : 0)
+            setVICEIntResource("Drive\(configuration.unit)SoundEmulationVolume", value: Int32(configuration.soundVolume))
+        }
+
+        if updateStatus {
+            statusText = "Drive settings updated"
+        }
+    }
+
+    private func setVICEIntResource(_ name: String, value: Int32) {
+        name.withCString { resourceName in
+            _ = ViceEngineSetIntResource(resourceName, value)
+        }
+    }
 }
 
 private struct PressedEmulatorKey {
@@ -135,6 +688,149 @@ private struct EmulatorModifierKey {
     let symbol: Int64
     let modifiers: Int32
     let isToggle: Bool
+}
+
+struct DriveStatusSnapshot {
+    let unit: Int
+    let enabled: Bool
+    let driveType: Int32
+    let ledColor: UInt32
+    let ledIntensity: UInt32
+    let errorIntensity: UInt32
+    let driveStatusCode: Int32
+    let driveStatusText: String?
+    let imagePath: String?
+}
+
+struct CartridgeStatusSnapshot {
+    let isAttached: Bool
+    let cartridgeID: Int32
+    let cartridgeFlags: UInt32
+    let romSize: UInt32
+    let chipCount: UInt32
+    let bankCount: UInt32
+    let cartridgeName: String?
+    let imagePath: String?
+}
+
+private enum ViceResource {
+    static let viciiModel = "VICIIModel"
+    static let machinePowerFrequency = "MachinePowerFrequency"
+    static let speed = "Speed"
+    static let sidModel = "SidModel"
+    static let sound = "Sound"
+    static let soundVolume = "SoundVolume"
+}
+
+private enum ViceVICIIModel {
+    static let mos8565: Int32 = 1
+    static let mos8562: Int32 = 4
+}
+
+private enum EmulatorDefaults {
+    private static let videoStandardKey = "vice.videoStandard"
+    private static let emulationSpeedKey = "vice.emulationSpeed"
+    private static let displayModeKey = "vice.displayMode"
+    private static let sidModelKey = "vice.sidModel"
+    private static let soundEnabledKey = "vice.soundEnabled"
+    private static let soundVolumeKey = "vice.soundVolume"
+    private static let driveConfigurationsKey = "vice.driveConfigurations"
+
+    static func loadVideoStandard() -> EmulatorSession.VideoStandard {
+        guard let rawValue = UserDefaults.standard.string(forKey: videoStandardKey) else {
+            return .ntsc
+        }
+
+        return EmulatorSession.VideoStandard(rawValue: rawValue) ?? .ntsc
+    }
+
+    static func saveVideoStandard(_ standard: EmulatorSession.VideoStandard) {
+        UserDefaults.standard.set(standard.rawValue, forKey: videoStandardKey)
+    }
+
+    static func loadEmulationSpeed() -> EmulatorSession.EmulationSpeed {
+        guard let rawValue = UserDefaults.standard.string(forKey: emulationSpeedKey) else {
+            return .normal
+        }
+
+        return EmulatorSession.EmulationSpeed(rawValue: rawValue) ?? .normal
+    }
+
+    static func saveEmulationSpeed(_ speed: EmulatorSession.EmulationSpeed) {
+        UserDefaults.standard.set(speed.rawValue, forKey: emulationSpeedKey)
+    }
+
+    static func loadDisplayMode() -> EmulatorSession.DisplayMode {
+        guard let rawValue = UserDefaults.standard.string(forKey: displayModeKey) else {
+            return .native
+        }
+
+        return EmulatorSession.DisplayMode(rawValue: rawValue) ?? .native
+    }
+
+    static func saveDisplayMode(_ mode: EmulatorSession.DisplayMode) {
+        UserDefaults.standard.set(mode.rawValue, forKey: displayModeKey)
+    }
+
+    static func loadSIDModel() -> EmulatorSession.SIDModel {
+        guard UserDefaults.standard.object(forKey: sidModelKey) != nil else {
+            return .mos8580
+        }
+
+        let rawValue = Int32(UserDefaults.standard.integer(forKey: sidModelKey))
+        return EmulatorSession.SIDModel(rawValue: rawValue) ?? .mos8580
+    }
+
+    static func saveSIDModel(_ model: EmulatorSession.SIDModel) {
+        UserDefaults.standard.set(Int(model.rawValue), forKey: sidModelKey)
+    }
+
+    static func loadSoundEnabled() -> Bool {
+        guard UserDefaults.standard.object(forKey: soundEnabledKey) != nil else {
+            return true
+        }
+
+        return UserDefaults.standard.bool(forKey: soundEnabledKey)
+    }
+
+    static func saveSoundEnabled(_ enabled: Bool) {
+        UserDefaults.standard.set(enabled, forKey: soundEnabledKey)
+    }
+
+    static func loadSoundVolume() -> Int {
+        guard UserDefaults.standard.object(forKey: soundVolumeKey) != nil else {
+            return 100
+        }
+
+        return min(max(UserDefaults.standard.integer(forKey: soundVolumeKey), 0), 100)
+    }
+
+    static func saveSoundVolume(_ volume: Int) {
+        UserDefaults.standard.set(min(max(volume, 0), 100), forKey: soundVolumeKey)
+    }
+
+    static func loadDriveConfigurations() -> [DriveConfiguration] {
+        guard let data = UserDefaults.standard.data(forKey: driveConfigurationsKey),
+              let configurations = try? JSONDecoder().decode([DriveConfiguration].self, from: data),
+              configurations.map(\.unit) == [8, 9, 10, 11] else {
+            return [
+                DriveConfiguration(unit: 8, isAttached: true, driveType: .c1541, soundEnabled: false, soundVolume: 1000),
+                DriveConfiguration(unit: 9, isAttached: false, driveType: .c1541, soundEnabled: false, soundVolume: 1000),
+                DriveConfiguration(unit: 10, isAttached: false, driveType: .c1541, soundEnabled: false, soundVolume: 1000),
+                DriveConfiguration(unit: 11, isAttached: false, driveType: .c1541, soundEnabled: false, soundVolume: 1000)
+            ]
+        }
+
+        return configurations
+    }
+
+    static func saveDriveConfigurations(_ configurations: [DriveConfiguration]) {
+        guard let data = try? JSONEncoder().encode(configurations) else {
+            return
+        }
+
+        UserDefaults.standard.set(data, forKey: driveConfigurationsKey)
+    }
 }
 
 private enum ViceMacKeyMapper {
@@ -344,4 +1040,85 @@ private let viceFrameCallback: @convention(c) (
                                       bytesPerRow: Int(frame.stride),
                                       sequence: frame.sequence,
                                       pixels: pixelData))
+}
+
+private let viceDriveStatusCallback: @convention(c) (
+    UnsafePointer<ViceEngineDriveStatus>?,
+    UnsafeMutableRawPointer?
+) -> Void = { statusPointer, context in
+    guard let statusPointer,
+          let context else {
+        return
+    }
+
+    let status = statusPointer.pointee
+    let session = Unmanaged<EmulatorSession>.fromOpaque(context).takeUnretainedValue()
+    let imagePath: String?
+    let driveStatusText: String?
+
+    if let imagePathPointer = status.imagePath, imagePathPointer.pointee != 0 {
+        imagePath = String(cString: imagePathPointer)
+    } else {
+        imagePath = nil
+    }
+
+    if let driveStatusTextPointer = status.driveStatusText, driveStatusTextPointer.pointee != 0 {
+        driveStatusText = String(cString: driveStatusTextPointer)
+    } else {
+        driveStatusText = nil
+    }
+
+    let snapshot = DriveStatusSnapshot(unit: Int(status.unit),
+                                       enabled: status.enabled,
+                                       driveType: status.driveType,
+                                       ledColor: status.ledColor,
+                                       ledIntensity: status.ledIntensity,
+                                       errorIntensity: status.errorIntensity,
+                                       driveStatusCode: status.driveStatusCode,
+                                       driveStatusText: driveStatusText,
+                                       imagePath: imagePath)
+
+    Task { @MainActor in
+        session.handleDriveStatus(snapshot)
+    }
+}
+
+private let viceCartridgeStatusCallback: @convention(c) (
+    UnsafePointer<ViceEngineCartridgeStatus>?,
+    UnsafeMutableRawPointer?
+) -> Void = { statusPointer, context in
+    guard let statusPointer,
+          let context else {
+        return
+    }
+
+    let status = statusPointer.pointee
+    let session = Unmanaged<EmulatorSession>.fromOpaque(context).takeUnretainedValue()
+    let cartridgeName: String?
+    let imagePath: String?
+
+    if let cartridgeNamePointer = status.cartridgeName, cartridgeNamePointer.pointee != 0 {
+        cartridgeName = String(cString: cartridgeNamePointer)
+    } else {
+        cartridgeName = nil
+    }
+
+    if let imagePathPointer = status.imagePath, imagePathPointer.pointee != 0 {
+        imagePath = String(cString: imagePathPointer)
+    } else {
+        imagePath = nil
+    }
+
+    let snapshot = CartridgeStatusSnapshot(isAttached: status.attached,
+                                           cartridgeID: status.cartridgeID,
+                                           cartridgeFlags: status.cartridgeFlags,
+                                           romSize: status.romSize,
+                                           chipCount: status.chipCount,
+                                           bankCount: status.bankCount,
+                                           cartridgeName: cartridgeName,
+                                           imagePath: imagePath)
+
+    Task { @MainActor in
+        session.handleCartridgeStatus(snapshot)
+    }
 }

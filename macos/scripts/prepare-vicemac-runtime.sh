@@ -64,6 +64,19 @@ if [[ ! -f "$BUILD_DIR/Makefile" || ! -f "$BUILD_DIR/src/arch/macos/Makefile" ]]
         --without-oss)
 fi
 
+SOUND_DRIVER_MAKEFILE="$BUILD_DIR/src/arch/shared/sounddrv/Makefile"
+if ! grep -Eq '^SOUND_DRIVERS = .*soundcoreaudio\.o' "$SOUND_DRIVER_MAKEFILE"; then
+    echo "CoreAudio sound driver was not enabled by the VICE configure step." >&2
+    exit 1
+fi
+
+for framework in CoreAudio AudioToolbox AudioUnit; do
+    if ! grep -Eq "^SOUND_LIBS = .*${framework}" "$SOUND_DRIVER_MAKEFILE"; then
+        echo "$framework link flags are missing from the VICE sound build." >&2
+        exit 1
+    fi
+done
+
 make -C "$BUILD_DIR/src/arch/macos" V=1
 make -C "$BUILD_DIR/src/lib/linenoise-ng" V=1
 

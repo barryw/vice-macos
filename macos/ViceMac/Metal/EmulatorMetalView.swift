@@ -4,12 +4,15 @@ import SwiftUI
 struct EmulatorMetalView: NSViewRepresentable {
     let frameSource: EmulatorFrameSource
     let filterSettings: VideoFilterSettings
+    let preservesAspectRatio: Bool
     let onKeyEvent: (NSEvent, Bool) -> Bool
     let onFlagsChanged: (NSEvent) -> Bool
     let onFocusLost: () -> Void
 
     func makeCoordinator() -> EmulatorRenderer {
-        EmulatorRenderer(frameSource: frameSource, filterSettings: filterSettings)
+        EmulatorRenderer(frameSource: frameSource,
+                         filterSettings: filterSettings,
+                         preservesAspectRatio: preservesAspectRatio)
     }
 
     func makeNSView(context: Context) -> MTKView {
@@ -29,7 +32,8 @@ struct EmulatorMetalView: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: MTKView, context: Context) {
-        context.coordinator.update(filterSettings: filterSettings)
+        context.coordinator.update(filterSettings: filterSettings,
+                                   preservesAspectRatio: preservesAspectRatio)
         if let inputView = nsView as? EmulatorInputMetalView {
             inputView.onKeyEvent = onKeyEvent
             inputView.onFlagsChanged = onFlagsChanged

@@ -29,6 +29,8 @@
 
 extern int drive_sound_emulation;
 extern int drive_sound_emulation_volume;
+extern int drive_sound_emulation_unit[];
+extern int drive_sound_emulation_volume_unit[];
 
 int drive_resources_init(void);
 void drive_resources_shutdown(void);

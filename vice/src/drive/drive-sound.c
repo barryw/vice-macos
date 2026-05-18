@@ -1445,8 +1445,12 @@ static int drive_sound_machine_calculate_samples(sound_t **psid, float *pbuf, in
         pbuf[i] = 0.0;
 
         for (j = 0; j < NUM_DISK_UNITS; j++) {
-            m = ((((*motor[j]) * motorvol[j]) * drive_sound_emulation_volume) >> 8) / 32767.0;
-            s = ((((*step[j]) * stepvol[j]) * drive_sound_emulation_volume) >> 8) / 32767.0;
+            if (!drive_sound_emulation_unit[j]) {
+                continue;
+            }
+
+            m = ((((*motor[j]) * motorvol[j]) * drive_sound_emulation_volume_unit[j]) >> 8) / 32767.0;
+            s = ((((*step[j]) * stepvol[j]) * drive_sound_emulation_volume_unit[j]) >> 8) / 32767.0;
 
             pbuf[i] += m;
             pbuf[i] += s;
@@ -1503,8 +1507,12 @@ static int drive_sound_machine_calculate_samples(sound_t **psid, int16_t *pbuf, 
 
     for (i = 0; i < nr; i++) {
         for (j = 0; j < NUM_DISK_UNITS; j++) {
-            m = (((*motor[j]) * motorvol[j]) * drive_sound_emulation_volume) >> 8;
-            s = (((*step[j]) * stepvol[j]) * drive_sound_emulation_volume) >> 8;
+            if (!drive_sound_emulation_unit[j]) {
+                continue;
+            }
+
+            m = (((*motor[j]) * motorvol[j]) * drive_sound_emulation_volume_unit[j]) >> 8;
+            s = (((*step[j]) * stepvol[j]) * drive_sound_emulation_volume_unit[j]) >> 8;
             switch (soc) {
                 default:
                 case SOUND_OUTPUT_MONO:
@@ -1614,6 +1622,9 @@ void drive_sound_update(int i, int unit)
         drive_sound.chip_enabled = 0;
         return;
     }
+    if (unit < 0 || unit >= NUM_DISK_UNITS || !drive_sound_emulation_unit[unit]) {
+        return;
+    }
     sound_store((uint16_t)drive_sound_offset, 0, 0);
     switch (i) {
         case DRIVE_SOUND_MOTOR_ON:
@@ -1631,6 +1642,9 @@ void drive_sound_head(int track, int dir, int unit)
 {
     if (!drive_sound_emulation) {
         drive_sound.chip_enabled = 0;
+        return;
+    }
+    if (unit < 0 || unit >= NUM_DISK_UNITS || !drive_sound_emulation_unit[unit]) {
         return;
     }
     sound_store((uint16_t)drive_sound_offset, 0, 0);

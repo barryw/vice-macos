@@ -58,9 +58,11 @@
 
 /* Is drive sound emulation switched on?  */
 int drive_sound_emulation;
+int drive_sound_emulation_unit[NUM_DISK_UNITS] = { 1, 1, 1, 1 };
 
 /* volume of the drive sound */
 int drive_sound_emulation_volume;
+int drive_sound_emulation_volume_unit[NUM_DISK_UNITS] = { 1000, 1000, 1000, 1000 };
 
 static int set_drive_true_emulation(int val, void *param)
 {
@@ -110,17 +112,51 @@ static int set_drive_true_emulation(int val, void *param)
 
 static int set_drive_sound_emulation(int val, void *param)
 {
+    int dnr;
+
     drive_sound_emulation = val ? 1 : 0;
+    for (dnr = 0; dnr < NUM_DISK_UNITS; dnr++) {
+        drive_sound_emulation_unit[dnr] = drive_sound_emulation;
+    }
 
     return 0;
 }
 
 static int set_drive_sound_emulation_volume(int val, void *param)
 {
+    int dnr;
+
     if ((val < 0) || (val > DRIVE_SOUND_VOLUME_MAX)) {
         return -1;
     }
     drive_sound_emulation_volume = val;
+    for (dnr = 0; dnr < NUM_DISK_UNITS; dnr++) {
+        drive_sound_emulation_volume_unit[dnr] = drive_sound_emulation_volume;
+    }
+    return 0;
+}
+
+static int set_drive_unit_sound_emulation(int val, void *param)
+{
+    unsigned int dnr = vice_ptr_to_uint(param);
+
+    if (dnr >= NUM_DISK_UNITS) {
+        return -1;
+    }
+
+    drive_sound_emulation_unit[dnr] = val ? 1 : 0;
+    return 0;
+}
+
+static int set_drive_unit_sound_emulation_volume(int val, void *param)
+{
+    unsigned int dnr = vice_ptr_to_uint(param);
+
+    if (dnr >= NUM_DISK_UNITS || val < 0 || val > DRIVE_SOUND_VOLUME_MAX) {
+        return -1;
+    }
+
+    drive_sound_emulation_volume_unit[dnr] = val;
     return 0;
 }
 
@@ -403,6 +439,14 @@ static resource_int_t res_drive[] = {
     RESOURCE_INT_LIST_END
 };
 
+static resource_int_t res_drive_sound[] = {
+    { NULL, 1, RES_EVENT_NO, NULL,
+      NULL, set_drive_unit_sound_emulation, NULL },
+    { NULL, 1000, RES_EVENT_NO, NULL,
+      NULL, set_drive_unit_sound_emulation_volume, NULL },
+    RESOURCE_INT_LIST_END
+};
+
 static resource_int_t res_drive_rtc[] = {
     { NULL, 0, RES_EVENT_NO, NULL,
       NULL, set_drive_rtc_save, NULL },
@@ -449,6 +493,12 @@ int drive_resources_init(void)
         res_drive[5].name = lib_msprintf("Drive%iTrueEmulation", dnr + 8);
         res_drive[5].value_ptr = &(drive0->true_emulation);
         res_drive[5].param = vice_uint_to_ptr(dnr);
+        res_drive_sound[0].name = lib_msprintf("Drive%iSoundEmulation", dnr + 8);
+        res_drive_sound[0].value_ptr = &(drive_sound_emulation_unit[dnr]);
+        res_drive_sound[0].param = vice_uint_to_ptr(dnr);
+        res_drive_sound[1].name = lib_msprintf("Drive%iSoundEmulationVolume", dnr + 8);
+        res_drive_sound[1].value_ptr = &(drive_sound_emulation_volume_unit[dnr]);
+        res_drive_sound[1].param = vice_uint_to_ptr(dnr);
 
         if (has_iec) {
             res_drive_rtc[0].name = lib_msprintf("Drive%iRTCSave", dnr + 8);
@@ -462,10 +512,15 @@ int drive_resources_init(void)
         if (resources_register_int(res_drive) < 0) {
             return -1;
         }
+        if (resources_register_int(res_drive_sound) < 0) {
+            return -1;
+        }
 
         for (i = 0; i <= 5; i++) {
             lib_free(res_drive[i].name);
         }
+        lib_free(res_drive_sound[0].name);
+        lib_free(res_drive_sound[1].name);
         if (has_iec) {
             lib_free(res_drive_rtc[0].name);
         }
