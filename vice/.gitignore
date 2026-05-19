@@ -1,0 +1,19 @@
+Makefile
+config.h
+stamp-h1
+autom4te.cache/
+.aclocal.out
+.autoconf.out
+.autoheader.out
+.automake.out
+config.log
+config.status
+libtool
+.deps/
+*.o
+*.a
+__.SYMDEF SORTED
+*.lo
+*.la
+*.Po
+*.Plo

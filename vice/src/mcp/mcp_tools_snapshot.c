@@ -37,6 +37,54 @@
  * Snapshot Management Tools
  * ========================================================================= */
 
+static int mcp_snapshot_name_is_valid(const char *name)
+{
+    const char *p;
+
+    if (name == NULL || name[0] == '\0') {
+        return 0;
+    }
+
+    for (p = name; *p; p++) {
+        if (!isalnum((unsigned char)*p) && *p != '_' && *p != '-') {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+static cJSON *mcp_snapshot_invalid_name_error(void)
+{
+    return mcp_error(MCP_ERROR_INVALID_PARAMS,
+        "Invalid name: use only alphanumeric characters, underscores, and hyphens");
+}
+
+static char *mcp_build_snapshot_vsf_path(const char *dir, const char *name)
+{
+    char *path;
+    size_t len;
+
+    path = mcp_build_vsf_path(dir, name);
+    if (path == NULL) {
+        return NULL;
+    }
+
+    len = strlen(path);
+    if (len < 4 || strcmp(path + len - 4, ".vsf") != 0) {
+        char *full_path = lib_malloc(len + 5);
+        if (full_path == NULL) {
+            lib_free(path);
+            return NULL;
+        }
+        snprintf(full_path, len + 5, "%s.vsf", path);
+        lib_free(path);
+        path = full_path;
+    }
+
+    return path;
+}
+
 cJSON* mcp_tool_snapshot_save(cJSON *params)
 {
     cJSON *response;
@@ -68,15 +116,8 @@ cJSON* mcp_tool_snapshot_save(cJSON *params)
         return mcp_error(MCP_ERROR_INVALID_PARAMS, "'name' must not be empty");
     }
 
-    /* Validate name - alphanumeric, underscore, hyphen only */
-    {
-        const char *p;
-        for (p = name; *p; p++) {
-            if (!isalnum((unsigned char)*p) && *p != '_' && *p != '-') {
-                return mcp_error(MCP_ERROR_INVALID_PARAMS,
-                    "Invalid name: use only alphanumeric characters, underscores, and hyphens");
-            }
-        }
+    if (!mcp_snapshot_name_is_valid(name)) {
+        return mcp_snapshot_invalid_name_error();
     }
 
     /* Get optional description */
@@ -103,8 +144,8 @@ cJSON* mcp_tool_snapshot_save(cJSON *params)
         return mcp_error(MCP_ERROR_INTERNAL_ERROR, "Could not create snapshots directory");
     }
 
-    /* Build vsf path from name */
-    vsf_path = mcp_build_vsf_path(snapshots_dir, name);
+    /* Build final .vsf path from name before checking for duplicates. */
+    vsf_path = mcp_build_snapshot_vsf_path(snapshots_dir, name);
     lib_free(snapshots_dir);
 
     if (vsf_path == NULL) {
@@ -113,27 +154,12 @@ cJSON* mcp_tool_snapshot_save(cJSON *params)
 
     /* Check if file already exists */
     {
-        FILE *f = fopen(vsf_path, "r");
+        FILE *f = fopen(vsf_path, "rb");
         if (f != NULL) {
             fclose(f);
             lib_free(vsf_path);
             return mcp_error(MCP_ERROR_INVALID_PARAMS,
                 "Snapshot with this name already exists. Use a different name or delete the existing one first.");
-        }
-    }
-
-    /* Ensure the path ends with .vsf for machine_write_snapshot */
-    {
-        size_t len = strlen(vsf_path);
-        if (len < 4 || strcmp(vsf_path + len - 4, ".vsf") != 0) {
-            char *full_path = lib_malloc(len + 5);
-            if (full_path == NULL) {
-                lib_free(vsf_path);
-                return mcp_error(MCP_ERROR_INTERNAL_ERROR, "Out of memory");
-            }
-            snprintf(full_path, len + 5, "%s.vsf", vsf_path);
-            lib_free(vsf_path);
-            vsf_path = full_path;
         }
     }
 
@@ -200,6 +226,9 @@ cJSON* mcp_tool_snapshot_load(cJSON *params)
     if (name[0] == '\0') {
         return mcp_error(MCP_ERROR_INVALID_PARAMS, "'name' must not be empty");
     }
+    if (!mcp_snapshot_name_is_valid(name)) {
+        return mcp_snapshot_invalid_name_error();
+    }
 
     /* Get snapshots directory */
     snapshots_dir = mcp_get_snapshots_dir();
@@ -207,8 +236,8 @@ cJSON* mcp_tool_snapshot_load(cJSON *params)
         return mcp_error(MCP_ERROR_INTERNAL_ERROR, "Could not access snapshots directory");
     }
 
-    /* Build vsf path from name */
-    vsf_path = mcp_build_vsf_path(snapshots_dir, name);
+    /* Build final .vsf path from name */
+    vsf_path = mcp_build_snapshot_vsf_path(snapshots_dir, name);
     lib_free(snapshots_dir);
 
     if (vsf_path == NULL) {
@@ -217,25 +246,11 @@ cJSON* mcp_tool_snapshot_load(cJSON *params)
 
     /* Check if file exists */
     {
-        FILE *f = fopen(vsf_path, "r");
+        FILE *f = fopen(vsf_path, "rb");
         if (f == NULL) {
-            /* Try with .vsf extension */
-            size_t len = strlen(vsf_path);
-            char *full_path = lib_malloc(len + 5);
-            if (full_path == NULL) {
-                lib_free(vsf_path);
-                return mcp_error(MCP_ERROR_INTERNAL_ERROR, "Out of memory");
-            }
-            snprintf(full_path, len + 5, "%s.vsf", vsf_path);
             lib_free(vsf_path);
-            vsf_path = full_path;
-
-            f = fopen(vsf_path, "r");
-            if (f == NULL) {
-                lib_free(vsf_path);
-                return mcp_error(MCP_ERROR_INVALID_PARAMS,
-                    "Snapshot not found. Use vice.snapshot.list to see available snapshots.");
-            }
+            return mcp_error(MCP_ERROR_INVALID_PARAMS,
+                "Snapshot not found. Use vice.snapshot.list to see available snapshots.");
         }
         fclose(f);
     }
@@ -317,6 +332,7 @@ cJSON* mcp_tool_snapshot_list(cJSON *params)
                 if (snapshot_obj != NULL) {
                     /* Extract name (without .vsf extension) */
                     char *name = lib_malloc(name_len - 3);
+                    char *vsf_path = NULL;
                     if (name != NULL) {
                         strncpy(name, entry_name, name_len - 4);
                         name[name_len - 4] = '\0';
@@ -324,19 +340,14 @@ cJSON* mcp_tool_snapshot_list(cJSON *params)
                     }
 
                     /* Add full path */
-                    {
-                        char *vsf_path = mcp_build_vsf_path(snapshots_dir, entry_name);
-                        if (vsf_path != NULL) {
-                            cJSON_AddStringToObject(snapshot_obj, "path", vsf_path);
-                            lib_free(vsf_path);
-                        }
+                    vsf_path = mcp_build_vsf_path(snapshots_dir, entry_name);
+                    if (vsf_path != NULL) {
+                        cJSON_AddStringToObject(snapshot_obj, "path", vsf_path);
                     }
 
                     /* Try to read metadata from sidecar */
-                    {
-                        char *vsf_path = mcp_build_vsf_path(snapshots_dir, entry_name);
+                    if (vsf_path != NULL) {
                         cJSON *metadata = mcp_read_snapshot_metadata(vsf_path);
-                        lib_free(vsf_path);
 
                         if (metadata != NULL) {
                             cJSON *desc, *created, *machine;
@@ -355,10 +366,13 @@ cJSON* mcp_tool_snapshot_list(cJSON *params)
                             }
                             cJSON_Delete(metadata);
                         }
+                    }
 
-                        cJSON_AddItemToArray(snapshots_array, snapshot_obj);
-
+                    cJSON_AddItemToArray(snapshots_array, snapshot_obj);
+                    if (vsf_path != NULL) {
                         lib_free(vsf_path);
+                    }
+                    if (name != NULL) {
                         lib_free(name);
                     }
                 }

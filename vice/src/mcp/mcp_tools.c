@@ -173,43 +173,6 @@ const mcp_tool_t tool_registry[] = {
       "Returns group names, checkpoint IDs, and enabled/disabled counts.",
       mcp_tool_checkpoint_group_list },
 
-    /* Phase 5.3: Auto-Snapshot on Checkpoint Hit */
-    { "vice.checkpoint.set_auto_snapshot",
-      "Configure automatic snapshot on checkpoint hit. "
-      "When the checkpoint triggers, saves to {prefix}_{hit_count:03d}.vsf with ring buffer. "
-      "NOTE: Actual triggering requires VICE callback integration (config stored MCP-side).",
-      mcp_tool_checkpoint_set_auto_snapshot },
-    { "vice.checkpoint.clear_auto_snapshot",
-      "Remove auto-snapshot configuration from a checkpoint. "
-      "Stops automatic snapshot-on-hit behavior for this checkpoint.",
-      mcp_tool_checkpoint_clear_auto_snapshot },
-
-    /* Phase 5.4: Execution Tracing */
-    { "vice.trace.start",
-      "Start execution trace recording to a file. "
-      "Records disassembled instructions as they execute, optionally filtered by PC range. "
-      "NOTE: Actual tracing requires VICE CPU hook integration (config stored MCP-side).",
-      mcp_tool_trace_start },
-    { "vice.trace.stop",
-      "Stop an active execution trace and get recording statistics. "
-      "Returns instructions recorded, output file path, and cycles elapsed.",
-      mcp_tool_trace_stop },
-
-    /* Phase 5.4: Interrupt Logging */
-    { "vice.interrupt.log.start",
-      "Start logging interrupt events (IRQ, NMI, BRK). "
-      "Returns log_id for later reference. Filter by interrupt types and set max entries. "
-      "NOTE: Actual logging requires VICE interrupt hook integration (config stored MCP-side).",
-      mcp_tool_interrupt_log_start },
-    { "vice.interrupt.log.stop",
-      "Stop an active interrupt log and retrieve all recorded entries. "
-      "Returns entries with type, cycle, pc, vector_address, and handler_address.",
-      mcp_tool_interrupt_log_stop },
-    { "vice.interrupt.log.read",
-      "Read entries from an active interrupt log without stopping it. "
-      "Supports incremental reads via since_index parameter.",
-      mcp_tool_interrupt_log_read },
-
     /* Machine Configuration */
     { "vice.machine.config.get",
       "Get current machine configuration including chips, memory map, and resources. "

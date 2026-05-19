@@ -2518,6 +2518,8 @@ TEST(snapshot_save_with_name_succeeds)
 
     test_snapshot_reset();
     test_snapshot_set_save_result(0);  /* Success */
+    remove("/tmp/vice-test-config/mcp_snapshots/test_debug_state.vsf");
+    remove("/tmp/vice-test-config/mcp_snapshots/test_debug_state.json");
 
     params = cJSON_CreateObject();
     cJSON_AddStringToObject(params, "name", "test_debug_state");
@@ -2572,6 +2574,8 @@ TEST(snapshot_save_with_options_succeeds)
 
     test_snapshot_reset();
     test_snapshot_set_save_result(0);
+    remove("/tmp/vice-test-config/mcp_snapshots/full_state.vsf");
+    remove("/tmp/vice-test-config/mcp_snapshots/full_state.json");
 
     params = cJSON_CreateObject();
     cJSON_AddStringToObject(params, "name", "full_state");
@@ -2596,6 +2600,8 @@ TEST(snapshot_save_failure_returns_error)
 
     test_snapshot_reset();
     test_snapshot_set_save_result(-1);  /* Simulate failure */
+    remove("/tmp/vice-test-config/mcp_snapshots/will_fail.vsf");
+    remove("/tmp/vice-test-config/mcp_snapshots/will_fail.json");
 
     params = cJSON_CreateObject();
     cJSON_AddStringToObject(params, "name", "will_fail");
@@ -2606,6 +2612,38 @@ TEST(snapshot_save_failure_returns_error)
     code_item = cJSON_GetObjectItem(response, "code");
     ASSERT_NOT_NULL(code_item);
     ASSERT_INT_EQ(code_item->valueint, MCP_ERROR_INTERNAL_ERROR);  /* Implementation uses internal error */
+
+    cJSON_Delete(params);
+    cJSON_Delete(response);
+}
+
+/* Test: Snapshot save rejects an existing final .vsf path */
+TEST(snapshot_save_rejects_existing_vsf)
+{
+    cJSON *response, *params, *code_item;
+    FILE *f;
+
+    test_snapshot_reset();
+    test_snapshot_set_save_result(0);
+
+    mkdir("/tmp/vice-test-config", 0755);
+    mkdir("/tmp/vice-test-config/mcp_snapshots", 0755);
+    f = fopen("/tmp/vice-test-config/mcp_snapshots/existing_snapshot.vsf", "w");
+    if (f) { fprintf(f, "existing"); fclose(f); }
+
+    params = cJSON_CreateObject();
+    cJSON_AddStringToObject(params, "name", "existing_snapshot");
+
+    response = mcp_tool_snapshot_save(params);
+    ASSERT_NOT_NULL(response);
+
+    code_item = cJSON_GetObjectItem(response, "code");
+    ASSERT_NOT_NULL(code_item);
+    ASSERT_INT_EQ(code_item->valueint, MCP_ERROR_INVALID_PARAMS);
+    ASSERT_TRUE(test_snapshot_get_last_saved()[0] == '\0');
+
+    remove("/tmp/vice-test-config/mcp_snapshots/existing_snapshot.vsf");
+    remove("/tmp/vice-test-config/mcp_snapshots/existing_snapshot.json");
 
     cJSON_Delete(params);
     cJSON_Delete(response);
@@ -5311,11 +5349,10 @@ TEST(checkpoint_clear_auto_snapshot_clears_existing_config)
     cJSON_Delete(response);
 }
 
-/* Test: checkpoint.set_auto_snapshot dispatch works */
+/* Test: checkpoint.set_auto_snapshot is not advertised until hooks exist */
 TEST(checkpoint_set_auto_snapshot_dispatch_works)
 {
     cJSON *response, *params;
-    cJSON *enabled_item;
 
     test_auto_snapshot_configs_reset();
 
@@ -5326,23 +5363,18 @@ TEST(checkpoint_set_auto_snapshot_dispatch_works)
     response = mcp_tools_dispatch("vice.checkpoint.set_auto_snapshot", params);
     ASSERT_NOT_NULL(response);
 
-    /* Should not be an error */
     cJSON *code_item = cJSON_GetObjectItem(response, "code");
-    ASSERT_TRUE(code_item == NULL);
-
-    enabled_item = cJSON_GetObjectItem(response, "enabled");
-    ASSERT_NOT_NULL(enabled_item);
-    ASSERT_TRUE(cJSON_IsTrue(enabled_item));
+    ASSERT_NOT_NULL(code_item);
+    ASSERT_INT_EQ(code_item->valueint, MCP_ERROR_METHOD_NOT_FOUND);
 
     cJSON_Delete(params);
     cJSON_Delete(response);
 }
 
-/* Test: checkpoint.clear_auto_snapshot dispatch works */
+/* Test: checkpoint.clear_auto_snapshot is not advertised until hooks exist */
 TEST(checkpoint_clear_auto_snapshot_dispatch_works)
 {
     cJSON *response, *params;
-    cJSON *cleared_item;
 
     test_auto_snapshot_configs_reset();
 
@@ -5352,13 +5384,9 @@ TEST(checkpoint_clear_auto_snapshot_dispatch_works)
     response = mcp_tools_dispatch("vice.checkpoint.clear_auto_snapshot", params);
     ASSERT_NOT_NULL(response);
 
-    /* Should not be an error */
     cJSON *code_item = cJSON_GetObjectItem(response, "code");
-    ASSERT_TRUE(code_item == NULL);
-
-    cleared_item = cJSON_GetObjectItem(response, "cleared");
-    ASSERT_NOT_NULL(cleared_item);
-    /* Note: cleared may be true or false depending on previous state */
+    ASSERT_NOT_NULL(code_item);
+    ASSERT_INT_EQ(code_item->valueint, MCP_ERROR_METHOD_NOT_FOUND);
 
     cJSON_Delete(params);
     cJSON_Delete(response);
@@ -5746,11 +5774,10 @@ TEST(trace_stop_stops_existing_trace)
     cJSON_Delete(stop_response);
 }
 
-/* Test: trace.start dispatch works */
+/* Test: trace.start is not advertised until CPU hooks exist */
 TEST(trace_start_dispatch_works)
 {
     cJSON *response, *params;
-    cJSON *trace_id_item;
 
     test_trace_configs_reset();
 
@@ -5760,23 +5787,18 @@ TEST(trace_start_dispatch_works)
     response = mcp_tools_dispatch("vice.trace.start", params);
     ASSERT_NOT_NULL(response);
 
-    /* Should not be an error */
     cJSON *code_item = cJSON_GetObjectItem(response, "code");
-    ASSERT_TRUE(code_item == NULL);
-
-    trace_id_item = cJSON_GetObjectItem(response, "trace_id");
-    ASSERT_NOT_NULL(trace_id_item);
-    ASSERT_TRUE(cJSON_IsString(trace_id_item));
+    ASSERT_NOT_NULL(code_item);
+    ASSERT_INT_EQ(code_item->valueint, MCP_ERROR_METHOD_NOT_FOUND);
 
     cJSON_Delete(params);
     cJSON_Delete(response);
 }
 
-/* Test: trace.stop dispatch works */
+/* Test: trace.stop is not advertised until CPU hooks exist */
 TEST(trace_stop_dispatch_works)
 {
     cJSON *response, *params;
-    cJSON *stopped_item;
 
     test_trace_configs_reset();
 
@@ -5786,13 +5808,9 @@ TEST(trace_stop_dispatch_works)
     response = mcp_tools_dispatch("vice.trace.stop", params);
     ASSERT_NOT_NULL(response);
 
-    /* Should not be an error */
     cJSON *code_item = cJSON_GetObjectItem(response, "code");
-    ASSERT_TRUE(code_item == NULL);
-
-    stopped_item = cJSON_GetObjectItem(response, "stopped");
-    ASSERT_NOT_NULL(stopped_item);
-    /* Note: stopped may be true or false depending on previous state */
+    ASSERT_NOT_NULL(code_item);
+    ASSERT_INT_EQ(code_item->valueint, MCP_ERROR_METHOD_NOT_FOUND);
 
     cJSON_Delete(params);
     cJSON_Delete(response);
@@ -6332,7 +6350,7 @@ TEST(interrupt_log_multiple_logs_run_simultaneously)
     cJSON_Delete(response2);
 }
 
-/* Test: interrupt.log.start dispatch works */
+/* Test: interrupt.log.start is not advertised until interrupt hooks exist */
 TEST(interrupt_log_start_dispatch_works)
 {
     cJSON *response;
@@ -6342,17 +6360,14 @@ TEST(interrupt_log_start_dispatch_works)
     response = mcp_tools_dispatch("vice.interrupt.log.start", NULL);
     ASSERT_NOT_NULL(response);
 
-    /* Should not be an error */
     cJSON *code_item = cJSON_GetObjectItem(response, "code");
-    ASSERT_TRUE(code_item == NULL);
-
-    cJSON *log_id_item = cJSON_GetObjectItem(response, "log_id");
-    ASSERT_NOT_NULL(log_id_item);
+    ASSERT_NOT_NULL(code_item);
+    ASSERT_INT_EQ(code_item->valueint, MCP_ERROR_METHOD_NOT_FOUND);
 
     cJSON_Delete(response);
 }
 
-/* Test: interrupt.log.stop dispatch works */
+/* Test: interrupt.log.stop is not advertised until interrupt hooks exist */
 TEST(interrupt_log_stop_dispatch_works)
 {
     cJSON *response, *params;
@@ -6365,43 +6380,32 @@ TEST(interrupt_log_stop_dispatch_works)
     response = mcp_tools_dispatch("vice.interrupt.log.stop", params);
     ASSERT_NOT_NULL(response);
 
-    /* Should not be an error (even for nonexistent log) */
     cJSON *code_item = cJSON_GetObjectItem(response, "code");
-    ASSERT_TRUE(code_item == NULL);
-
-    cJSON *stopped_item = cJSON_GetObjectItem(response, "stopped");
-    ASSERT_NOT_NULL(stopped_item);
+    ASSERT_NOT_NULL(code_item);
+    ASSERT_INT_EQ(code_item->valueint, MCP_ERROR_METHOD_NOT_FOUND);
 
     cJSON_Delete(params);
     cJSON_Delete(response);
 }
 
-/* Test: interrupt.log.read dispatch works */
+/* Test: interrupt.log.read is not advertised until interrupt hooks exist */
 TEST(interrupt_log_read_dispatch_works)
 {
-    cJSON *start_response, *read_response, *read_params;
-    cJSON *log_id_item;
+    cJSON *read_response, *read_params;
 
     test_interrupt_log_configs_reset();
 
-    /* Start a log first */
-    start_response = mcp_tools_dispatch("vice.interrupt.log.start", NULL);
-    ASSERT_NOT_NULL(start_response);
-    log_id_item = cJSON_GetObjectItem(start_response, "log_id");
-    ASSERT_NOT_NULL(log_id_item);
-
     /* Read the log via dispatch */
     read_params = cJSON_CreateObject();
-    cJSON_AddStringToObject(read_params, "log_id", log_id_item->valuestring);
+    cJSON_AddStringToObject(read_params, "log_id", "intlog_1");
 
     read_response = mcp_tools_dispatch("vice.interrupt.log.read", read_params);
     ASSERT_NOT_NULL(read_response);
 
-    /* Should not be an error */
     cJSON *code_item = cJSON_GetObjectItem(read_response, "code");
-    ASSERT_TRUE(code_item == NULL);
+    ASSERT_NOT_NULL(code_item);
+    ASSERT_INT_EQ(code_item->valueint, MCP_ERROR_METHOD_NOT_FOUND);
 
-    cJSON_Delete(start_response);
     cJSON_Delete(read_params);
     cJSON_Delete(read_response);
 }
@@ -7482,6 +7486,67 @@ TEST(memory_read_validates_address)
     test_setup_c64_defaults();
 }
 
+TEST(memory_read_hex_encoding_returns_single_string)
+{
+    cJSON *params, *response, *hex_item, *data_item, *encoding_item;
+
+    test_setup_c64_defaults();
+    test_memory_clear();
+    test_memory_set_byte(0x2000, 0x12);
+    test_memory_set_byte(0x2001, 0xAB);
+    test_memory_set_byte(0x2002, 0x00);
+
+    params = cJSON_CreateObject();
+    cJSON_AddNumberToObject(params, "address", 0x2000);
+    cJSON_AddNumberToObject(params, "size", 3);
+    cJSON_AddStringToObject(params, "encoding", "hex");
+
+    response = mcp_tool_memory_read(params);
+    ASSERT_NOT_NULL(response);
+
+    encoding_item = cJSON_GetObjectItem(response, "encoding");
+    ASSERT_NOT_NULL(encoding_item);
+    ASSERT_STR_EQ(encoding_item->valuestring, "hex");
+
+    hex_item = cJSON_GetObjectItem(response, "data_hex");
+    ASSERT_NOT_NULL(hex_item);
+    ASSERT_STR_EQ(hex_item->valuestring, "12AB00");
+
+    data_item = cJSON_GetObjectItem(response, "data");
+    ASSERT_TRUE(data_item == NULL);
+
+    cJSON_Delete(params);
+    cJSON_Delete(response);
+}
+
+TEST(memory_write_validates_payload_before_writing)
+{
+    cJSON *params, *data, *response, *code_item;
+
+    test_setup_c64_defaults();
+    test_memory_clear();
+    test_memory_set_byte(0x2000, 0xAA);
+
+    params = cJSON_CreateObject();
+    data = cJSON_CreateArray();
+    cJSON_AddItemToArray(data, cJSON_CreateNumber(0x11));
+    cJSON_AddItemToArray(data, cJSON_CreateNumber(0x1FF));
+    cJSON_AddNumberToObject(params, "address", 0x2000);
+    cJSON_AddItemToObject(params, "data", data);
+
+    response = mcp_tools_dispatch("vice.memory.write", params);
+    ASSERT_NOT_NULL(response);
+
+    code_item = cJSON_GetObjectItem(response, "code");
+    ASSERT_NOT_NULL(code_item);
+    ASSERT_INT_EQ(code_item->valueint, MCP_ERROR_INVALID_PARAMS);
+    ASSERT_INT_EQ(test_memory_get_byte(0x2000), 0xAA);
+    ASSERT_INT_EQ(test_memory_get_byte(0x2001), 0x00);
+
+    cJSON_Delete(params);
+    cJSON_Delete(response);
+}
+
 /* =================================================================
  * Bug Fix Regression Tests
  * ================================================================= */
@@ -7516,7 +7581,10 @@ TEST(memory_read_rejects_negative_address)
     ASSERT_NOT_NULL(response);
     cJSON *code = cJSON_GetObjectItem(response, "code");
     ASSERT_NOT_NULL(code);
-    ASSERT_TRUE(code->valueint < 0);
+    ASSERT_INT_EQ(code->valueint, MCP_ERROR_INVALID_PARAMS);
+    cJSON *msg = cJSON_GetObjectItem(response, "message");
+    ASSERT_NOT_NULL(msg);
+    ASSERT_TRUE(strstr(msg->valuestring, "16-bit range") != NULL);
     cJSON_Delete(params);
     cJSON_Delete(response);
 }
@@ -8125,6 +8193,7 @@ int main(void)
     RUN_TEST(snapshot_save_without_name_returns_error);
     RUN_TEST(snapshot_save_with_options_succeeds);
     RUN_TEST(snapshot_save_failure_returns_error);
+    RUN_TEST(snapshot_save_rejects_existing_vsf);
     RUN_TEST(snapshot_load_with_name_succeeds);
     RUN_TEST(snapshot_load_without_name_returns_error);
     RUN_TEST(snapshot_load_failure_returns_error);
@@ -8333,6 +8402,8 @@ int main(void)
     RUN_TEST(cia_get_state_error_on_vic20);
     RUN_TEST(memory_map_dispatch_returns_not_found);
     RUN_TEST(memory_read_validates_address);
+    RUN_TEST(memory_read_hex_encoding_returns_single_string);
+    RUN_TEST(memory_write_validates_payload_before_writing);
 
     /* Bug fix regression tests */
     RUN_TEST(memory_read_rejects_address_above_64k);

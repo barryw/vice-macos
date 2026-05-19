@@ -65,7 +65,8 @@ extern void mcp_server_shutdown(void);
  *  Starts listening for MCP JSON-RPC requests on the specified host and port.
  *  The server runs in a separate thread using libmicrohttpd.
  *
- *  @param host  IP address to bind to (e.g., "127.0.0.1" or "0.0.0.0")
+ *  @param host  IP address to bind to (e.g., "127.0.0.1" or "0.0.0.0").
+ *               Non-loopback binds require MCPServerToken.
  *  @param port  TCP port number to listen on
  *  @return 0 on success, -1 on failure
  */
@@ -128,7 +129,8 @@ extern const char *mcp_server_get_host(void);
 
 /** @brief Register MCP server VICE resources.
  *
- *  Registers MCPServer, MCPServerPort, MCPServerHost resources
+ *  Registers MCPServer, MCPServerPort, MCPServerHost, MCPServerToken,
+ *  and MCPServerCORSOrigin resources
  *  with VICE's resource system for configuration persistence.
  *
  *  @return 0 on success, -1 on failure
@@ -137,7 +139,8 @@ extern int mcp_server_register_resources(void);
 
 /** @brief Register MCP server command-line options.
  *
- *  Registers -mcpserver, -mcpserverport, -mcpserverhost options.
+ *  Registers -mcpserver, -mcpserverport, -mcpserverhost,
+ *  -mcpservertoken, and -mcpservercorsorigin options.
  *
  *  @return 0 on success, -1 on failure
  */
