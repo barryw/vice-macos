@@ -15,9 +15,9 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "A10000000000000000000001"
-               BuildableName = "ViceMac.app"
-               BlueprintName = "ViceMac"
+               BlueprintIdentifier = "B20000000000000000000001"
+               BuildableName = "VICE Mac VIC-20.app"
+               BlueprintName = "ViceMacVIC20"
                ReferencedContainer = "container:ViceMac.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -43,9 +43,9 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "A10000000000000000000001"
-            BuildableName = "ViceMac.app"
-            BlueprintName = "ViceMac"
+            BlueprintIdentifier = "B20000000000000000000001"
+            BuildableName = "VICE Mac VIC-20.app"
+            BlueprintName = "ViceMacVIC20"
             ReferencedContainer = "container:ViceMac.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
@@ -60,9 +60,9 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "A10000000000000000000001"
-            BuildableName = "ViceMac.app"
-            BlueprintName = "ViceMac"
+            BlueprintIdentifier = "B20000000000000000000001"
+            BuildableName = "VICE Mac VIC-20.app"
+            BlueprintName = "ViceMacVIC20"
             ReferencedContainer = "container:ViceMac.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>

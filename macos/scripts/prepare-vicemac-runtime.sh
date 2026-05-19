@@ -7,9 +7,7 @@ REPO_ROOT="$(cd "$MACOS_DIR/.." && pwd)"
 VICE_SRC="$REPO_ROOT/vice"
 BUILD_DIR="${VICE_MACOS_ENGINE_BUILD_DIR:-/private/tmp/vice-macos-native-build}"
 PRODUCTS_DIR="$MACOS_DIR/BuildProducts"
-DYLIB_NAME="libvicemacx64sc.dylib"
-DYLIB_PATH="$PRODUCTS_DIR/$DYLIB_NAME"
-LINK_LOG="/private/tmp/vice-macos-native-x64sc.log"
+read -r -a MACHINE_TARGETS <<< "${VICE_MACOS_MACHINE_TARGETS:-x64sc}"
 
 mkdir -p "$BUILD_DIR" "$PRODUCTS_DIR"
 
@@ -83,23 +81,44 @@ make -C "$BUILD_DIR/src/vdrive" V=1
 make -C "$BUILD_DIR/src/arch/macos" V=1
 make -C "$BUILD_DIR/src/lib/linenoise-ng" V=1
 
-rm -f "$BUILD_DIR/src/x64sc"
-make -C "$BUILD_DIR/src" x64sc V=1 > "$LINK_LOG" 2>&1
+codesign_dylib() {
+    local dylib="$1"
+    local identity="${EXPANDED_CODE_SIGN_IDENTITY:--}"
 
-link_command="$(grep ' -o x64sc ' "$LINK_LOG" | tail -n 1 || true)"
-if [[ -z "$link_command" ]]; then
-    tail -n 80 "$LINK_LOG" >&2
-    echo "Unable to find x64sc link command in $LINK_LOG" >&2
-    exit 1
-fi
+    if [[ -z "$identity" ]]; then
+        identity="-"
+    fi
 
-dylib_command="${link_command/ -o x64sc / -dynamiclib -install_name @rpath\/$DYLIB_NAME -o $DYLIB_PATH }"
-(cd "$BUILD_DIR/src" && eval "$dylib_command")
+    codesign --force --sign "$identity" --timestamp=none "$dylib"
+}
 
-if [[ -n "${TARGET_BUILD_DIR:-}" && -n "${FRAMEWORKS_FOLDER_PATH:-}" ]]; then
-    mkdir -p "$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH"
-    cp "$DYLIB_PATH" "$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH/$DYLIB_NAME"
-fi
+for machine_target in "${MACHINE_TARGETS[@]}"; do
+    dylib_name="libvicemac${machine_target}.dylib"
+    dylib_path="$PRODUCTS_DIR/$dylib_name"
+    link_log="/private/tmp/vice-macos-native-${machine_target}.log"
+
+    rm -f "$BUILD_DIR/src/$machine_target"
+    make -C "$BUILD_DIR/src" "$machine_target" V=1 > "$link_log" 2>&1
+
+    link_command="$(grep " -o $machine_target " "$link_log" | tail -n 1 || true)"
+    if [[ -z "$link_command" ]]; then
+        tail -n 80 "$link_log" >&2
+        echo "Unable to find $machine_target link command in $link_log" >&2
+        exit 1
+    fi
+
+    dylib_command="${link_command/ -o $machine_target / -dynamiclib -install_name @rpath\/$dylib_name -o $dylib_path }"
+    (cd "$BUILD_DIR/src" && eval "$dylib_command")
+
+    codesign_dylib "$dylib_path"
+
+    if [[ -n "${TARGET_BUILD_DIR:-}" && -n "${FRAMEWORKS_FOLDER_PATH:-}" ]]; then
+        mkdir -p "$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH"
+        cp "$dylib_path" "$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH/$dylib_name"
+        codesign_dylib "$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH/$dylib_name"
+    fi
+done
+
 
 if [[ -n "${TARGET_BUILD_DIR:-}" && -n "${UNLOCALIZED_RESOURCES_FOLDER_PATH:-}" ]]; then
     mkdir -p "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/VICEData"

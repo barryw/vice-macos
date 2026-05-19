@@ -223,19 +223,6 @@ void ui_display_drive_track(unsigned int drive_number,
     }
 }
 
-void ui_display_drive_sector(unsigned int drive_number,
-                             unsigned int drive_base,
-                             unsigned int sector_valid,
-                             unsigned int sector,
-                             unsigned int operation)
-{
-    (void)drive_number;
-    (void)drive_base;
-    (void)sector_valid;
-    (void)sector;
-    (void)operation;
-}
-
 /* The pwm value will vary between 0 and 1000.  */
 void ui_display_drive_led(unsigned int drive_number,
                           unsigned int drive_base,

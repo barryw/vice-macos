@@ -7,10 +7,88 @@ struct DriveConfiguration: Identifiable, Codable, Equatable {
     let unit: Int
     var isAttached: Bool
     var driveType: DriveType
+    var accessMode: DriveAccessMode
     var soundEnabled: Bool
     var soundVolume: Int
 
     var id: Int { unit }
+
+    init(unit: Int,
+         isAttached: Bool,
+         driveType: DriveType,
+         accessMode: DriveAccessMode = .native,
+         soundEnabled: Bool,
+         soundVolume: Int) {
+        self.unit = unit
+        self.isAttached = isAttached
+        self.driveType = driveType
+        self.accessMode = accessMode
+        self.soundEnabled = soundEnabled
+        self.soundVolume = soundVolume
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        unit = try container.decode(Int.self, forKey: .unit)
+        isAttached = try container.decode(Bool.self, forKey: .isAttached)
+        driveType = try container.decode(DriveType.self, forKey: .driveType)
+        accessMode = try container.decodeIfPresent(DriveAccessMode.self, forKey: .accessMode) ?? .native
+        soundEnabled = try container.decode(Bool.self, forKey: .soundEnabled)
+        soundVolume = try container.decode(Int.self, forKey: .soundVolume)
+    }
+}
+
+enum DriveAccessMode: String, CaseIterable, Codable, Identifiable {
+    case native
+    case fast
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .native:
+            return "Native"
+        case .fast:
+            return "Fast"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .native:
+            return "True drive emulation"
+        case .fast:
+            return "Fast disk access"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .native:
+            return "externaldrive"
+        case .fast:
+            return "bolt.fill"
+        }
+    }
+
+    var trueDriveEmulationResourceValue: Int32 {
+        switch self {
+        case .native:
+            return 1
+        case .fast:
+            return 0
+        }
+    }
+
+    var trapDeviceResourceValue: Int32 {
+        switch self {
+        case .native:
+            return 0
+        case .fast:
+            return 1
+        }
+    }
 }
 
 struct ControlPortConfiguration: Codable, Equatable {
@@ -475,7 +553,7 @@ enum GameControllerControl: String, CaseIterable, Codable, Identifiable {
     }
 }
 
-enum JoystickAction: String, CaseIterable, Identifiable {
+enum JoystickAction: String, CaseIterable, Identifiable, Hashable {
     case up
     case down
     case left
@@ -558,6 +636,7 @@ private enum JoystickBits {
     static let left: UInt16 = 1 << 2
     static let right: UInt16 = 1 << 3
     static let fire: UInt16 = 1 << 4
+    static let all: UInt16 = up | down | left | right | fire
 }
 
 private enum MacJoystickKeyCode {
@@ -573,92 +652,58 @@ private enum MacJoystickKeyCode {
 }
 
 struct ROMImageConfiguration: Codable, Equatable {
-    var basicPath: String?
-    var kernalPath: String?
-    var characterPath: String?
+    private var paths: [String: String]
 
-    static let standard = ROMImageConfiguration(basicPath: nil,
-                                                kernalPath: nil,
-                                                characterPath: nil)
+    static let standard = ROMImageConfiguration(paths: [:])
 
-    func path(for image: MachineROMImage) -> String? {
-        switch image {
-        case .basic:
-            return basicPath
-        case .kernal:
-            return kernalPath
-        case .character:
-            return characterPath
+    init(paths: [String: String] = [:]) {
+        self.paths = paths
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        if let paths = try container.decodeIfPresent([String: String].self, forKey: .paths) {
+            self.paths = paths
+            return
         }
+
+        var legacyPaths: [String: String] = [:]
+        if let basicPath = try container.decodeIfPresent(String.self, forKey: .basicPath) {
+            legacyPaths[MachineROMSlot.c64Basic.id] = basicPath
+        }
+        if let kernalPath = try container.decodeIfPresent(String.self, forKey: .kernalPath) {
+            legacyPaths[MachineROMSlot.c64Kernal.id] = kernalPath
+        }
+        if let characterPath = try container.decodeIfPresent(String.self, forKey: .characterPath) {
+            legacyPaths[MachineROMSlot.c64Character.id] = characterPath
+        }
+        paths = legacyPaths
     }
 
-    func resourceValue(for image: MachineROMImage) -> String {
-        path(for: image) ?? image.defaultFileName
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(paths, forKey: .paths)
     }
 
-    mutating func setPath(_ path: String?, for image: MachineROMImage) {
+    func path(for slot: MachineROMSlot) -> String? {
+        paths[slot.id]
+    }
+
+    func resourceValue(for slot: MachineROMSlot) -> String {
+        path(for: slot) ?? slot.defaultFileName
+    }
+
+    mutating func setPath(_ path: String?, for slot: MachineROMSlot) {
         let normalizedPath = path?.isEmpty == false ? path : nil
-
-        switch image {
-        case .basic:
-            basicPath = normalizedPath
-        case .kernal:
-            kernalPath = normalizedPath
-        case .character:
-            characterPath = normalizedPath
-        }
-    }
-}
-
-enum MachineROMImage: String, CaseIterable, Identifiable {
-    case basic
-    case kernal
-    case character
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .basic:
-            return "BASIC"
-        case .kernal:
-            return "KERNAL"
-        case .character:
-            return "Character"
-        }
+        paths[slot.id] = normalizedPath
     }
 
-    var resourceName: String {
-        switch self {
-        case .basic:
-            return "BasicName"
-        case .kernal:
-            return "KernalName"
-        case .character:
-            return "ChargenName"
-        }
-    }
-
-    var defaultFileName: String {
-        switch self {
-        case .basic:
-            return "basic-901226-01.bin"
-        case .kernal:
-            return "kernal-901227-03.bin"
-        case .character:
-            return "chargen-901225-01.bin"
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .basic:
-            return "terminal"
-        case .kernal:
-            return "cpu"
-        case .character:
-            return "textformat"
-        }
+    private enum CodingKeys: String, CodingKey {
+        case paths
+        case basicPath
+        case kernalPath
+        case characterPath
     }
 }
 
@@ -706,6 +751,55 @@ enum DriveType: Int32, CaseIterable, Codable, Identifiable {
             return .green
         }
     }
+
+    var supportedDiskImageTypes: [DiskImageFileType] {
+        switch self {
+        case .c1540, .c1541, .c1541II, .c1570:
+            return [.d64, .d67, .g64, .p64, .x64]
+        case .c1571:
+            return [.d64, .d67, .d71, .g64, .g71, .p64, .x64]
+        case .c1581:
+            return [.d81]
+        case .fd2000, .fd4000:
+            return [.d81, .d1m, .d2m, .d4m]
+        case .cmdHD:
+            return [.dhd]
+        }
+    }
+
+    var supportedDiskImageDescription: String {
+        supportedDiskImageTypes.map(\.title).joined(separator: ", ")
+    }
+
+    func supportsDiskImage(url: URL) -> Bool {
+        guard let fileType = DiskImageFileType(url: url) else {
+            return false
+        }
+
+        return supportedDiskImageTypes.contains(fileType)
+    }
+}
+
+enum DiskImageFileType: String, CaseIterable, Identifiable {
+    case d64
+    case d67
+    case d71
+    case d81
+    case d1m
+    case d2m
+    case d4m
+    case dhd
+    case g64
+    case g71
+    case p64
+    case x64
+
+    var id: String { rawValue }
+    var title: String { rawValue.uppercased() }
+
+    init?(url: URL) {
+        self.init(rawValue: url.pathExtension.lowercased())
+    }
 }
 
 enum DriveLEDColor: Equatable {
@@ -721,6 +815,7 @@ struct DriveActivity: Identifiable, Equatable {
     let unit: Int
     var isConfigured: Bool
     var driveType: DriveType
+    var accessMode: DriveAccessMode
     var ledColor: DriveLEDColor
     var ledIntensity: UInt32
     var errorIntensity: UInt32
@@ -733,6 +828,7 @@ struct DriveActivity: Identifiable, Equatable {
 
     var id: Int { unit }
     var isActive: Bool { ledIntensity > 0 }
+    var isFastAccessEnabled: Bool { accessMode == .fast }
     var hasErrorStatus: Bool {
         errorIntensity > 0 || (driveStatusCode != DriveStatusCode.ok
             && driveStatusCode != DriveStatusCode.dosVersion)
@@ -799,8 +895,199 @@ enum MachineResetKind {
     }
 }
 
+enum RAMExpansion: String, CaseIterable, Identifiable {
+    case none
+    case reu128
+    case reu256
+    case reu512
+    case reu1024
+    case reu2048
+    case reu4096
+    case reu8192
+    case reu16384
+    case georam512
+    case georam1024
+    case georam2048
+    case georam4096
+    case ramcart64
+    case ramcart128
+    case dqbb16
+    case dqbb32
+    case dqbb64
+    case dqbb128
+    case dqbb256
+    case isepic
+    case c64_256kDE00
+    case c64_256kDE80
+    case c64_256kDF00
+    case c64_256kDF80
+    case plus60kD040
+    case plus60kD100
+    case plus256k
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .none:
+            return "None"
+        case .reu128, .reu256, .reu512, .reu1024, .reu2048, .reu4096, .reu8192, .reu16384:
+            return "REU \(sizeTitle)"
+        case .georam512, .georam1024, .georam2048, .georam4096:
+            return "GeoRAM \(sizeTitle)"
+        case .ramcart64, .ramcart128:
+            return "RamCart \(sizeTitle)"
+        case .dqbb16, .dqbb32, .dqbb64, .dqbb128, .dqbb256:
+            return "DQBB \(sizeTitle)"
+        case .isepic:
+            return "ISEPIC 2K"
+        case .c64_256kDE00:
+            return "C64 256K @ $DE00"
+        case .c64_256kDE80:
+            return "C64 256K @ $DE80"
+        case .c64_256kDF00:
+            return "C64 256K @ $DF00"
+        case .c64_256kDF80:
+            return "C64 256K @ $DF80"
+        case .plus60kD040:
+            return "+60K @ $D040"
+        case .plus60kD100:
+            return "+60K @ $D100"
+        case .plus256k:
+            return "+256K"
+        }
+    }
+
+    var statusTitle: String {
+        self == .none ? "disabled" : title
+    }
+
+    var chipTitle: String {
+        switch self {
+        case .none:
+            return ""
+        case .c64_256kDE00, .c64_256kDE80, .c64_256kDF00, .c64_256kDF80:
+            return "C64 256K"
+        case .plus60kD040, .plus60kD100:
+            return "+60K"
+        default:
+            return title
+        }
+    }
+
+    fileprivate var device: RAMExpansionDevice {
+        switch self {
+        case .none:
+            return .none
+        case .reu128, .reu256, .reu512, .reu1024, .reu2048, .reu4096, .reu8192, .reu16384:
+            return .reu
+        case .georam512, .georam1024, .georam2048, .georam4096:
+            return .georam
+        case .ramcart64, .ramcart128:
+            return .ramcart
+        case .dqbb16, .dqbb32, .dqbb64, .dqbb128, .dqbb256:
+            return .dqbb
+        case .isepic:
+            return .isepic
+        case .c64_256kDE00, .c64_256kDE80, .c64_256kDF00, .c64_256kDF80,
+             .plus60kD040, .plus60kD100, .plus256k:
+            return .memoryHack
+        }
+    }
+
+    fileprivate var sizeKiB: Int32? {
+        switch self {
+        case .reu128, .dqbb128, .ramcart128:
+            return 128
+        case .reu256, .dqbb256:
+            return 256
+        case .reu512, .georam512:
+            return 512
+        case .reu1024, .georam1024:
+            return 1024
+        case .reu2048, .georam2048:
+            return 2048
+        case .reu4096, .georam4096:
+            return 4096
+        case .reu8192:
+            return 8192
+        case .reu16384:
+            return 16384
+        case .ramcart64, .dqbb64:
+            return 64
+        case .dqbb16:
+            return 16
+        case .dqbb32:
+            return 32
+        case .none, .isepic, .c64_256kDE00, .c64_256kDE80, .c64_256kDF00, .c64_256kDF80,
+             .plus60kD040, .plus60kD100, .plus256k:
+            return nil
+        }
+    }
+
+    fileprivate var memoryHack: Int32 {
+        switch self {
+        case .c64_256kDE00, .c64_256kDE80, .c64_256kDF00, .c64_256kDF80:
+            return 1
+        case .plus60kD040, .plus60kD100:
+            return 2
+        case .plus256k:
+            return 3
+        case .none, .reu128, .reu256, .reu512, .reu1024, .reu2048, .reu4096, .reu8192, .reu16384,
+             .georam512, .georam1024, .georam2048, .georam4096, .ramcart64, .ramcart128,
+             .dqbb16, .dqbb32, .dqbb64, .dqbb128, .dqbb256, .isepic:
+            return 0
+        }
+    }
+
+    fileprivate var baseAddress: Int32? {
+        switch self {
+        case .c64_256kDE00:
+            return 0xde00
+        case .c64_256kDE80:
+            return 0xde80
+        case .c64_256kDF00:
+            return 0xdf00
+        case .c64_256kDF80:
+            return 0xdf80
+        case .plus60kD040:
+            return 0xd040
+        case .plus60kD100:
+            return 0xd100
+        case .none, .reu128, .reu256, .reu512, .reu1024, .reu2048, .reu4096, .reu8192, .reu16384,
+             .georam512, .georam1024, .georam2048, .georam4096, .ramcart64, .ramcart128,
+             .dqbb16, .dqbb32, .dqbb64, .dqbb128, .dqbb256, .isepic, .plus256k:
+            return nil
+        }
+    }
+
+    private var sizeTitle: String {
+        guard let sizeKiB else {
+            return ""
+        }
+
+        if sizeKiB >= 1024 {
+            return "\(sizeKiB / 1024)M"
+        }
+
+        return "\(sizeKiB)K"
+    }
+}
+
+fileprivate enum RAMExpansionDevice {
+    case none
+    case reu
+    case georam
+    case ramcart
+    case dqbb
+    case isepic
+    case memoryHack
+}
+
 @MainActor
 final class EmulatorSession: ObservableObject {
+    let machine = EmulatedMachine.current
+
     @Published var isPaused = false {
         didSet {
             guard isPaused != oldValue else {
@@ -816,7 +1103,7 @@ final class EmulatorSession: ObservableObject {
                 return
             }
 
-            EmulatorDefaults.saveEmulationSpeed(emulationSpeed)
+            EmulatorDefaults.saveEmulationSpeed(emulationSpeed, for: machine)
             applyEmulationSpeed()
         }
     }
@@ -826,7 +1113,7 @@ final class EmulatorSession: ObservableObject {
                 return
             }
 
-            EmulatorDefaults.saveDisplayMode(displayMode)
+            EmulatorDefaults.saveDisplayMode(displayMode, for: machine)
             statusText = "Display \(displayMode.title)"
         }
     }
@@ -836,7 +1123,7 @@ final class EmulatorSession: ObservableObject {
                 return
             }
 
-            EmulatorDefaults.saveVideoStandard(videoStandard)
+            EmulatorDefaults.saveVideoStandard(videoStandard, for: machine)
             applyVideoStandard()
         }
     }
@@ -846,7 +1133,7 @@ final class EmulatorSession: ObservableObject {
                 return
             }
 
-            EmulatorDefaults.saveSIDModel(sidModel)
+            EmulatorDefaults.saveSIDModel(sidModel, for: machine)
             applySIDModel()
         }
     }
@@ -856,7 +1143,7 @@ final class EmulatorSession: ObservableObject {
                 return
             }
 
-            EmulatorDefaults.saveSoundEnabled(soundEnabled)
+            EmulatorDefaults.saveSoundEnabled(soundEnabled, for: machine)
             applySoundSettings()
         }
     }
@@ -872,7 +1159,7 @@ final class EmulatorSession: ObservableObject {
                 return
             }
 
-            EmulatorDefaults.saveSoundVolume(soundVolume)
+            EmulatorDefaults.saveSoundVolume(soundVolume, for: machine)
             applySoundSettings()
         }
     }
@@ -882,8 +1169,18 @@ final class EmulatorSession: ObservableObject {
                 return
             }
 
-            EmulatorDefaults.saveROMImages(romImages)
+            EmulatorDefaults.saveROMImages(romImages, for: machine)
             applyROMImages()
+        }
+    }
+    @Published var ramExpansion: RAMExpansion {
+        didSet {
+            guard ramExpansion != oldValue else {
+                return
+            }
+
+            EmulatorDefaults.saveRAMExpansion(ramExpansion, for: machine)
+            applyRAMExpansion()
         }
     }
     @Published var controlPorts: ControlPortConfiguration {
@@ -898,7 +1195,7 @@ final class EmulatorSession: ObservableObject {
                 return
             }
 
-            EmulatorDefaults.saveControlPorts(controlPorts)
+            EmulatorDefaults.saveControlPorts(controlPorts, for: machine)
             applyControlPorts()
             publishKeyboardJoystickValues(force: true)
             publishGameControllerValues(force: true)
@@ -906,21 +1203,23 @@ final class EmulatorSession: ObservableObject {
     }
     @Published var driveConfigurations: [DriveConfiguration] {
         didSet {
-            EmulatorDefaults.saveDriveConfigurations(driveConfigurations)
-            applyDriveConfigurations()
+            EmulatorDefaults.saveDriveConfigurations(driveConfigurations, for: machine)
+            applyDriveConfigurationChanges(from: oldValue)
         }
     }
     @Published private var driveActivities: [Int: DriveActivity] = [:]
     @Published var cartridgeStatus = CartridgeStatus.detached
     @Published private(set) var gameControllerNames: [String] = []
+    @Published private var controlPortValues: [ControlPort: UInt16] = [:]
     @Published var filterSettings = VideoFilterSettings()
-    @Published var statusText = "Starting x64sc"
+    @Published var statusText: String
 
-    let frameSource = EmulatorFrameSource.x64scReady()
+    let frameSource: EmulatorFrameSource
     private var didStartEngine = false
     private var pressedKeys: [UInt16: PressedEmulatorKey] = [:]
     private var keyboardJoystickPressedKeys: [UUID: Set<UInt16>] = [:]
     private var lastJoystickValues: [UUID: UInt16] = [:]
+    private var gameControllerObservers: [NSObjectProtocol] = []
 
     enum DisplayMode: String, CaseIterable, Identifiable {
         case native
@@ -972,24 +1271,6 @@ final class EmulatorSession: ObservableObject {
         case pal = "PAL"
 
         var id: String { rawValue }
-
-        var viciiModelResourceValue: Int32 {
-            switch self {
-            case .ntsc:
-                return ViceVICIIModel.mos8562
-            case .pal:
-                return ViceVICIIModel.mos8565
-            }
-        }
-
-        var powerFrequency: Int32 {
-            switch self {
-            case .ntsc:
-                return 60
-            case .pal:
-                return 50
-            }
-        }
     }
 
     enum SIDModel: Int32, CaseIterable, Identifiable {
@@ -1060,16 +1341,40 @@ final class EmulatorSession: ObservableObject {
     }
 
     init() {
-        videoStandard = EmulatorDefaults.loadVideoStandard()
-        emulationSpeed = EmulatorDefaults.loadEmulationSpeed()
-        displayMode = EmulatorDefaults.loadDisplayMode()
-        sidModel = EmulatorDefaults.loadSIDModel()
-        soundEnabled = EmulatorDefaults.loadSoundEnabled()
-        soundVolume = EmulatorDefaults.loadSoundVolume()
-        romImages = EmulatorDefaults.loadROMImages()
-        controlPorts = EmulatorDefaults.loadControlPorts()
-        driveConfigurations = EmulatorDefaults.loadDriveConfigurations()
+        let machine = EmulatedMachine.current
+
+        videoStandard = EmulatorDefaults.loadVideoStandard(for: machine)
+        emulationSpeed = EmulatorDefaults.loadEmulationSpeed(for: machine)
+        displayMode = EmulatorDefaults.loadDisplayMode(for: machine)
+        sidModel = EmulatorDefaults.loadSIDModel(for: machine)
+        soundEnabled = EmulatorDefaults.loadSoundEnabled(for: machine)
+        soundVolume = EmulatorDefaults.loadSoundVolume(for: machine)
+        romImages = EmulatorDefaults.loadROMImages(for: machine)
+        ramExpansion = EmulatorDefaults.loadRAMExpansion(for: machine)
+        controlPorts = EmulatorDefaults.loadControlPorts(for: machine)
+        driveConfigurations = EmulatorDefaults.loadDriveConfigurations(for: machine)
+        statusText = "Starting \(machine.shortName)"
+        frameSource = EmulatorFrameSource.displaySource(for: machine)
         setupGameControllerMonitoring()
+    }
+
+    deinit {
+        for observer in gameControllerObservers {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        GCController.stopWirelessControllerDiscovery()
+    }
+
+    var isRAMExpansionConfigured: Bool {
+        machine.capabilities.supportsRAMExpansion && ramExpansion != .none
+    }
+
+    var availableControlPorts: [ControlPort] {
+        machine.capabilities.controlPorts
+    }
+
+    var hasMultipleControlPorts: Bool {
+        availableControlPorts.count > 1
     }
 
     var visibleDriveActivities: [DriveActivity] {
@@ -1078,14 +1383,17 @@ final class EmulatorSession: ObservableObject {
                 return nil
             }
 
-            if let activity = driveActivities[configuration.unit],
-               activity.isConfigured {
+            if var activity = driveActivities[configuration.unit] {
+                activity.isConfigured = true
+                activity.driveType = configuration.driveType
+                activity.accessMode = configuration.accessMode
                 return activity
             }
 
             return DriveActivity(unit: configuration.unit,
                                  isConfigured: true,
                                  driveType: configuration.driveType,
+                                 accessMode: configuration.accessMode,
                                  ledColor: configuration.driveType.defaultLEDColor,
                                  ledIntensity: 0,
                                  errorIntensity: 0,
@@ -1106,6 +1414,18 @@ final class EmulatorSession: ObservableObject {
         gameControllerNames.sorted { lhs, rhs in
             lhs.localizedStandardCompare(rhs) == .orderedAscending
         }
+    }
+
+    func driveAccessMode(for unit: Int) -> DriveAccessMode {
+        driveConfigurations.first { $0.unit == unit }?.accessMode ?? .native
+    }
+
+    func setDriveAccessMode(_ accessMode: DriveAccessMode, for unit: Int) {
+        guard let index = driveConfigurations.firstIndex(where: { $0.unit == unit }) else {
+            return
+        }
+
+        driveConfigurations[index].accessMode = accessMode
     }
 
     var controlDevices: [ControlDeviceConfiguration] {
@@ -1151,6 +1471,35 @@ final class EmulatorSession: ObservableObject {
         var updatedConfiguration = controlPorts
         updatedConfiguration.setAssignedDeviceID(deviceID, for: port)
         controlPorts = updatedConfiguration
+    }
+
+    func swapControlPorts() {
+        guard hasMultipleControlPorts else {
+            return
+        }
+
+        var updatedConfiguration = controlPorts
+        let port1DeviceID = controlPorts.assignedDeviceID(for: .one)
+        let port2DeviceID = controlPorts.assignedDeviceID(for: .two)
+
+        updatedConfiguration.setAssignedDeviceID(port2DeviceID, for: .one)
+        updatedConfiguration.setAssignedDeviceID(port1DeviceID, for: .two)
+        controlPorts = updatedConfiguration
+    }
+
+    func controlPortJoystickValue(for port: ControlPort) -> UInt16 {
+        controlPortValues[port] ?? 0
+    }
+
+    func controlPortActiveActions(for port: ControlPort) -> Set<JoystickAction> {
+        let value = controlPortJoystickValue(for: port)
+        var actions = Set<JoystickAction>()
+
+        for action in JoystickAction.allCases where (value & action.bit) != 0 {
+            actions.insert(action)
+        }
+
+        return actions
     }
 
     func makeControlDevice(kind: ControlDeviceKind) -> ControlDeviceConfiguration {
@@ -1199,10 +1548,14 @@ final class EmulatorSession: ObservableObject {
         }
 
         guard let executablePath = Bundle.main.executableURL?.path,
-              let dataDirectory = Bundle.main.resourceURL?.appendingPathComponent("VICEData").path else {
+              let dataDirectory = Bundle.main.resourceURL?.appendingPathComponent("VICEData").path,
+              let runtimeDirectory = Bundle.main.privateFrameworksURL?.path else {
             statusText = "Missing runtime paths"
             return
         }
+        let dynamicLibraryPath = URL(fileURLWithPath: runtimeDirectory)
+            .appendingPathComponent(machine.dynamicLibraryName)
+            .path
 
         didStartEngine = true
         ViceEngineSetVideoFrameCallback(viceFrameCallback,
@@ -1212,26 +1565,22 @@ final class EmulatorSession: ObservableObject {
         ViceEngineSetCartridgeStatusCallback(viceCartridgeStatusCallback,
                                              Unmanaged.passUnretained(self).toOpaque())
 
-        let basicROM = romImages.resourceValue(for: .basic)
-        let kernalROM = romImages.resourceValue(for: .kernal)
-        let characterROM = romImages.resourceValue(for: .character)
-        let started = executablePath.withCString { executablePathPointer in
-            dataDirectory.withCString { dataDirectoryPointer in
-                basicROM.withCString { basicROMPointer in
-                    kernalROM.withCString { kernalROMPointer in
-                        characterROM.withCString { characterROMPointer in
-                            ViceEngineStartX64SC(executablePathPointer,
-                                                  dataDirectoryPointer,
-                                                  sidModel.rawValue,
-                                                  soundEnabled,
-                                                  Int32(soundVolume),
-                                                  emulationSpeed.speedPercent,
-                                                  emulationSpeed.isWarpEnabled,
-                                                  basicROMPointer,
-                                                  kernalROMPointer,
-                                                  characterROMPointer)
-                        }
-                    }
+        let startupConfiguration = MachineStartupConfiguration(executablePath: executablePath,
+                                                               dataDirectory: dataDirectory,
+                                                               videoStandard: videoStandard,
+                                                               sidModel: sidModel,
+                                                               soundEnabled: soundEnabled,
+                                                               soundVolume: soundVolume,
+                                                               emulationSpeed: emulationSpeed,
+                                                               romImages: romImages)
+        let startupArguments = machine.startupArguments(configuration: startupConfiguration)
+        let started = machine.id.rawValue.withCString { machineIDPointer in
+            dynamicLibraryPath.withCString { dynamicLibraryPathPointer in
+                startupArguments.withCStringArray { argumentCount, argumentPointers in
+                    ViceEngineStartMachine(machineIDPointer,
+                                           dynamicLibraryPathPointer,
+                                           argumentCount,
+                                           argumentPointers)
                 }
             }
         }
@@ -1240,7 +1589,7 @@ final class EmulatorSession: ObservableObject {
             applyRuntimeConfiguration()
         }
 
-        statusText = started ? "x64sc running" : "x64sc already running"
+        statusText = started ? "\(machine.shortName) running" : "\(machine.shortName) already running"
     }
 
     func reset(kind: MachineResetKind = .soft) {
@@ -1350,6 +1699,7 @@ final class EmulatorSession: ObservableObject {
         let activity = DriveActivity(unit: status.unit,
                                      isConfigured: status.enabled,
                                      driveType: driveType,
+                                     accessMode: driveAccessMode(for: Int(status.unit)),
                                      ledColor: DriveLEDColor(viceColor: status.ledColor),
                                      ledIntensity: status.ledIntensity,
                                      errorIntensity: status.errorIntensity,
@@ -1389,24 +1739,49 @@ final class EmulatorSession: ObservableObject {
             return
         }
 
+        guard let configuration = driveConfigurations.first(where: { $0.unit == unit }),
+              configuration.isAttached else {
+            statusText = "Drive \(unit) is disabled"
+            return
+        }
+
+        guard configuration.driveType.supportsDiskImage(url: url) else {
+            let fileType = DiskImageFileType(url: url)?.title
+                ?? (url.pathExtension.isEmpty ? "File" : url.pathExtension.uppercased())
+            statusText = "\(fileType) is not supported by drive \(unit) (\(configuration.driveType.title))"
+            return
+        }
+
         url.path.withCString { path in
             _ = ViceEngineAttachDisk(UInt32(unit), path, autorun)
         }
     }
 
-    func setROMImage(_ image: MachineROMImage, path: String?) {
+    func setROMImage(_ image: MachineROMSlot, path: String?) {
+        guard machine.romSlots.contains(image) else {
+            return
+        }
+
         var updatedImages = romImages
         updatedImages.setPath(path, for: image)
         romImages = updatedImages
     }
 
     func attachCartridge(url: URL) {
+        guard machine.capabilities.supportsCartridges else {
+            return
+        }
+
         url.path.withCString { path in
             _ = ViceEngineAttachCartridge(path)
         }
     }
 
     func detachCartridge() {
+        guard machine.capabilities.supportsCartridges else {
+            return
+        }
+
         _ = ViceEngineDetachCartridge()
     }
 
@@ -1417,6 +1792,7 @@ final class EmulatorSession: ObservableObject {
         applyEmulationSpeed(updateStatus: false)
         applyPauseState(updateStatus: false)
         applyROMImages()
+        applyRAMExpansion(updateStatus: false)
         applyControlPorts()
         applyDriveConfigurations(updateStatus: false)
     }
@@ -1434,12 +1810,14 @@ final class EmulatorSession: ObservableObject {
     }
 
     private func applyVideoStandard(updateStatus: Bool = true) {
-        guard ViceEngineIsRunning() else {
+        guard ViceEngineIsRunning(),
+              machine.capabilities.supportsVideoStandardSelection else {
             return
         }
 
-        setVICEIntResource(ViceResource.viciiModel, value: videoStandard.viciiModelResourceValue)
-        setVICEIntResource(ViceResource.machinePowerFrequency, value: videoStandard.powerFrequency)
+        for assignment in machine.videoStandardAssignments(for: videoStandard) {
+            setVICEIntResource(assignment.name, value: assignment.value)
+        }
 
         if updateStatus {
             statusText = "Video \(videoStandard.rawValue)"
@@ -1447,7 +1825,8 @@ final class EmulatorSession: ObservableObject {
     }
 
     private func applySIDModel(updateStatus: Bool = true) {
-        guard ViceEngineIsRunning() else {
+        guard ViceEngineIsRunning(),
+              machine.capabilities.supportsSIDModelSelection else {
             return
         }
 
@@ -1491,10 +1870,75 @@ final class EmulatorSession: ObservableObject {
             return
         }
 
-        for image in MachineROMImage.allCases {
-            setVICEStringResource(image.resourceName,
-                                  value: romImages.resourceValue(for: image))
+        for slot in machine.romSlots {
+            setVICEStringResource(slot.resourceName,
+                                  value: romImages.resourceValue(for: slot))
         }
+    }
+
+    private func applyRAMExpansion(updateStatus: Bool = true) {
+        guard ViceEngineIsRunning(),
+              machine.capabilities.supportsRAMExpansion,
+              machine.ramExpansions.contains(ramExpansion) else {
+            return
+        }
+
+        disableRAMExpansionResources()
+
+        switch ramExpansion.device {
+        case .none:
+            break
+        case .reu:
+            if let sizeKiB = ramExpansion.sizeKiB {
+                setVICEIntResource(ViceResource.reuSize, value: sizeKiB)
+            }
+            setVICEIntResource(ViceResource.reu, value: 1)
+        case .georam:
+            if let sizeKiB = ramExpansion.sizeKiB {
+                setVICEIntResource(ViceResource.georamSize, value: sizeKiB)
+            }
+            setVICEIntResource(ViceResource.georam, value: 1)
+        case .ramcart:
+            if let sizeKiB = ramExpansion.sizeKiB {
+                setVICEIntResource(ViceResource.ramCartSize, value: sizeKiB)
+            }
+            setVICEIntResource(ViceResource.ramCart, value: 1)
+        case .dqbb:
+            if let sizeKiB = ramExpansion.sizeKiB {
+                setVICEIntResource(ViceResource.dqbbSize, value: sizeKiB)
+            }
+            setVICEIntResource(ViceResource.dqbbMode, value: ViceDQBBMode.c64)
+            setVICEIntResource(ViceResource.dqbb, value: 1)
+        case .isepic:
+            setVICEIntResource(ViceResource.isepicSwitch, value: 1)
+            setVICEIntResource(ViceResource.isepicCartridgeEnabled, value: 1)
+        case .memoryHack:
+            if let baseAddress = ramExpansion.baseAddress {
+                switch ramExpansion {
+                case .c64_256kDE00, .c64_256kDE80, .c64_256kDF00, .c64_256kDF80:
+                    setVICEIntResource(ViceResource.c64_256kBase, value: baseAddress)
+                case .plus60kD040, .plus60kD100:
+                    setVICEIntResource(ViceResource.plus60kBase, value: baseAddress)
+                default:
+                    break
+                }
+            }
+            setVICEIntResource(ViceResource.memoryHack, value: ramExpansion.memoryHack)
+        }
+
+        if updateStatus {
+            statusText = "RAM expansion \(ramExpansion.statusTitle)"
+        }
+    }
+
+    private func disableRAMExpansionResources() {
+        setVICEIntResource(ViceResource.reu, value: 0)
+        setVICEIntResource(ViceResource.georam, value: 0)
+        setVICEIntResource(ViceResource.ramCart, value: 0)
+        setVICEIntResource(ViceResource.dqbb, value: 0)
+        setVICEIntResource(ViceResource.isepicCartridgeEnabled, value: 0)
+        setVICEIntResource(ViceResource.isepicSwitch, value: 0)
+        setVICEIntResource(ViceResource.memoryHack, value: 0)
     }
 
     private func applyControlPorts() {
@@ -1502,7 +1946,7 @@ final class EmulatorSession: ObservableObject {
             return
         }
 
-        for port in ControlPort.allCases {
+        for port in availableControlPorts {
             guard let controlDevice = controlPorts.assignedDevice(for: port) else {
                 setVICEIntResource(port.resourceName, value: ViceJoyPortDevice.none)
                 publishJoystickValue(0, to: port)
@@ -1521,17 +1965,74 @@ final class EmulatorSession: ObservableObject {
 
         let driveSoundEnabled = driveConfigurations.contains { $0.soundEnabled }
         setVICEIntResource("DriveSoundEmulation", value: driveSoundEnabled ? 1 : 0)
+        if driveSoundEnabled,
+           let volume = driveConfigurations
+               .filter(\.soundEnabled)
+               .map(\.soundVolume)
+               .max() {
+            setVICEIntResource("DriveSoundEmulationVolume", value: Int32(volume))
+        }
 
         for configuration in driveConfigurations {
             let driveType = configuration.isAttached ? configuration.driveType.rawValue : 0
+
             setVICEIntResource("Drive\(configuration.unit)Type", value: driveType)
-            setVICEIntResource("Drive\(configuration.unit)SoundEmulation", value: configuration.soundEnabled ? 1 : 0)
-            setVICEIntResource("Drive\(configuration.unit)SoundEmulationVolume", value: Int32(configuration.soundVolume))
+            applyDriveAccessMode(configuration)
         }
 
         if updateStatus {
             statusText = "Drive settings updated"
         }
+    }
+
+    private func applyDriveConfigurationChanges(from oldConfigurations: [DriveConfiguration]) {
+        guard ViceEngineIsRunning() else {
+            return
+        }
+
+        guard driveConfigurations.map(\.unit) == oldConfigurations.map(\.unit) else {
+            applyDriveConfigurations()
+            return
+        }
+
+        var accessModeUpdates: [DriveConfiguration] = []
+
+        for configuration in driveConfigurations {
+            guard let oldConfiguration = oldConfigurations.first(where: { $0.unit == configuration.unit }) else {
+                applyDriveConfigurations()
+                return
+            }
+
+            guard configuration != oldConfiguration else {
+                continue
+            }
+
+            let onlyAccessModeChanged = configuration.accessMode != oldConfiguration.accessMode
+                && configuration.isAttached == oldConfiguration.isAttached
+                && configuration.driveType == oldConfiguration.driveType
+                && configuration.soundEnabled == oldConfiguration.soundEnabled
+                && configuration.soundVolume == oldConfiguration.soundVolume
+
+            guard onlyAccessModeChanged else {
+                applyDriveConfigurations()
+                return
+            }
+
+            accessModeUpdates.append(configuration)
+        }
+
+        for configuration in accessModeUpdates {
+            applyDriveAccessMode(configuration)
+        }
+    }
+
+    private func applyDriveAccessMode(_ configuration: DriveConfiguration) {
+        let accessMode = configuration.isAttached ? configuration.accessMode : DriveAccessMode.native
+
+        setVICEIntResource("Drive\(configuration.unit)TrueEmulation",
+                           value: accessMode.trueDriveEmulationResourceValue)
+        setVICEIntResource("TrapDevice\(configuration.unit)",
+                           value: accessMode.trapDeviceResourceValue)
     }
 
     private func setVICEIntResource(_ name: String, value: Int32) {
@@ -1587,21 +2088,22 @@ final class EmulatorSession: ObservableObject {
     }
 
     private func setupGameControllerMonitoring() {
-        NotificationCenter.default.addObserver(forName: .GCControllerDidConnect,
-                                               object: nil,
-                                               queue: .main) { [weak self] _ in
+        let connectObserver = NotificationCenter.default.addObserver(forName: .GCControllerDidConnect,
+                                                                     object: nil,
+                                                                     queue: .main) { [weak self] _ in
             Task { @MainActor in
                 self?.refreshGameControllers()
             }
         }
-        NotificationCenter.default.addObserver(forName: .GCControllerDidDisconnect,
-                                               object: nil,
-                                               queue: .main) { [weak self] _ in
+        let disconnectObserver = NotificationCenter.default.addObserver(forName: .GCControllerDidDisconnect,
+                                                                        object: nil,
+                                                                        queue: .main) { [weak self] _ in
             Task { @MainActor in
                 self?.refreshGameControllers()
             }
         }
 
+        gameControllerObservers = [connectObserver, disconnectObserver]
         GCController.startWirelessControllerDiscovery()
         refreshGameControllers()
     }
@@ -1740,7 +2242,7 @@ final class EmulatorSession: ObservableObject {
     }
 
     private func publishJoystickValue(_ value: UInt16, forDeviceID deviceID: UUID) {
-        for port in ControlPort.allCases where controlPorts.assignedDeviceID(for: port) == deviceID {
+        for port in availableControlPorts where controlPorts.assignedDeviceID(for: port) == deviceID {
             publishJoystickValue(value, to: port)
         }
     }
@@ -1757,7 +2259,7 @@ final class EmulatorSession: ObservableObject {
     private func assignedControlDevices(kind: ControlDeviceKind) -> [ControlDeviceConfiguration] {
         var devices: [ControlDeviceConfiguration] = []
 
-        for port in ControlPort.allCases {
+        for port in availableControlPorts {
             guard let device = controlPorts.assignedDevice(for: port),
                   device.kind == kind,
                   !devices.contains(where: { $0.id == device.id }) else {
@@ -1771,11 +2273,16 @@ final class EmulatorSession: ObservableObject {
     }
 
     private func publishJoystickValue(_ value: UInt16, to port: ControlPort) {
+        let normalizedValue = value & JoystickBits.all
+        if controlPortValues[port] != normalizedValue {
+            controlPortValues[port] = normalizedValue
+        }
+
         guard ViceEngineIsRunning() else {
             return
         }
 
-        _ = ViceEngineSetJoystickValue(port.joystickIndex, UInt32(value))
+        _ = ViceEngineSetJoystickValue(port.joystickIndex, UInt32(normalizedValue))
     }
 
     private func uniqueControlDeviceName(baseName: String) -> String {
@@ -1838,12 +2345,24 @@ struct CartridgeStatusSnapshot {
 }
 
 private enum ViceResource {
-    static let viciiModel = "VICIIModel"
-    static let machinePowerFrequency = "MachinePowerFrequency"
     static let speed = "Speed"
     static let sidModel = "SidModel"
     static let sound = "Sound"
     static let soundVolume = "SoundVolume"
+    static let reu = "REU"
+    static let reuSize = "REUsize"
+    static let georam = "GEORAM"
+    static let georamSize = "GEORAMsize"
+    static let ramCart = "RAMCART"
+    static let ramCartSize = "RAMCARTsize"
+    static let dqbb = "DQBB"
+    static let dqbbSize = "DQBBSize"
+    static let dqbbMode = "DQBBMode"
+    static let isepicCartridgeEnabled = "IsepicCartridgeEnabled"
+    static let isepicSwitch = "IsepicSwitch"
+    static let memoryHack = "MemoryHack"
+    static let c64_256kBase = "C64_256Kbase"
+    static let plus60kBase = "PLUS60Kbase"
 }
 
 private enum ViceJoyPortDevice {
@@ -1851,9 +2370,8 @@ private enum ViceJoyPortDevice {
     static let joystick: Int32 = 1
 }
 
-private enum ViceVICIIModel {
-    static let mos8565: Int32 = 1
-    static let mos8562: Int32 = 4
+private enum ViceDQBBMode {
+    static let c64: Int32 = 1
 }
 
 private enum EmulatorDefaults {
@@ -1864,34 +2382,37 @@ private enum EmulatorDefaults {
     private static let soundEnabledKey = "vice.soundEnabled"
     private static let soundVolumeKey = "vice.soundVolume"
     private static let romImagesKey = "vice.romImages"
+    private static let ramExpansionKey = "vice.ramExpansion"
     private static let controlPortsKey = "vice.controlPorts"
     private static let driveConfigurationsKey = "vice.driveConfigurations"
 
-    static func loadVideoStandard() -> EmulatorSession.VideoStandard {
-        guard let rawValue = UserDefaults.standard.string(forKey: videoStandardKey) else {
+    static func loadVideoStandard(for machine: EmulatedMachine) -> EmulatorSession.VideoStandard {
+        guard let rawValue = UserDefaults.standard.string(forKey: key(videoStandardKey, machine: machine))
+                ?? legacyString(forKey: videoStandardKey, machine: machine) else {
             return .ntsc
         }
 
         return EmulatorSession.VideoStandard(rawValue: rawValue) ?? .ntsc
     }
 
-    static func saveVideoStandard(_ standard: EmulatorSession.VideoStandard) {
-        UserDefaults.standard.set(standard.rawValue, forKey: videoStandardKey)
+    static func saveVideoStandard(_ standard: EmulatorSession.VideoStandard, for machine: EmulatedMachine) {
+        UserDefaults.standard.set(standard.rawValue, forKey: key(videoStandardKey, machine: machine))
     }
 
-    static func loadEmulationSpeed() -> EmulatorSession.EmulationSpeed {
-        guard let rawValue = UserDefaults.standard.string(forKey: emulationSpeedKey) else {
+    static func loadEmulationSpeed(for machine: EmulatedMachine) -> EmulatorSession.EmulationSpeed {
+        guard let rawValue = UserDefaults.standard.string(forKey: key(emulationSpeedKey, machine: machine))
+                ?? legacyString(forKey: emulationSpeedKey, machine: machine) else {
             return .normal
         }
 
         return EmulatorSession.EmulationSpeed(rawValue: rawValue) ?? .normal
     }
 
-    static func saveEmulationSpeed(_ speed: EmulatorSession.EmulationSpeed) {
-        UserDefaults.standard.set(speed.rawValue, forKey: emulationSpeedKey)
+    static func saveEmulationSpeed(_ speed: EmulatorSession.EmulationSpeed, for machine: EmulatedMachine) {
+        UserDefaults.standard.set(speed.rawValue, forKey: key(emulationSpeedKey, machine: machine))
     }
 
-    static func loadDisplayMode() -> EmulatorSession.DisplayMode {
+    static func loadDisplayMode(for machine: EmulatedMachine) -> EmulatorSession.DisplayMode {
         guard let rawValue = UserDefaults.standard.string(forKey: displayModeKey) else {
             return .native
         }
@@ -1899,24 +2420,28 @@ private enum EmulatorDefaults {
         return EmulatorSession.DisplayMode(rawValue: rawValue) ?? .native
     }
 
-    static func saveDisplayMode(_ mode: EmulatorSession.DisplayMode) {
+    static func saveDisplayMode(_ mode: EmulatorSession.DisplayMode, for machine: EmulatedMachine) {
         UserDefaults.standard.set(mode.rawValue, forKey: displayModeKey)
     }
 
-    static func loadSIDModel() -> EmulatorSession.SIDModel {
-        guard UserDefaults.standard.object(forKey: sidModelKey) != nil else {
+    static func loadSIDModel(for machine: EmulatedMachine) -> EmulatorSession.SIDModel {
+        let defaultsKey = key(sidModelKey, machine: machine)
+        let legacyKey = machine.id == .x64sc ? sidModelKey : defaultsKey
+        let activeKey = UserDefaults.standard.object(forKey: defaultsKey) != nil ? defaultsKey : legacyKey
+
+        guard UserDefaults.standard.object(forKey: activeKey) != nil else {
             return .mos8580
         }
 
-        let rawValue = Int32(UserDefaults.standard.integer(forKey: sidModelKey))
+        let rawValue = Int32(UserDefaults.standard.integer(forKey: activeKey))
         return EmulatorSession.SIDModel(rawValue: rawValue) ?? .mos8580
     }
 
-    static func saveSIDModel(_ model: EmulatorSession.SIDModel) {
-        UserDefaults.standard.set(Int(model.rawValue), forKey: sidModelKey)
+    static func saveSIDModel(_ model: EmulatorSession.SIDModel, for machine: EmulatedMachine) {
+        UserDefaults.standard.set(Int(model.rawValue), forKey: key(sidModelKey, machine: machine))
     }
 
-    static func loadSoundEnabled() -> Bool {
+    static func loadSoundEnabled(for machine: EmulatedMachine) -> Bool {
         guard UserDefaults.standard.object(forKey: soundEnabledKey) != nil else {
             return true
         }
@@ -1924,11 +2449,11 @@ private enum EmulatorDefaults {
         return UserDefaults.standard.bool(forKey: soundEnabledKey)
     }
 
-    static func saveSoundEnabled(_ enabled: Bool) {
+    static func saveSoundEnabled(_ enabled: Bool, for machine: EmulatedMachine) {
         UserDefaults.standard.set(enabled, forKey: soundEnabledKey)
     }
 
-    static func loadSoundVolume() -> Int {
+    static func loadSoundVolume(for machine: EmulatedMachine) -> Int {
         guard UserDefaults.standard.object(forKey: soundVolumeKey) != nil else {
             return 100
         }
@@ -1936,12 +2461,13 @@ private enum EmulatorDefaults {
         return min(max(UserDefaults.standard.integer(forKey: soundVolumeKey), 0), 100)
     }
 
-    static func saveSoundVolume(_ volume: Int) {
+    static func saveSoundVolume(_ volume: Int, for machine: EmulatedMachine) {
         UserDefaults.standard.set(min(max(volume, 0), 100), forKey: soundVolumeKey)
     }
 
-    static func loadROMImages() -> ROMImageConfiguration {
-        guard let data = UserDefaults.standard.data(forKey: romImagesKey),
+    static func loadROMImages(for machine: EmulatedMachine) -> ROMImageConfiguration {
+        guard let data = UserDefaults.standard.data(forKey: key(romImagesKey, machine: machine))
+                ?? legacyData(forKey: romImagesKey, machine: machine),
               let images = try? JSONDecoder().decode(ROMImageConfiguration.self, from: data) else {
             return .standard
         }
@@ -1949,52 +2475,83 @@ private enum EmulatorDefaults {
         return images
     }
 
-    static func saveROMImages(_ images: ROMImageConfiguration) {
+    static func saveROMImages(_ images: ROMImageConfiguration, for machine: EmulatedMachine) {
         guard let data = try? JSONEncoder().encode(images) else {
             return
         }
 
-        UserDefaults.standard.set(data, forKey: romImagesKey)
+        UserDefaults.standard.set(data, forKey: key(romImagesKey, machine: machine))
     }
 
-    static func loadControlPorts() -> ControlPortConfiguration {
-        guard let data = UserDefaults.standard.data(forKey: controlPortsKey),
+    static func loadRAMExpansion(for machine: EmulatedMachine) -> RAMExpansion {
+        guard machine.capabilities.supportsRAMExpansion,
+              let rawValue = UserDefaults.standard.string(forKey: key(ramExpansionKey, machine: machine))
+                ?? legacyString(forKey: ramExpansionKey, machine: machine) else {
+            return .none
+        }
+
+        return RAMExpansion(rawValue: rawValue) ?? .none
+    }
+
+    static func saveRAMExpansion(_ expansion: RAMExpansion, for machine: EmulatedMachine) {
+        UserDefaults.standard.set(expansion.rawValue, forKey: key(ramExpansionKey, machine: machine))
+    }
+
+    static func loadControlPorts(for machine: EmulatedMachine) -> ControlPortConfiguration {
+        guard let data = UserDefaults.standard.data(forKey: key(controlPortsKey, machine: machine))
+                ?? legacyData(forKey: controlPortsKey, machine: machine),
               let configuration = try? JSONDecoder().decode(ControlPortConfiguration.self, from: data) else {
             return .standard
         }
 
-        return configuration
+        return configuration.sanitized()
     }
 
-    static func saveControlPorts(_ configuration: ControlPortConfiguration) {
+    static func saveControlPorts(_ configuration: ControlPortConfiguration, for machine: EmulatedMachine) {
         guard let data = try? JSONEncoder().encode(configuration) else {
             return
         }
 
-        UserDefaults.standard.set(data, forKey: controlPortsKey)
+        UserDefaults.standard.set(data, forKey: key(controlPortsKey, machine: machine))
     }
 
-    static func loadDriveConfigurations() -> [DriveConfiguration] {
-        guard let data = UserDefaults.standard.data(forKey: driveConfigurationsKey),
+    static func loadDriveConfigurations(for machine: EmulatedMachine) -> [DriveConfiguration] {
+        guard let data = UserDefaults.standard.data(forKey: key(driveConfigurationsKey, machine: machine))
+                ?? legacyData(forKey: driveConfigurationsKey, machine: machine),
               let configurations = try? JSONDecoder().decode([DriveConfiguration].self, from: data),
-              configurations.map(\.unit) == [8, 9, 10, 11] else {
-            return [
-                DriveConfiguration(unit: 8, isAttached: true, driveType: .c1541, soundEnabled: false, soundVolume: 1000),
-                DriveConfiguration(unit: 9, isAttached: false, driveType: .c1541, soundEnabled: false, soundVolume: 1000),
-                DriveConfiguration(unit: 10, isAttached: false, driveType: .c1541, soundEnabled: false, soundVolume: 1000),
-                DriveConfiguration(unit: 11, isAttached: false, driveType: .c1541, soundEnabled: false, soundVolume: 1000)
-            ]
+              configurations.map(\.unit) == machine.capabilities.driveUnits else {
+            return machine.defaultDriveConfigurations()
         }
 
         return configurations
     }
 
-    static func saveDriveConfigurations(_ configurations: [DriveConfiguration]) {
+    static func saveDriveConfigurations(_ configurations: [DriveConfiguration], for machine: EmulatedMachine) {
         guard let data = try? JSONEncoder().encode(configurations) else {
             return
         }
 
-        UserDefaults.standard.set(data, forKey: driveConfigurationsKey)
+        UserDefaults.standard.set(data, forKey: key(driveConfigurationsKey, machine: machine))
+    }
+
+    private static func key(_ baseKey: String, machine: EmulatedMachine) -> String {
+        "\(baseKey).\(machine.id.rawValue)"
+    }
+
+    private static func legacyData(forKey baseKey: String, machine: EmulatedMachine) -> Data? {
+        guard machine.id == .x64sc else {
+            return nil
+        }
+
+        return UserDefaults.standard.data(forKey: baseKey)
+    }
+
+    private static func legacyString(forKey baseKey: String, machine: EmulatedMachine) -> String? {
+        guard machine.id == .x64sc else {
+            return nil
+        }
+
+        return UserDefaults.standard.string(forKey: baseKey)
     }
 }
 
@@ -2177,6 +2734,34 @@ private enum ViceMacKeyMapper {
             return Key.f1 + 11
         default:
             return nil
+        }
+    }
+}
+
+private extension Array where Element == String {
+    func withCStringArray<Result>(
+        _ body: (Int32, UnsafePointer<UnsafePointer<CChar>?>?) -> Result
+    ) -> Result {
+        var cStrings: [UnsafeMutablePointer<CChar>] = []
+        cStrings.reserveCapacity(count)
+
+        for string in self {
+            guard let cString = strdup(string) else {
+                fatalError("Unable to allocate C string")
+            }
+            cStrings.append(cString)
+        }
+        defer {
+            for cString in cStrings {
+                free(cString)
+            }
+        }
+
+        var pointers = cStrings.map { Optional(UnsafePointer<CChar>($0)) }
+        pointers.append(nil)
+
+        return pointers.withUnsafeBufferPointer { buffer in
+            body(Int32(count), buffer.baseAddress)
         }
     }
 }

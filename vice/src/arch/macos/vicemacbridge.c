@@ -217,9 +217,6 @@ void vicemac_publish_drive_status(uint32_t unit,
                                   uint32_t track,
                                   uint32_t half_track,
                                   uint32_t disk_side,
-                                  uint32_t sector_valid,
-                                  uint32_t sector,
-                                  uint32_t operation,
                                   int32_t drive_status_code,
                                   const char *drive_status_text,
                                   const char *image_path)
@@ -240,9 +237,6 @@ void vicemac_publish_drive_status(uint32_t unit,
     status.track = track;
     status.half_track = half_track;
     status.disk_side = disk_side;
-    status.sector_valid = sector_valid ? 1U : 0U;
-    status.sector = sector;
-    status.operation = operation;
     status.drive_status_code = drive_status_code;
     status.drive_status_text = drive_status_text;
     status.image_path = image_path;

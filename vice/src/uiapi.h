@@ -53,12 +53,6 @@ typedef enum {
     UI_DRIVE_ENABLE_3 = 1 << 3
 } ui_drive_enable_t;
 
-typedef enum {
-    UI_DRIVE_OPERATION_NONE = 0,
-    UI_DRIVE_OPERATION_READ = 1,
-    UI_DRIVE_OPERATION_WRITE = 2
-} ui_drive_operation_t;
-
 /* Initialization  */
 int ui_resources_init(void);
 void ui_resources_shutdown(void);
@@ -83,7 +77,6 @@ char* ui_get_file(const char *format, ...) VICE_ATTR_PRINTF;
 /* Drive related UI.  */
 void ui_enable_drive_status(ui_drive_enable_t state, int *drive_led_color);
 void ui_display_drive_track(unsigned int drive_number, unsigned int drive_base, unsigned int half_track_number, unsigned int disk_side);
-void ui_display_drive_sector(unsigned int drive_number, unsigned int drive_base, unsigned int sector_valid, unsigned int sector, unsigned int operation);
 
 /* The pwm value will vary between 0 and 1000.  */
 void ui_display_drive_led(unsigned int drive_number, unsigned int drive_base, unsigned int led_pwm1, unsigned int led_pwm2);

@@ -328,9 +328,6 @@ typedef struct drive_s {
     int old_led_status;
     int old_half_track;
     unsigned int old_side;
-    int old_sector_valid;
-    unsigned int old_sector;
-    unsigned int old_operation;
 
     /* Complicated image, with complex emulation requirements */
     int complicated_image_loaded;

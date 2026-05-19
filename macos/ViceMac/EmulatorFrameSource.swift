@@ -10,20 +10,33 @@ struct EmulatorVideoFrame {
 }
 
 final class EmulatorFrameSource {
-    let resourceName: String
-    let fileExtension: String
-    let pixelSize: CGSize
+    let displayProfile: MachineDisplayProfile
     private let lock = NSLock()
     private var latestFrame: EmulatorVideoFrame?
 
-    var aspectRatio: CGFloat {
-        pixelSize.width / pixelSize.height
+    var bootFrame: MachineBootFrame {
+        displayProfile.bootFrame
     }
 
-    init(resourceName: String, fileExtension: String, pixelSize: CGSize) {
-        self.resourceName = resourceName
-        self.fileExtension = fileExtension
-        self.pixelSize = pixelSize
+    var resourceName: String {
+        bootFrame.resourceName
+    }
+
+    var fileExtension: String {
+        bootFrame.fileExtension
+    }
+
+    var pixelSize: CGSize {
+        bootFrame.pixelSize
+    }
+
+    var aspectRatio: CGFloat {
+        let presentedSize = displayProfile.presentationSize(for: pixelSize)
+        return presentedSize.width / presentedSize.height
+    }
+
+    init(displayProfile: MachineDisplayProfile) {
+        self.displayProfile = displayProfile
     }
 
     func publish(_ frame: EmulatorVideoFrame) {
@@ -41,15 +54,19 @@ final class EmulatorFrameSource {
             return latestFrame
         }
     }
+
+    func presentationSize(for pixelSize: CGSize) -> CGSize {
+        displayProfile.presentationSize(for: pixelSize)
+    }
+
+    func nativeDisplaySize(for pixelSize: CGSize? = nil) -> CGSize {
+        displayProfile.nativeDisplaySize(for: pixelSize)
+    }
 }
 
 extension EmulatorFrameSource {
-    static func x64scReady() -> EmulatorFrameSource {
-        EmulatorFrameSource(
-            resourceName: "x64sc-ready",
-            fileExtension: "png",
-            pixelSize: CGSize(width: 384, height: 272)
-        )
+    static func displaySource(for machine: EmulatedMachine) -> EmulatorFrameSource {
+        EmulatorFrameSource(displayProfile: machine.displayProfile)
     }
 }
 

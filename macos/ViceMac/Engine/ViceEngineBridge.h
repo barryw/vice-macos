@@ -28,9 +28,6 @@ typedef struct ViceEngineDriveStatus {
     uint32_t track;
     uint32_t halfTrack;
     uint32_t diskSide;
-    bool sectorValid;
-    uint32_t sector;
-    uint32_t operation;
     int32_t driveStatusCode;
     const char *driveStatusText;
     const char *imagePath;
@@ -60,16 +57,10 @@ void ViceEngineSetDriveStatusCallback(ViceEngineDriveStatusCallback callback,
                                       void *context);
 void ViceEngineSetCartridgeStatusCallback(ViceEngineCartridgeStatusCallback callback,
                                           void *context);
-bool ViceEngineStartX64SC(const char *executablePath,
-                          const char *dataDirectory,
-                          int32_t sidModel,
-                          bool soundEnabled,
-                          int32_t soundVolume,
-                          int32_t speedPercent,
-                          bool warpEnabled,
-                          const char *basicROM,
-                          const char *kernalROM,
-                          const char *characterROM);
+bool ViceEngineStartMachine(const char *machineID,
+                            const char *dynamicLibraryPath,
+                            int32_t argc,
+                            const char * const *argv);
 bool ViceEngineIsRunning(void);
 void ViceEngineSendKeyEvent(int64_t key, int32_t modifiers, bool pressed);
 void ViceEngineReleaseAllKeys(void);

@@ -1,5 +1,6 @@
 #include "ViceEngineBridge.h"
 
+#include <dlfcn.h>
 #include <pthread.h>
 #include <stdatomic.h>
 #include <stdio.h>
@@ -8,27 +9,69 @@
 
 #include "vicemacbridge.h"
 
-extern int main_program(int argc, char **argv);
-extern void archdep_program_path_set_argv0(char *argv0);
+typedef int (*ViceMainProgramFunction)(int argc, char **argv);
+typedef void (*ViceArchdepProgramPathSetArgv0Function)(char *argv0);
+typedef void (*ViceSetVideoFrameCallbackFunction)(vicemac_video_frame_callback_t callback,
+                                                  void *context);
+typedef void (*ViceSetDriveStatusCallbackFunction)(vicemac_drive_status_callback_t callback,
+                                                   void *context);
+typedef void (*ViceSetCartridgeStatusCallbackFunction)(vicemac_cartridge_status_callback_t callback,
+                                                       void *context);
+typedef int (*ViceQueueKeyEventFunction)(signed long key, int mod, int pressed);
+typedef int (*ViceQueueKeyboardClearFunction)(void);
+typedef int (*ViceQueueResourceIntFunction)(const char *name, int value);
+typedef int (*ViceQueueResourceStringFunction)(const char *name, const char *value);
+typedef int (*ViceQueueJoystickValueFunction)(uint32_t port, uint32_t value);
+typedef int (*ViceQueuePauseFunction)(int paused);
+typedef int (*ViceQueueMachineResetFunction)(uint32_t reset_mode);
+typedef int (*ViceQueueWarpModeFunction)(int enabled);
+typedef int (*ViceQueueDriveResetFunction)(uint32_t unit);
+typedef int (*ViceQueueDriveAttachDiskFunction)(uint32_t unit,
+                                                uint32_t drive,
+                                                const char *path,
+                                                int autorun);
+typedef int (*ViceQueueCartridgeAttachFunction)(const char *path);
+typedef int (*ViceQueueCartridgeDetachFunction)(void);
+
+typedef struct ViceEngineSymbols {
+    ViceMainProgramFunction mainProgram;
+    ViceArchdepProgramPathSetArgv0Function archdepProgramPathSetArgv0;
+    ViceSetVideoFrameCallbackFunction setVideoFrameCallback;
+    ViceSetDriveStatusCallbackFunction setDriveStatusCallback;
+    ViceSetCartridgeStatusCallbackFunction setCartridgeStatusCallback;
+    ViceQueueKeyEventFunction queueKeyEvent;
+    ViceQueueKeyboardClearFunction queueKeyboardClear;
+    ViceQueueResourceIntFunction queueResourceInt;
+    ViceQueueResourceStringFunction queueResourceString;
+    ViceQueueJoystickValueFunction queueJoystickValue;
+    ViceQueuePauseFunction queuePause;
+    ViceQueueMachineResetFunction queueMachineReset;
+    ViceQueueWarpModeFunction queueWarpMode;
+    ViceQueueDriveResetFunction queueDriveReset;
+    ViceQueueDriveAttachDiskFunction queueDriveAttachDisk;
+    ViceQueueCartridgeAttachFunction queueCartridgeAttach;
+    ViceQueueCartridgeDetachFunction queueCartridgeDetach;
+} ViceEngineSymbols;
 
 typedef struct ViceEngineStartArguments {
-    char *executablePath;
-    char *dataDirectory;
-    int32_t sidModel;
-    bool soundEnabled;
-    int32_t soundVolume;
-    int32_t speedPercent;
-    bool warpEnabled;
-    char *basicROM;
-    char *kernalROM;
-    char *characterROM;
+    char *machineID;
+    int argc;
+    char **argv;
 } ViceEngineStartArguments;
 
 static pthread_t engineThread;
 static atomic_bool engineRunning = false;
+static void *runtimeHandle = NULL;
+static char *runtimePath = NULL;
+static ViceEngineSymbols runtimeSymbols;
+static pthread_mutex_t runtimeMutex = PTHREAD_MUTEX_INITIALIZER;
+
 static ViceEngineVideoFrameCallback videoFrameCallback = NULL;
+static void *videoFrameCallbackContext = NULL;
 static ViceEngineDriveStatusCallback driveStatusCallback = NULL;
+static void *driveStatusCallbackContext = NULL;
 static ViceEngineCartridgeStatusCallback cartridgeStatusCallback = NULL;
+static void *cartridgeStatusCallbackContext = NULL;
 
 static void videoFrameTrampoline(const vicemac_video_frame_t *frame, void *context)
 {
@@ -66,9 +109,6 @@ static void driveStatusTrampoline(const vicemac_drive_status_t *status, void *co
     bridgedStatus.track = status->track;
     bridgedStatus.halfTrack = status->half_track;
     bridgedStatus.diskSide = status->disk_side;
-    bridgedStatus.sectorValid = status->sector_valid != 0;
-    bridgedStatus.sector = status->sector;
-    bridgedStatus.operation = status->operation;
     bridgedStatus.driveStatusCode = status->drive_status_code;
     bridgedStatus.driveStatusText = status->drive_status_text;
     bridgedStatus.imagePath = status->image_path;
@@ -96,25 +136,135 @@ static void cartridgeStatusTrampoline(const vicemac_cartridge_status_t *status, 
     cartridgeStatusCallback(&bridgedStatus, context);
 }
 
+static int loadRuntimeSymbols(void *handle, ViceEngineSymbols *symbols)
+{
+#define LOAD_RUNTIME_SYMBOL(field, symbolName) \
+    do { \
+        symbols->field = (typeof(symbols->field))dlsym(handle, symbolName); \
+        if (symbols->field == NULL) { \
+            fprintf(stderr, "VICE Mac: missing runtime symbol %s\n", symbolName); \
+            return 0; \
+        } \
+    } while (0)
+
+    memset(symbols, 0, sizeof(*symbols));
+    LOAD_RUNTIME_SYMBOL(mainProgram, "main_program");
+    LOAD_RUNTIME_SYMBOL(archdepProgramPathSetArgv0, "archdep_program_path_set_argv0");
+    LOAD_RUNTIME_SYMBOL(setVideoFrameCallback, "vicemac_set_video_frame_callback");
+    LOAD_RUNTIME_SYMBOL(setDriveStatusCallback, "vicemac_set_drive_status_callback");
+    LOAD_RUNTIME_SYMBOL(setCartridgeStatusCallback, "vicemac_set_cartridge_status_callback");
+    LOAD_RUNTIME_SYMBOL(queueKeyEvent, "vicemac_queue_key_event");
+    LOAD_RUNTIME_SYMBOL(queueKeyboardClear, "vicemac_queue_keyboard_clear");
+    LOAD_RUNTIME_SYMBOL(queueResourceInt, "vicemac_queue_resource_int");
+    LOAD_RUNTIME_SYMBOL(queueResourceString, "vicemac_queue_resource_string");
+    LOAD_RUNTIME_SYMBOL(queueJoystickValue, "vicemac_queue_joystick_value");
+    LOAD_RUNTIME_SYMBOL(queuePause, "vicemac_queue_pause");
+    LOAD_RUNTIME_SYMBOL(queueMachineReset, "vicemac_queue_machine_reset");
+    LOAD_RUNTIME_SYMBOL(queueWarpMode, "vicemac_queue_warp_mode");
+    LOAD_RUNTIME_SYMBOL(queueDriveReset, "vicemac_queue_drive_reset");
+    LOAD_RUNTIME_SYMBOL(queueDriveAttachDisk, "vicemac_queue_drive_attach_disk");
+    LOAD_RUNTIME_SYMBOL(queueCartridgeAttach, "vicemac_queue_cartridge_attach");
+    LOAD_RUNTIME_SYMBOL(queueCartridgeDetach, "vicemac_queue_cartridge_detach");
+
+#undef LOAD_RUNTIME_SYMBOL
+    return 1;
+}
+
+static void applyStoredCallbacks(void)
+{
+    if (runtimeHandle == NULL) {
+        return;
+    }
+
+    runtimeSymbols.setVideoFrameCallback(videoFrameTrampoline,
+                                         videoFrameCallbackContext);
+    runtimeSymbols.setDriveStatusCallback(driveStatusTrampoline,
+                                          driveStatusCallbackContext);
+    runtimeSymbols.setCartridgeStatusCallback(cartridgeStatusTrampoline,
+                                              cartridgeStatusCallbackContext);
+}
+
+static int ensureRuntimeLoaded(const char *dynamicLibraryPath)
+{
+    void *handle;
+    ViceEngineSymbols symbols;
+
+    if (dynamicLibraryPath == NULL || dynamicLibraryPath[0] == '\0') {
+        return 0;
+    }
+
+    pthread_mutex_lock(&runtimeMutex);
+
+    if (runtimeHandle != NULL) {
+        int matches = runtimePath != NULL && strcmp(runtimePath, dynamicLibraryPath) == 0;
+        pthread_mutex_unlock(&runtimeMutex);
+        return matches;
+    }
+
+    handle = dlopen(dynamicLibraryPath, RTLD_NOW | RTLD_LOCAL);
+    if (handle == NULL) {
+        fprintf(stderr, "VICE Mac: unable to load %s: %s\n",
+                dynamicLibraryPath,
+                dlerror());
+        pthread_mutex_unlock(&runtimeMutex);
+        return 0;
+    }
+
+    if (!loadRuntimeSymbols(handle, &symbols)) {
+        dlclose(handle);
+        pthread_mutex_unlock(&runtimeMutex);
+        return 0;
+    }
+
+    runtimePath = strdup(dynamicLibraryPath);
+    if (runtimePath == NULL) {
+        dlclose(handle);
+        pthread_mutex_unlock(&runtimeMutex);
+        return 0;
+    }
+
+    runtimeSymbols = symbols;
+    runtimeHandle = handle;
+    applyStoredCallbacks();
+
+    pthread_mutex_unlock(&runtimeMutex);
+    return 1;
+}
+
 void ViceEngineSetVideoFrameCallback(ViceEngineVideoFrameCallback callback,
                                      void *context)
 {
+    pthread_mutex_lock(&runtimeMutex);
     videoFrameCallback = callback;
-    vicemac_set_video_frame_callback(videoFrameTrampoline, context);
+    videoFrameCallbackContext = context;
+    if (runtimeHandle != NULL) {
+        runtimeSymbols.setVideoFrameCallback(videoFrameTrampoline, context);
+    }
+    pthread_mutex_unlock(&runtimeMutex);
 }
 
 void ViceEngineSetDriveStatusCallback(ViceEngineDriveStatusCallback callback,
                                       void *context)
 {
+    pthread_mutex_lock(&runtimeMutex);
     driveStatusCallback = callback;
-    vicemac_set_drive_status_callback(driveStatusTrampoline, context);
+    driveStatusCallbackContext = context;
+    if (runtimeHandle != NULL) {
+        runtimeSymbols.setDriveStatusCallback(driveStatusTrampoline, context);
+    }
+    pthread_mutex_unlock(&runtimeMutex);
 }
 
 void ViceEngineSetCartridgeStatusCallback(ViceEngineCartridgeStatusCallback callback,
                                           void *context)
 {
+    pthread_mutex_lock(&runtimeMutex);
     cartridgeStatusCallback = callback;
-    vicemac_set_cartridge_status_callback(cartridgeStatusTrampoline, context);
+    cartridgeStatusCallbackContext = context;
+    if (runtimeHandle != NULL) {
+        runtimeSymbols.setCartridgeStatusCallback(cartridgeStatusTrampoline, context);
+    }
+    pthread_mutex_unlock(&runtimeMutex);
 }
 
 bool ViceEngineIsRunning(void)
@@ -124,189 +274,192 @@ bool ViceEngineIsRunning(void)
 
 void ViceEngineSendKeyEvent(int64_t key, int32_t modifiers, bool pressed)
 {
-    if (!atomic_load(&engineRunning)) {
+    if (!atomic_load(&engineRunning) || runtimeSymbols.queueKeyEvent == NULL) {
         return;
     }
 
-    (void)vicemac_queue_key_event((signed long)key, (int)modifiers, pressed ? 1 : 0);
+    (void)runtimeSymbols.queueKeyEvent((signed long)key, (int)modifiers, pressed ? 1 : 0);
 }
 
 void ViceEngineReleaseAllKeys(void)
 {
-    if (!atomic_load(&engineRunning)) {
+    if (!atomic_load(&engineRunning) || runtimeSymbols.queueKeyboardClear == NULL) {
         return;
     }
 
-    (void)vicemac_queue_keyboard_clear();
+    (void)runtimeSymbols.queueKeyboardClear();
 }
 
 bool ViceEngineSetIntResource(const char *name, int32_t value)
 {
-    if (!atomic_load(&engineRunning)) {
+    if (!atomic_load(&engineRunning) || runtimeSymbols.queueResourceInt == NULL) {
         return false;
     }
 
-    return vicemac_queue_resource_int(name, (int)value) != 0;
+    return runtimeSymbols.queueResourceInt(name, (int)value) != 0;
 }
 
 bool ViceEngineSetStringResource(const char *name, const char *value)
 {
-    if (!atomic_load(&engineRunning)) {
+    if (!atomic_load(&engineRunning) || runtimeSymbols.queueResourceString == NULL) {
         return false;
     }
 
-    return vicemac_queue_resource_string(name, value) != 0;
+    return runtimeSymbols.queueResourceString(name, value) != 0;
 }
 
 bool ViceEngineSetJoystickValue(uint32_t port, uint32_t value)
 {
-    if (!atomic_load(&engineRunning)) {
+    if (!atomic_load(&engineRunning) || runtimeSymbols.queueJoystickValue == NULL) {
         return false;
     }
 
-    return vicemac_queue_joystick_value(port, value) != 0;
+    return runtimeSymbols.queueJoystickValue(port, value) != 0;
 }
 
 bool ViceEngineSetPauseEnabled(bool paused)
 {
-    if (!atomic_load(&engineRunning)) {
+    if (!atomic_load(&engineRunning) || runtimeSymbols.queuePause == NULL) {
         return false;
     }
 
-    return vicemac_queue_pause(paused ? 1 : 0) != 0;
+    return runtimeSymbols.queuePause(paused ? 1 : 0) != 0;
 }
 
 bool ViceEngineTriggerMachineReset(bool hardReset)
 {
-    if (!atomic_load(&engineRunning)) {
+    if (!atomic_load(&engineRunning) || runtimeSymbols.queueMachineReset == NULL) {
         return false;
     }
 
-    return vicemac_queue_machine_reset(hardReset ? 1U : 0U) != 0;
+    return runtimeSymbols.queueMachineReset(hardReset ? 1U : 0U) != 0;
 }
 
 bool ViceEngineSetWarpMode(bool enabled)
 {
-    if (!atomic_load(&engineRunning)) {
+    if (!atomic_load(&engineRunning) || runtimeSymbols.queueWarpMode == NULL) {
         return false;
     }
 
-    return vicemac_queue_warp_mode(enabled ? 1 : 0) != 0;
+    return runtimeSymbols.queueWarpMode(enabled ? 1 : 0) != 0;
 }
 
 bool ViceEngineResetDrive(uint32_t unit)
 {
-    if (!atomic_load(&engineRunning)) {
+    if (!atomic_load(&engineRunning) || runtimeSymbols.queueDriveReset == NULL) {
         return false;
     }
 
-    return vicemac_queue_drive_reset(unit) != 0;
+    return runtimeSymbols.queueDriveReset(unit) != 0;
 }
 
 bool ViceEngineAttachDisk(uint32_t unit, const char *path, bool autorun)
 {
-    if (!atomic_load(&engineRunning)) {
+    if (!atomic_load(&engineRunning) || runtimeSymbols.queueDriveAttachDisk == NULL) {
         return false;
     }
 
-    return vicemac_queue_drive_attach_disk(unit, 0, path, autorun ? 1 : 0) != 0;
+    return runtimeSymbols.queueDriveAttachDisk(unit, 0, path, autorun ? 1 : 0) != 0;
 }
 
 bool ViceEngineAttachCartridge(const char *path)
 {
-    if (!atomic_load(&engineRunning)) {
+    if (!atomic_load(&engineRunning) || runtimeSymbols.queueCartridgeAttach == NULL) {
         return false;
     }
 
-    return vicemac_queue_cartridge_attach(path) != 0;
+    return runtimeSymbols.queueCartridgeAttach(path) != 0;
 }
 
 bool ViceEngineDetachCartridge(void)
 {
-    if (!atomic_load(&engineRunning)) {
+    if (!atomic_load(&engineRunning) || runtimeSymbols.queueCartridgeDetach == NULL) {
         return false;
     }
 
-    return vicemac_queue_cartridge_detach() != 0;
+    return runtimeSymbols.queueCartridgeDetach() != 0;
+}
+
+static void freeStartArguments(ViceEngineStartArguments *arguments)
+{
+    int index;
+
+    if (arguments == NULL) {
+        return;
+    }
+
+    free(arguments->machineID);
+    if (arguments->argv != NULL) {
+        for (index = 0; index < arguments->argc; index++) {
+            free(arguments->argv[index]);
+        }
+        free(arguments->argv);
+    }
+    free(arguments);
+}
+
+static ViceEngineStartArguments *copyStartArguments(const char *machineID,
+                                                    int32_t argc,
+                                                    const char * const *argv)
+{
+    ViceEngineStartArguments *arguments;
+    int index;
+
+    if (machineID == NULL || machineID[0] == '\0' || argc <= 0 || argv == NULL) {
+        return NULL;
+    }
+
+    arguments = (ViceEngineStartArguments *)calloc(1, sizeof(*arguments));
+    if (arguments == NULL) {
+        return NULL;
+    }
+
+    arguments->machineID = strdup(machineID);
+    arguments->argc = (int)argc;
+    arguments->argv = (char **)calloc((size_t)argc + 1, sizeof(char *));
+    if (arguments->machineID == NULL || arguments->argv == NULL) {
+        freeStartArguments(arguments);
+        return NULL;
+    }
+
+    for (index = 0; index < argc; index++) {
+        if (argv[index] == NULL) {
+            freeStartArguments(arguments);
+            return NULL;
+        }
+
+        arguments->argv[index] = strdup(argv[index]);
+        if (arguments->argv[index] == NULL) {
+            freeStartArguments(arguments);
+            return NULL;
+        }
+    }
+    arguments->argv[argc] = NULL;
+
+    return arguments;
 }
 
 static void *engineThreadMain(void *opaque)
 {
     ViceEngineStartArguments *arguments = (ViceEngineStartArguments *)opaque;
-    char sidModelArgument[12];
-    char soundVolumeArgument[12];
-    char speedArgument[12];
-    char *argv[] = {
-        arguments->executablePath,
-        "-default",
-        "-directory",
-        arguments->dataDirectory,
-        arguments->warpEnabled ? "-warp" : "+warp",
-        "-speed",
-        speedArgument,
-        arguments->soundEnabled ? "-sound" : "+sound",
-        "-sounddev",
-        "coreaudio",
-        "-soundrate",
-        "48000",
-        "-soundbufsize",
-        "20",
-        "-soundfragsize",
-        "0",
-        "-soundoutput",
-        "0",
-        "-soundwarpmode",
-        "1",
-        "-soundvolume",
-        soundVolumeArgument,
-        "-sidmodel",
-        sidModelArgument,
-        "-basic",
-        arguments->basicROM,
-        "-kernal",
-        arguments->kernalROM,
-        "-chargen",
-        arguments->characterROM,
-        NULL
-    };
-    int argc = (int)(sizeof(argv) / sizeof(argv[0])) - 1;
 
-    snprintf(sidModelArgument, sizeof(sidModelArgument), "%d", (int)arguments->sidModel);
-    snprintf(soundVolumeArgument, sizeof(soundVolumeArgument), "%d", (int)arguments->soundVolume);
-    snprintf(speedArgument, sizeof(speedArgument), "%d", (int)arguments->speedPercent);
-
-    archdep_program_path_set_argv0(arguments->executablePath);
-    (void)main_program(argc, argv);
+    runtimeSymbols.archdepProgramPathSetArgv0(arguments->argv[0]);
+    (void)runtimeSymbols.mainProgram(arguments->argc, arguments->argv);
 
     atomic_store(&engineRunning, false);
-    free(arguments->executablePath);
-    free(arguments->dataDirectory);
-    free(arguments->basicROM);
-    free(arguments->kernalROM);
-    free(arguments->characterROM);
-    free(arguments);
+    freeStartArguments(arguments);
     return NULL;
 }
 
-bool ViceEngineStartX64SC(const char *executablePath,
-                          const char *dataDirectory,
-                          int32_t sidModel,
-                          bool soundEnabled,
-                          int32_t soundVolume,
-                          int32_t speedPercent,
-                          bool warpEnabled,
-                          const char *basicROM,
-                          const char *kernalROM,
-                          const char *characterROM)
+bool ViceEngineStartMachine(const char *machineID,
+                            const char *dynamicLibraryPath,
+                            int32_t argc,
+                            const char * const *argv)
 {
     ViceEngineStartArguments *arguments;
     bool expected = false;
 
-    if (executablePath == NULL
-        || dataDirectory == NULL
-        || basicROM == NULL
-        || kernalROM == NULL
-        || characterROM == NULL) {
+    if (!ensureRuntimeLoaded(dynamicLibraryPath)) {
         return false;
     }
 
@@ -314,44 +467,14 @@ bool ViceEngineStartX64SC(const char *executablePath,
         return false;
     }
 
-    arguments = (ViceEngineStartArguments *)calloc(1, sizeof(*arguments));
+    arguments = copyStartArguments(machineID, argc, argv);
     if (arguments == NULL) {
         atomic_store(&engineRunning, false);
         return false;
     }
 
-    arguments->sidModel = sidModel;
-    arguments->soundEnabled = soundEnabled;
-    arguments->soundVolume = soundVolume;
-    arguments->speedPercent = speedPercent <= 0 ? 100 : speedPercent;
-    arguments->warpEnabled = warpEnabled;
-    arguments->executablePath = strdup(executablePath);
-    arguments->dataDirectory = strdup(dataDirectory);
-    arguments->basicROM = strdup(basicROM);
-    arguments->kernalROM = strdup(kernalROM);
-    arguments->characterROM = strdup(characterROM);
-    if (arguments->executablePath == NULL
-        || arguments->dataDirectory == NULL
-        || arguments->basicROM == NULL
-        || arguments->kernalROM == NULL
-        || arguments->characterROM == NULL) {
-        free(arguments->executablePath);
-        free(arguments->dataDirectory);
-        free(arguments->basicROM);
-        free(arguments->kernalROM);
-        free(arguments->characterROM);
-        free(arguments);
-        atomic_store(&engineRunning, false);
-        return false;
-    }
-
     if (pthread_create(&engineThread, NULL, engineThreadMain, arguments) != 0) {
-        free(arguments->executablePath);
-        free(arguments->dataDirectory);
-        free(arguments->basicROM);
-        free(arguments->kernalROM);
-        free(arguments->characterROM);
-        free(arguments);
+        freeStartArguments(arguments);
         atomic_store(&engineRunning, false);
         return false;
     }

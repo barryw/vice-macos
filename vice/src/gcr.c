@@ -260,60 +260,6 @@ static int gcr_find_sector_header(const disk_track_t *raw, uint8_t sector)
     return -CBMDOS_FDC_ERR_HEADER;
 }
 
-int gcr_get_sector_at_offset(const disk_track_t *raw, unsigned int bit_offset, uint8_t *sector)
-{
-    uint8_t header[4];
-    unsigned int track_bits;
-    unsigned int normalized_offset;
-    unsigned int best_distance = 0;
-    uint8_t best_sector = 0;
-    int found = 0;
-    int p = 0;
-    int p2 = -CBMDOS_FDC_ERR_SYNC;
-
-    if (raw == NULL || raw->data == NULL || raw->size <= 0 || sector == NULL) {
-        return 0;
-    }
-
-    track_bits = (unsigned int)raw->size * 8U;
-    if (track_bits == 0) {
-        return 0;
-    }
-
-    normalized_offset = bit_offset % track_bits;
-
-    for (;;) {
-        p = gcr_find_sync(raw, p, (int)track_bits);
-        if (p < 0 || p2 == p) {
-            break;
-        }
-        if (p2 < 0) {
-            p2 = p;
-        }
-
-        gcr_decode_block(raw, p, header, 1);
-        if (header[0] == 0x08) {
-            unsigned int header_offset = (unsigned int)p;
-            unsigned int distance = normalized_offset >= header_offset
-                ? normalized_offset - header_offset
-                : normalized_offset + track_bits - header_offset;
-
-            if (!found || distance < best_distance) {
-                best_distance = distance;
-                best_sector = header[2];
-                found = 1;
-            }
-        }
-    }
-
-    if (!found) {
-        return 0;
-    }
-
-    *sector = best_sector;
-    return 1;
-}
-
 fdc_err_t gcr_read_sector(const disk_track_t *raw, uint8_t *data, uint8_t sector)
 {
     uint8_t buffer[260];

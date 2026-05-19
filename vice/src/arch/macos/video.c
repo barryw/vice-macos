@@ -8,7 +8,6 @@
 #include "vice.h"
 
 #include <stdint.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -39,6 +38,16 @@ static unsigned int min_uint(unsigned int a, unsigned int b)
     return a < b ? a : b;
 }
 
+static int max_int(int a, int b)
+{
+    return a > b ? a : b;
+}
+
+static int min_int(int a, int b)
+{
+    return a < b ? a : b;
+}
+
 static int ensure_frame_buffer(size_t size)
 {
     uint8_t *new_buffer;
@@ -55,6 +64,116 @@ static int ensure_frame_buffer(size_t size)
     frame_buffer = new_buffer;
     frame_buffer_size = size;
     return 0;
+}
+
+static void calculate_visible_area(video_canvas_t *canvas,
+                                   unsigned int *first_x_out,
+                                   unsigned int *first_line_out,
+                                   unsigned int *x_offset_out,
+                                   unsigned int *y_offset_out,
+                                   unsigned int *width_out,
+                                   unsigned int *height_out)
+{
+    geometry_t *geometry = canvas->geometry;
+    rectangle_t *screen_size = &geometry->screen_size;
+    rectangle_t *gfx_size = &geometry->gfx_size;
+    position_t *gfx_position = &geometry->gfx_position;
+    int canvas_width = (int)canvas->draw_buffer->canvas_width;
+    int canvas_height = (int)canvas->draw_buffer->canvas_height;
+    int first_x;
+    int first_line;
+    int x_offset;
+    int y_offset;
+    int real_gfx_height;
+    int displayed_width;
+    int displayed_height;
+    int small_x_border;
+    int small_y_border;
+
+    if (canvas_width <= 0 || canvas_height <= 0) {
+        *first_x_out = 0;
+        *first_line_out = 0;
+        *x_offset_out = 0;
+        *y_offset_out = 0;
+        *width_out = 0;
+        *height_out = 0;
+        return;
+    }
+
+    small_x_border = (int)screen_size->width - (int)gfx_position->x - (int)gfx_size->width;
+    small_x_border = min_int(small_x_border, (int)gfx_position->x);
+
+    if ((int)gfx_size->width + small_x_border * 2 > canvas_width) {
+        first_x = (int)gfx_position->x - (canvas_width - (int)gfx_size->width) / 2;
+    } else if ((int)gfx_position->x > small_x_border) {
+        first_x = (int)screen_size->width - canvas_width;
+    } else {
+        first_x = 0;
+    }
+
+    x_offset = (canvas_width - (int)screen_size->width) / 2;
+    x_offset = max_int(x_offset, 0);
+    first_x = max_int(first_x, 0);
+
+    if (!geometry->gfx_area_moves && first_x > (int)gfx_position->x) {
+        first_x = (int)gfx_position->x;
+    }
+
+    real_gfx_height = (int)geometry->last_displayed_line - (int)geometry->first_displayed_line + 1;
+    small_y_border = (int)geometry->last_displayed_line - (int)gfx_position->y - (int)gfx_size->height + 1;
+    small_y_border = min_int(small_y_border,
+                             (int)gfx_position->y - (int)geometry->first_displayed_line);
+
+    if ((int)gfx_size->height + small_y_border * 2 > canvas_height) {
+        first_line = (int)gfx_position->y - (canvas_height - (int)gfx_size->height) / 2;
+    } else if ((int)gfx_position->y - (int)geometry->first_displayed_line > small_y_border) {
+        first_line = real_gfx_height - canvas_height + (int)geometry->first_displayed_line;
+    } else {
+        first_line = (int)geometry->first_displayed_line;
+    }
+
+    y_offset = (canvas_height - real_gfx_height) / 2;
+    y_offset = max_int(y_offset, 0);
+
+    if (geometry->gfx_area_moves) {
+        int centered_line = (int)gfx_position->y - (canvas_height - (int)gfx_size->height) / 2;
+        first_line = max_int(centered_line, (int)geometry->first_displayed_line);
+    } else {
+        first_line = max_int(first_line, (int)geometry->first_displayed_line);
+
+        if (first_line > (int)gfx_position->y) {
+            first_line = (int)gfx_position->y;
+        }
+    }
+
+    displayed_width = min_int(canvas_width, (int)screen_size->width - first_x);
+    displayed_height = min_int(canvas_height,
+                               (int)geometry->last_displayed_line - first_line + 1);
+
+    *first_x_out = (unsigned int)max_int(first_x, 0);
+    *first_line_out = (unsigned int)max_int(first_line, 0);
+    *x_offset_out = (unsigned int)max_int(x_offset, 0);
+    *y_offset_out = (unsigned int)max_int(y_offset, 0);
+    *width_out = (unsigned int)max_int(displayed_width, 0);
+    *height_out = (unsigned int)max_int(displayed_height, 0);
+}
+
+static void extend_last_rendered_line(uint8_t *buffer,
+                                      size_t stride,
+                                      unsigned int rendered_height,
+                                      unsigned int target_height)
+{
+    unsigned int y;
+    uint8_t *source;
+
+    if (rendered_height == 0 || rendered_height >= target_height) {
+        return;
+    }
+
+    source = buffer + ((size_t)rendered_height - 1U) * stride;
+    for (y = rendered_height; y < target_height; y++) {
+        memcpy(buffer + (size_t)y * stride, source, stride);
+    }
 }
 
 int video_arch_get_active_chip(void)
@@ -137,8 +256,18 @@ void video_canvas_refresh(struct video_canvas_s *canvas,
     unsigned int render_height;
     unsigned int render_xs;
     unsigned int render_ys;
+    unsigned int render_xi;
+    unsigned int render_yi;
+    unsigned int render_bottom;
     size_t stride;
     size_t payload_size;
+
+    (void)xs;
+    (void)ys;
+    (void)xi;
+    (void)yi;
+    (void)w;
+    (void)h;
 
     if (!vicemac_has_video_frame_callback() ||
         canvas == NULL ||
@@ -168,12 +297,20 @@ void video_canvas_refresh(struct video_canvas_s *canvas,
         return;
     }
 
-    render_xs = viewport->first_x + geometry->extra_offscreen_border_left;
-    render_ys = viewport->first_line;
-    render_width = min_uint(canvas->draw_buffer->canvas_width,
-                            geometry->screen_size.width - viewport->first_x);
-    render_height = min_uint(canvas->draw_buffer->canvas_height,
-                             viewport->last_line - viewport->first_line + 1U);
+    calculate_visible_area(canvas,
+                           &render_xs,
+                           &render_ys,
+                           &render_xi,
+                           &render_yi,
+                           &render_width,
+                           &render_height);
+    render_xs += geometry->extra_offscreen_border_left;
+    render_xi *= canvas->videoconfig->scalex;
+    render_yi *= canvas->videoconfig->scaley;
+    render_width *= canvas->videoconfig->scalex;
+    render_height *= canvas->videoconfig->scaley;
+    render_width = min_uint(render_width, width - min_uint(render_xi, width));
+    render_height = min_uint(render_height, height - min_uint(render_yi, height));
 
     if (render_width == 0 || render_height == 0) {
         return;
@@ -186,9 +323,17 @@ void video_canvas_refresh(struct video_canvas_s *canvas,
                         (int)render_height,
                         (int)render_xs,
                         (int)render_ys,
-                        (int)viewport->x_offset,
-                        (int)viewport->y_offset,
+                        (int)render_xi,
+                        (int)render_yi,
                         (int)stride);
+
+    render_bottom = render_yi + render_height;
+    if (render_xi == 0 && render_bottom < height) {
+        extend_last_rendered_line(frame_buffer,
+                                  stride,
+                                  render_bottom,
+                                  height);
+    }
 
     vicemac_publish_video_frame(width, height, (uint32_t)stride, frame_buffer);
 }

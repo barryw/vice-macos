@@ -34,9 +34,6 @@ typedef struct vicemac_drive_status_s {
     uint32_t track;
     uint32_t half_track;
     uint32_t disk_side;
-    uint32_t sector_valid;
-    uint32_t sector;
-    uint32_t operation;
     int32_t drive_status_code;
     const char *drive_status_text;
     const char *image_path;
@@ -83,9 +80,6 @@ void vicemac_publish_drive_status(uint32_t unit,
                                   uint32_t track,
                                   uint32_t half_track,
                                   uint32_t disk_side,
-                                  uint32_t sector_valid,
-                                  uint32_t sector,
-                                  uint32_t operation,
                                   int32_t drive_status_code,
                                   const char *drive_status_text,
                                   const char *image_path);

@@ -40,12 +40,19 @@ private struct MachineSettingsPane: View {
     var body: some View {
         SettingsPane {
             Section("Machine") {
-                Picker("Video standard", selection: $emulator.videoStandard) {
-                    ForEach(EmulatorSession.VideoStandard.allCases) { standard in
-                        Text(standard.rawValue).tag(standard)
-                    }
+                LabeledContent("Model") {
+                    Label(emulator.machine.displayName, systemImage: "cpu")
+                        .foregroundStyle(.secondary)
                 }
-                .pickerStyle(.segmented)
+
+                if emulator.machine.capabilities.supportsVideoStandardSelection {
+                    Picker("Video standard", selection: $emulator.videoStandard) {
+                        ForEach(EmulatorSession.VideoStandard.allCases) { standard in
+                            Text(standard.rawValue).tag(standard)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
 
                 Picker("Speed", selection: $emulator.emulationSpeed) {
                     ForEach(EmulatorSession.EmulationSpeed.allCases) { speed in
@@ -56,9 +63,21 @@ private struct MachineSettingsPane: View {
                 Toggle("Paused", isOn: $emulator.isPaused)
             }
 
-            Section("ROM Images") {
-                ForEach(MachineROMImage.allCases) { image in
-                    ROMImageSettingsRow(image: image)
+            if emulator.machine.capabilities.supportsRAMExpansion {
+                Section("Memory") {
+                    Picker("RAM expansion", selection: $emulator.ramExpansion) {
+                        ForEach(emulator.machine.ramExpansions) { expansion in
+                            Text(expansion.title).tag(expansion)
+                        }
+                    }
+                }
+            }
+
+            if !emulator.machine.romSlots.isEmpty {
+                Section("ROM Images") {
+                    ForEach(emulator.machine.romSlots) { image in
+                        ROMImageSettingsRow(image: image)
+                    }
                 }
             }
         }
@@ -68,7 +87,7 @@ private struct MachineSettingsPane: View {
 private struct ROMImageSettingsRow: View {
     @EnvironmentObject private var emulator: EmulatorSession
 
-    let image: MachineROMImage
+    let image: MachineROMSlot
 
     var body: some View {
         LabeledContent {
@@ -182,13 +201,15 @@ private struct SoundSettingsPane: View {
                 }
             }
 
-            Section("SID") {
-                Picker("Model", selection: $emulator.sidModel) {
-                    ForEach(EmulatorSession.SIDModel.allCases) { model in
-                        Text(model.title).tag(model)
+            if emulator.machine.capabilities.supportsSIDModelSelection {
+                Section("SID") {
+                    Picker("Model", selection: $emulator.sidModel) {
+                        ForEach(EmulatorSession.SIDModel.allCases) { model in
+                            Text(model.title).tag(model)
+                        }
                     }
+                    .pickerStyle(.segmented)
                 }
-                .pickerStyle(.segmented)
             }
         }
     }
@@ -759,6 +780,14 @@ private struct DriveSettingsSection: View {
                     Text(type.title).tag(type)
                 }
             }
+            .disabled(!drive.isAttached)
+
+            Picker("Access", selection: $drive.accessMode) {
+                ForEach(DriveAccessMode.allCases) { mode in
+                    Text(mode.title).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
             .disabled(!drive.isAttached)
 
             Toggle("Drive sounds", isOn: $drive.soundEnabled)

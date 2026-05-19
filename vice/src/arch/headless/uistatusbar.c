@@ -237,19 +237,6 @@ void ui_display_drive_track(unsigned int drive_number,
     /* printf("%s\n", __func__); */
 }
 
-void ui_display_drive_sector(unsigned int drive_number,
-                             unsigned int drive_base,
-                             unsigned int sector_valid,
-                             unsigned int sector,
-                             unsigned int operation)
-{
-    (void)drive_number;
-    (void)drive_base;
-    (void)sector_valid;
-    (void)sector;
-    (void)operation;
-}
-
 
 /** \brief Update information about each drive.
  *

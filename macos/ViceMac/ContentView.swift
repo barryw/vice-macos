@@ -43,14 +43,16 @@ struct ContentView: View {
 
                 InputToolbarControls()
 
-                Picker("Video", selection: $emulator.videoStandard) {
-                    ForEach(EmulatorSession.VideoStandard.allCases) { standard in
-                        Text(standard.rawValue).tag(standard)
+                if emulator.machine.capabilities.supportsVideoStandardSelection {
+                    Picker("Video", selection: $emulator.videoStandard) {
+                        ForEach(EmulatorSession.VideoStandard.allCases) { standard in
+                            Text(standard.rawValue).tag(standard)
+                        }
                     }
+                    .pickerStyle(.segmented)
+                    .frame(width: 118)
+                    .help("Video standard")
                 }
-                .pickerStyle(.segmented)
-                .frame(width: 118)
-                .help("Video standard")
 
                 SoundToolbarControls()
 
@@ -84,15 +86,27 @@ private struct EmulatorStatusBar: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            Label("x64sc", systemImage: "cpu")
-            StatusPill(text: emulator.videoStandard.rawValue)
-            StatusPill(text: emulator.sidModel.title)
+            Label(emulator.machine.shortName, systemImage: "cpu")
+            if emulator.machine.capabilities.supportsVideoStandardSelection {
+                StatusPill(text: emulator.videoStandard.rawValue)
+            }
+            if emulator.machine.capabilities.supportsSIDModelSelection {
+                StatusPill(text: emulator.sidModel.title)
+            }
             StatusPill(text: emulator.isPaused ? "Paused" : "READY")
             StatusPill(text: emulator.filterSettings.preset.rawValue)
+            if emulator.isRAMExpansionConfigured {
+                RAMExpansionStatusChip()
+            }
+            ForEach(emulator.availableControlPorts) { port in
+                ControlPortStatusIndicator(port: port)
+            }
 
             Spacer()
 
-            CartridgeIndicator()
+            if emulator.machine.capabilities.supportsCartridges {
+                CartridgeIndicator()
+            }
 
             ForEach(emulator.visibleDriveActivities) { drive in
                 DriveIndicator(drive: drive)
@@ -106,8 +120,6 @@ private struct EmulatorStatusBar: View {
 
 private struct EmulatorDisplaySurface: View {
     @EnvironmentObject private var emulator: EmulatorSession
-
-    private let nativeScale: CGFloat = 2
 
     var body: some View {
         GeometryReader { proxy in
@@ -131,8 +143,7 @@ private struct EmulatorDisplaySurface: View {
     }
 
     private var nativeSize: CGSize {
-        CGSize(width: emulator.frameSource.pixelSize.width * nativeScale,
-               height: emulator.frameSource.pixelSize.height * nativeScale)
+        emulator.frameSource.nativeDisplaySize()
     }
 
     private func size(for containerSize: CGSize) -> CGSize {
@@ -150,13 +161,127 @@ private struct EmulatorDisplaySurface: View {
 }
 
 private struct InputToolbarControls: View {
+    @EnvironmentObject private var emulator: EmulatorSession
+
     var body: some View {
         HStack(spacing: 8) {
-            ForEach(ControlPort.allCases) { port in
+            ForEach(emulator.availableControlPorts) { port in
                 ControlPortToolbarMenu(port: port)
+            }
+
+            if emulator.hasMultipleControlPorts {
+                Button {
+                    emulator.swapControlPorts()
+                } label: {
+                    ToolbarIconLabel(title: "Swap Control Ports",
+                                     systemImage: "arrow.left.arrow.right")
+                }
+                .frame(width: 44)
+                .buttonStyle(.plain)
+                .help("Swap control ports")
             }
         }
         .fixedSize()
+    }
+}
+
+private struct ControlPortStatusIndicator: View {
+    @EnvironmentObject private var emulator: EmulatorSession
+
+    let port: ControlPort
+
+    var body: some View {
+        let device = emulator.controlPortDevice(for: port)
+        let connectionState = emulator.controlPortConnectionState(for: port)
+
+        HStack(spacing: 6) {
+            Text("P\(port.rawValue)")
+                .font(.caption.weight(.semibold))
+                .monospacedDigit()
+
+            Image(systemName: device?.systemImage ?? "slash.circle")
+                .font(.system(size: 11, weight: .semibold))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(iconTint(for: connectionState, hasDevice: device != nil))
+
+            ControlPortInputDots(activeActions: emulator.controlPortActiveActions(for: port),
+                                 isEnabled: device != nil && connectionState.isConnected)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(.quaternary.opacity(0.7), in: Capsule())
+        .help(helpText(device: device, connectionState: connectionState))
+    }
+
+    private func iconTint(for connectionState: ControlDeviceConnectionState,
+                          hasDevice: Bool) -> Color {
+        guard hasDevice else {
+            return .secondary
+        }
+
+        return connectionState.isConnected ? .primary : .orange
+    }
+
+    private func helpText(device: ControlDeviceConfiguration?,
+                          connectionState: ControlDeviceConnectionState) -> String {
+        guard let device else {
+            return "\(port.title): None"
+        }
+
+        guard connectionState.isConnected else {
+            return "\(port.title): \(device.name) - \(connectionState.title)"
+        }
+
+        let activeActions = emulator.controlPortActiveActions(for: port)
+        guard !activeActions.isEmpty else {
+            return "\(port.title): \(device.name) - idle"
+        }
+
+        let actionText = JoystickAction.allCases
+            .filter { activeActions.contains($0) }
+            .map(\.title)
+            .joined(separator: ", ")
+        return "\(port.title): \(device.name) - \(actionText)"
+    }
+}
+
+private struct ControlPortInputDots: View {
+    let activeActions: Set<JoystickAction>
+    let isEnabled: Bool
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(JoystickAction.allCases) { action in
+                Image(systemName: systemImage(for: action))
+                    .font(.system(size: action == .fire ? 6 : 7, weight: .semibold))
+                    .frame(width: 8, height: 8)
+                    .foregroundStyle(tint(for: action))
+            }
+        }
+        .opacity(isEnabled ? 1 : 0.45)
+    }
+
+    private func systemImage(for action: JoystickAction) -> String {
+        switch action {
+        case .up:
+            return "arrowtriangle.up.fill"
+        case .down:
+            return "arrowtriangle.down.fill"
+        case .left:
+            return "arrowtriangle.left.fill"
+        case .right:
+            return "arrowtriangle.right.fill"
+        case .fire:
+            return "circle.fill"
+        }
+    }
+
+    private func tint(for action: JoystickAction) -> Color {
+        guard isEnabled else {
+            return .secondary.opacity(0.28)
+        }
+
+        return activeActions.contains(action) ? .accentColor : .secondary.opacity(0.28)
     }
 }
 
@@ -261,7 +386,7 @@ private struct MachineToolbarControls: View {
                                  systemImage: emulator.isPaused ? "play.fill" : "pause.fill")
             }
             .frame(width: 44)
-            .help(emulator.isPaused ? "Resume x64sc" : "Pause x64sc")
+            .help(emulator.isPaused ? "Resume \(emulator.machine.shortName)" : "Pause \(emulator.machine.shortName)")
 
             Menu {
                 Button {
@@ -279,7 +404,7 @@ private struct MachineToolbarControls: View {
                 ToolbarIconLabel(title: "Reset", systemImage: "restart")
             }
             .frame(width: 58)
-            .help("Reset x64sc")
+            .help("Reset \(emulator.machine.shortName)")
 
             Menu {
                 ForEach(EmulatorSession.EmulationSpeed.allCases) { speed in
@@ -554,14 +679,16 @@ private struct SoundToolbarControls: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Picker("SID", selection: $emulator.sidModel) {
-                ForEach(EmulatorSession.SIDModel.allCases) { model in
-                    Text(model.title).tag(model)
+            if emulator.machine.capabilities.supportsSIDModelSelection {
+                Picker("SID", selection: $emulator.sidModel) {
+                    ForEach(EmulatorSession.SIDModel.allCases) { model in
+                        Text(model.title).tag(model)
+                    }
                 }
+                .pickerStyle(.segmented)
+                .frame(width: 104)
+                .help("SID model")
             }
-            .pickerStyle(.segmented)
-            .frame(width: 104)
-            .help("SID model")
 
             Button {
                 showingVolumePopover.toggle()
@@ -694,6 +821,37 @@ private struct StatusPill: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
             .background(.quaternary, in: Capsule())
+    }
+}
+
+private struct RAMExpansionStatusChip: View {
+    @EnvironmentObject private var emulator: EmulatorSession
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "memorychip")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(activityColor)
+                .symbolRenderingMode(.hierarchical)
+
+            Text(emulator.ramExpansion.chipTitle)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(Color.secondary.opacity(0.13), in: Capsule())
+        .help(helpText)
+    }
+
+    private var activityColor: Color {
+        .secondary.opacity(0.55)
+    }
+
+    private var helpText: String {
+        "\(emulator.ramExpansion.title) configured"
     }
 }
 
@@ -942,6 +1100,12 @@ private struct DriveIndicator: View {
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
 
+                    if drive.isFastAccessEnabled {
+                        Image(systemName: "bolt.fill")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(.yellow)
+                    }
+
                     if let headPositionText = drive.headPositionText {
                         Text(headPositionText)
                             .font(.system(.caption2, design: .monospaced).weight(.medium))
@@ -1033,6 +1197,24 @@ private struct DrivePopover: View {
                     }
                 }
 
+                DriveInfoRow(title: "Formats") {
+                    Text(diskImageFormatDescription)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                DriveInfoRow(title: "Access") {
+                    Picker("Access", selection: accessModeBinding) {
+                        ForEach(DriveAccessMode.allCases) { mode in
+                            Label(mode.title, systemImage: mode.systemImage).tag(mode)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .help(accessModeHelp)
+                }
+
                 if let headPositionText = drive.headPositionText {
                     DriveInfoRow(title: "Track") {
                         Text(headPositionText)
@@ -1058,6 +1240,7 @@ private struct DrivePopover: View {
                     Label("Attach Disk...", systemImage: "externaldrive.badge.plus")
                 }
                 .buttonStyle(.borderedProminent)
+                .help("Attach \(diskImageFormatDescription) to drive \(drive.unit)")
             }
         }
         .padding(16)
@@ -1115,15 +1298,32 @@ private struct DrivePopover: View {
         return !imagePath.isEmpty
     }
 
+    private var accessModeBinding: Binding<DriveAccessMode> {
+        Binding {
+            emulator.driveAccessMode(for: drive.unit)
+        } set: { accessMode in
+            emulator.setDriveAccessMode(accessMode, for: drive.unit)
+        }
+    }
+
+    private var accessModeHelp: String {
+        switch emulator.driveAccessMode(for: drive.unit) {
+        case .native:
+            return "Use true drive emulation without virtual traps"
+        case .fast:
+            return "Enable virtual traps and disable true drive emulation for faster disk access"
+        }
+    }
+
     private func openDiskPanel() {
         let panel = NSOpenPanel()
         panel.title = "Attach Disk"
-        panel.message = "Choose a disk image for drive \(drive.unit)."
+        panel.message = "Choose a \(diskImageFormatDescription) image for drive \(drive.unit)."
         panel.prompt = "Attach"
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = Self.diskImageTypes
+        panel.allowedContentTypes = allowedDiskImageTypes
 
         isPresented = false
         NSApp.activate(ignoringOtherApps: true)
@@ -1137,13 +1337,17 @@ private struct DrivePopover: View {
         emulator.attachDisk(to: drive.unit, url: url, autorun: autorun)
     }
 
-    private static let diskImageTypes: [UTType] = {
-        let types = [
-            "d64", "d67", "d71", "d80", "d81", "d82", "d90", "g64", "g71", "x64"
-        ].compactMap { UTType(filenameExtension: $0) }
+    private var diskImageFormatDescription: String {
+        drive.driveType.supportedDiskImageDescription
+    }
+
+    private var allowedDiskImageTypes: [UTType] {
+        let types = drive.driveType.supportedDiskImageTypes.compactMap { type in
+            UTType(filenameExtension: type.rawValue)
+        }
 
         return types.isEmpty ? [.data] : types
-    }()
+    }
 }
 
 private struct DriveInfoRow<Content: View>: View {

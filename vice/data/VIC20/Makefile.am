@@ -27,6 +27,10 @@ gtk3_keymaps = \
 	gtk3_pos.vkm \
 	gtk3_sym.vkm
 
+macos_keymaps = \
+	macos_sym.vkm \
+	macos_pos.vkm
+
 sdl_keymaps = \
 	sdl_sym.vkm \
 	sdl_sym_de.vkm \
@@ -54,5 +58,10 @@ endif
 
 if USE_HEADLESSUI
 vic20_DATA = $(roms) $(romsets) $(palettes)
+EXTRA_DIST = $(vic20_DATA) $(sdl_keymaps) $(gtk3_keymaps) $(macos_keymaps)
+endif
+
+if USE_MACOSUI
+vic20_DATA = $(roms) $(romsets) $(palettes) $(macos_keymaps)
 EXTRA_DIST = $(vic20_DATA) $(sdl_keymaps) $(gtk3_keymaps)
 endif

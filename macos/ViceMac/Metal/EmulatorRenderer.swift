@@ -69,7 +69,7 @@ final class EmulatorRenderer: NSObject, MTKViewDelegate {
         let fullscreenVertices = makeFullscreenVertices()
         let sourceVertices = preservesAspectRatio
             ? makeVertices(drawableSize: view.drawableSize,
-                           textureSize: frameTextureSize)
+                           presentationSize: frameSource.presentationSize(for: frameTextureSize))
             : fullscreenVertices
         guard sourceVertices.count == 4, fullscreenVertices.count == 4 else {
             return
@@ -318,16 +318,16 @@ final class EmulatorRenderer: NSObject, MTKViewDelegate {
         lastFrameSequence = frame.sequence
     }
 
-    private func makeVertices(drawableSize: CGSize, textureSize: CGSize) -> [Vertex] {
+    private func makeVertices(drawableSize: CGSize, presentationSize: CGSize) -> [Vertex] {
         guard drawableSize.width > 0,
               drawableSize.height > 0,
-              textureSize.width > 0,
-              textureSize.height > 0 else {
+              presentationSize.width > 0,
+              presentationSize.height > 0 else {
             return []
         }
 
         let drawableAspect = Float(drawableSize.width / drawableSize.height)
-        let textureAspect = Float(textureSize.width / textureSize.height)
+        let textureAspect = Float(presentationSize.width / presentationSize.height)
         let xScale: Float
         let yScale: Float
 
@@ -357,9 +357,11 @@ final class EmulatorRenderer: NSObject, MTKViewDelegate {
     }
 
     private func makeFilterUniforms(renderSize: CGSize) -> FilterUniforms {
-        FilterUniforms(
-            sourceAndRenderSize: SIMD4(Float(frameSource.pixelSize.width),
-                                       Float(frameSource.pixelSize.height),
+        let sourceSize = frameTextureSize == .zero ? frameSource.pixelSize : frameTextureSize
+
+        return FilterUniforms(
+            sourceAndRenderSize: SIMD4(Float(sourceSize.width),
+                                       Float(sourceSize.height),
                                        Float(renderSize.width),
                                        Float(renderSize.height)),
             controlsA: SIMD4(Float(filterSettings.scanlineIntensity),

@@ -12,12 +12,12 @@ struct ViceMacApp: App {
         }
         .commands {
             CommandGroup(after: .appInfo) {
-                Button("Soft Reset x64sc") {
+                Button("Soft Reset \(emulator.machine.shortName)") {
                     emulator.reset(kind: .soft)
                 }
                 .keyboardShortcut("r", modifiers: [.command])
 
-                Button("Hard Reset x64sc") {
+                Button("Hard Reset \(emulator.machine.shortName)") {
                     emulator.reset(kind: .hard)
                 }
                 .keyboardShortcut("r", modifiers: [.command, .option])

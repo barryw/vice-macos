@@ -100,21 +100,6 @@ void ui_error(const char *format, ...)
 
 }
 
-void ui_display_drive_track(unsigned int drive_number,
-                            unsigned int drive_base,
-                            unsigned int half_track_number,
-                            unsigned int disk_side)
-{
-}
-
-void ui_display_drive_sector(unsigned int drive_number,
-                             unsigned int drive_base,
-                             unsigned int sector_valid,
-                             unsigned int sector,
-                             unsigned int operation)
-{
-}
-
 void main_exit(void)
 {
 

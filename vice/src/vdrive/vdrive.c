@@ -60,7 +60,6 @@
 #include "lib.h"
 #include "log.h"
 #include "types.h"
-#include "uiapi.h"
 #include "vdrive-bam.h"
 #include "vdrive-command.h"
 #include "vdrive-dir.h"
@@ -69,24 +68,11 @@
 #include "vdrive-rel.h"
 #include "vdrive-snapshot.h"
 #include "vdrive.h"
+#if 0
+#include "uiapi.h"
+#endif
 
 static log_t vdrive_log = LOG_DEFAULT;
-
-static void vdrive_display_sector(vdrive_t *vdrive, const disk_addr_t *dadr, unsigned int operation)
-{
-    unsigned int drive_number;
-
-    if (vdrive == NULL
-        || dadr == NULL
-        || vdrive->unit < 8
-        || vdrive->unit >= 12) {
-        return;
-    }
-
-    drive_number = vdrive->unit - 8;
-    ui_display_drive_track(drive_number, 0, dadr->track * 2, 0);
-    ui_display_drive_sector(drive_number, 0, 1, dadr->sector, operation);
-}
 
 void vdrive_init(void)
 {
@@ -969,7 +955,9 @@ int vdrive_read_sector(vdrive_t *vdrive, uint8_t *buf, unsigned int track, unsig
         return CBMDOS_IPE_NOT_READY;
     }
 
-    vdrive_display_sector(vdrive, &dadr, UI_DRIVE_OPERATION_READ);
+#if 0
+    ui_display_drive_track(vdrive->unit - 8, 0, dadr.track * 2);
+#endif
     ret = disk_image_read_sector(vdrive->image, buf, &dadr);
 #ifdef DEBUG_DRIVE
     log_debug(LOG_DEFAULT, "VDRIVE: read_sector %u %u = %d", dadr.track, dadr.sector, ret);
@@ -998,7 +986,9 @@ int vdrive_write_sector(vdrive_t *vdrive, const uint8_t *buf, unsigned int track
         return CBMDOS_IPE_NOT_READY;
     }
 
-    vdrive_display_sector(vdrive, &dadr, UI_DRIVE_OPERATION_WRITE);
+#if 0
+    ui_display_drive_track(vdrive->unit - 8, 0, dadr.track * 2);
+#endif
     ret = disk_image_write_sector(vdrive->image, buf, &dadr);
 
 #ifdef DEBUG_DRIVE
@@ -1013,7 +1003,6 @@ int vdrive_read_sector_physical(vdrive_t *vdrive, uint8_t *buf, unsigned int tra
     disk_addr_t dadr;
     dadr.track = track;
     dadr.sector = sector;
-    vdrive_display_sector(vdrive, &dadr, UI_DRIVE_OPERATION_READ);
     return disk_image_read_sector(vdrive->image, buf, &dadr);
 }
 
@@ -1022,7 +1011,6 @@ int vdrive_write_sector_physical(vdrive_t *vdrive, const uint8_t *buf, unsigned 
     disk_addr_t dadr;
     dadr.track = track;
     dadr.sector = sector;
-    vdrive_display_sector(vdrive, &dadr, UI_DRIVE_OPERATION_WRITE);
     return disk_image_write_sector(vdrive->image, buf, &dadr);
 }
 

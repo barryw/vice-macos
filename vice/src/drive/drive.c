@@ -247,9 +247,6 @@ int drive_init(void)
             drive->attach_detach_clk = (CLOCK)0;
             drive->old_led_status = 0;
             drive->old_half_track = 0;
-            drive->old_sector_valid = 0;
-            drive->old_sector = 0;
-            drive->old_operation = UI_DRIVE_OPERATION_NONE;
             drive->side = 0;
             drive->GCR_image_loaded = 0;
             drive->P64_image_loaded = 0;
@@ -474,9 +471,6 @@ void drive_enable_update_ui(diskunit_context_t *drv)
             drive->old_led_status = -1;
             drive->old_half_track = -1;
             drive->old_side = -1;
-            drive->old_sector_valid = -1;
-            drive->old_sector = 0;
-            drive->old_operation = UI_DRIVE_OPERATION_NONE;
         }
     }
 
@@ -936,57 +930,6 @@ static void drive_led_update(diskunit_context_t *unit, drive_t *drive, int base)
     }
 }
 
-static int drive_get_current_sector(drive_t *drive, unsigned int *sector)
-{
-    disk_track_t raw;
-    uint8_t gcr_sector = 0;
-
-    if (drive == NULL
-        || sector == NULL
-        || drive->GCR_image_loaded == 0
-        || drive->GCR_track_start_ptr == NULL
-        || drive->GCR_current_track_size == 0) {
-        return 0;
-    }
-
-    raw.data = drive->GCR_track_start_ptr;
-    raw.size = (int)drive->GCR_current_track_size;
-
-    if (!gcr_get_sector_at_offset(&raw, drive->GCR_head_offset, &gcr_sector)) {
-        return 0;
-    }
-
-    *sector = gcr_sector;
-    return 1;
-}
-
-static void drive_sector_update(int drive_number, drive_t *drive, int base)
-{
-    unsigned int sector = 0;
-    unsigned int operation = UI_DRIVE_OPERATION_NONE;
-    int sector_valid = 0;
-
-    if (drive != NULL && (drive->led_status & 1) != 0) {
-        sector_valid = drive_get_current_sector(drive, &sector);
-        operation = drive->read_write_mode != 0
-            ? UI_DRIVE_OPERATION_READ
-            : UI_DRIVE_OPERATION_WRITE;
-    }
-
-    if (sector_valid != drive->old_sector_valid
-        || sector != drive->old_sector
-        || operation != drive->old_operation) {
-        ui_display_drive_sector((unsigned int)drive_number,
-                                (unsigned int)base,
-                                (unsigned int)sector_valid,
-                                sector,
-                                operation);
-        drive->old_sector_valid = sector_valid;
-        drive->old_sector = sector;
-        drive->old_operation = operation;
-    }
-}
-
 /* Update the status bar in the UI.  */
 void drive_update_ui_status(void)
 {
@@ -1011,7 +954,6 @@ void drive_update_ui_status(void)
                 drive0->old_side = drive0->side;
                 ui_display_drive_track(i, 0, drive0->current_half_track, drive0->side);
             }
-            drive_sector_update(i, drive0, 0);
             /* update LED and track of the second drive for dual drives */
             if (drive_check_dual(unit->type)) {
                 drive_led_update(unit, drive1, 1);
@@ -1021,7 +963,6 @@ void drive_update_ui_status(void)
                     drive1->old_side = drive1->side;
                     ui_display_drive_track(i, 1, drive1->current_half_track, drive1->side);
                 }
-                drive_sector_update(i, drive1, 1);
             }
         }
     }
