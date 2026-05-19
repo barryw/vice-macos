@@ -30,6 +30,13 @@ typedef struct vicemac_drive_status_s {
     uint32_t led_color;
     uint32_t led_pwm1;
     uint32_t led_pwm2;
+    uint32_t track_valid;
+    uint32_t track;
+    uint32_t half_track;
+    uint32_t disk_side;
+    uint32_t sector_valid;
+    uint32_t sector;
+    uint32_t operation;
     int32_t drive_status_code;
     const char *drive_status_text;
     const char *image_path;
@@ -72,12 +79,21 @@ void vicemac_publish_drive_status(uint32_t unit,
                                   uint32_t led_color,
                                   uint32_t led_pwm1,
                                   uint32_t led_pwm2,
+                                  uint32_t track_valid,
+                                  uint32_t track,
+                                  uint32_t half_track,
+                                  uint32_t disk_side,
+                                  uint32_t sector_valid,
+                                  uint32_t sector,
+                                  uint32_t operation,
                                   int32_t drive_status_code,
                                   const char *drive_status_text,
                                   const char *image_path);
 int vicemac_queue_key_event(signed long key, int mod, int pressed);
 int vicemac_queue_keyboard_clear(void);
 int vicemac_queue_resource_int(const char *name, int value);
+int vicemac_queue_resource_string(const char *name, const char *value);
+int vicemac_queue_joystick_value(uint32_t port, uint32_t value);
 int vicemac_queue_pause(int paused);
 int vicemac_queue_machine_reset(uint32_t reset_mode);
 int vicemac_queue_warp_mode(int enabled);

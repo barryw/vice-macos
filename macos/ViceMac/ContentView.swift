@@ -41,6 +41,8 @@ struct ContentView: View {
             ToolbarItemGroup {
                 MachineToolbarControls()
 
+                InputToolbarControls()
+
                 Picker("Video", selection: $emulator.videoStandard) {
                     ForEach(EmulatorSession.VideoStandard.allCases) { standard in
                         Text(standard.rawValue).tag(standard)
@@ -53,7 +55,8 @@ struct ContentView: View {
                 SoundToolbarControls()
 
                 VideoFilterPresetPicker()
-                    .frame(width: 190)
+                    .frame(width: 224)
+                    .fixedSize()
                     .help("Display filter preset")
 
                 DisplayToolbarControls()
@@ -137,25 +140,112 @@ private struct EmulatorDisplaySurface: View {
         case .native:
             return nativeSize
         case .fit:
-            return aspectFitSize(in: containerSize)
+            return CGSize(width: max(containerSize.width, 1),
+                          height: max(containerSize.height, 1))
         case .stretch:
             return CGSize(width: max(containerSize.width, 1),
                           height: max(containerSize.height, 1))
         }
     }
+}
 
-    private func aspectFitSize(in containerSize: CGSize) -> CGSize {
-        let availableWidth = max(containerSize.width, 1)
-        let availableHeight = max(containerSize.height, 1)
-        let aspectRatio = emulator.frameSource.aspectRatio
+private struct InputToolbarControls: View {
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(ControlPort.allCases) { port in
+                ControlPortToolbarMenu(port: port)
+            }
+        }
+        .fixedSize()
+    }
+}
 
-        if availableWidth / availableHeight > aspectRatio {
-            return CGSize(width: availableHeight * aspectRatio,
-                          height: availableHeight)
+private struct ControlPortToolbarMenu: View {
+    @EnvironmentObject private var emulator: EmulatorSession
+
+    let port: ControlPort
+
+    var body: some View {
+        Menu {
+            Button {
+                emulator.setControlPortDeviceID(nil, for: port)
+            } label: {
+                if emulator.controlPortDeviceID(for: port) == nil {
+                    Label("None", systemImage: "checkmark")
+                } else {
+                    Label("None", systemImage: "slash.circle")
+                }
+            }
+
+            if !emulator.controlDevices.isEmpty {
+                Divider()
+            }
+
+            ForEach(emulator.controlDevices) { device in
+                Button {
+                    emulator.setControlPortDeviceID(device.id, for: port)
+                } label: {
+                    let connectionState = emulator.connectionState(for: device)
+                    let title = connectionState.isConnected
+                        ? device.name
+                        : "\(device.name) - \(connectionState.title)"
+
+                    if emulator.controlPortDeviceID(for: port) == device.id {
+                        Label(title, systemImage: connectionState.isConnected ? "checkmark" : connectionState.systemImage)
+                    } else {
+                        Label(title, systemImage: connectionState.isConnected ? device.systemImage : connectionState.systemImage)
+                    }
+                }
+            }
+
+            if emulator.controlDevices.isEmpty {
+                Text("No control devices")
+            }
+        } label: {
+            HStack(spacing: 5) {
+                Text("P\(port.rawValue)")
+                    .font(.callout.weight(.semibold))
+                    .monospacedDigit()
+
+                Image(systemName: toolbarSystemImage)
+                    .font(.system(size: 15, weight: .semibold))
+                    .symbolRenderingMode(.hierarchical)
+                    .frame(width: 17, height: 17)
+                    .foregroundStyle(toolbarTint)
+            }
+            .frame(width: 58)
+        }
+        .help(helpText)
+    }
+
+    private var toolbarSystemImage: String {
+        guard let device = emulator.controlPortDevice(for: port) else {
+            return "slash.circle"
         }
 
-        return CGSize(width: availableWidth,
-                      height: availableWidth / aspectRatio)
+        let connectionState = emulator.connectionState(for: device)
+        return connectionState.isConnected ? device.systemImage : connectionState.systemImage
+    }
+
+    private var toolbarTint: Color {
+        guard let device = emulator.controlPortDevice(for: port) else {
+            return .secondary
+        }
+
+        return emulator.connectionState(for: device).isConnected ? .primary : .orange
+    }
+
+    private var helpText: String {
+        guard let device = emulator.controlPortDevice(for: port) else {
+            return "\(port.title): None"
+        }
+
+        let connectionState = emulator.connectionState(for: device)
+        if connectionState.isConnected {
+            return "\(port.title): \(device.name)"
+        }
+
+        return "\(port.title): \(device.name) - \(connectionState.title)"
     }
 }
 
@@ -487,7 +577,9 @@ private struct SoundToolbarControls: View {
                 VolumePopoverContent(soundEnabled: $emulator.soundEnabled,
                                      volume: volumeBinding)
             }
+            .frame(width: 78)
         }
+        .fixedSize()
     }
 
     private var volumeSymbol: String {
@@ -849,6 +941,14 @@ private struct DriveIndicator: View {
                     Text("\(drive.unit)")
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
+
+                    if let headPositionText = drive.headPositionText {
+                        Text(headPositionText)
+                            .font(.system(.caption2, design: .monospaced).weight(.medium))
+                            .foregroundStyle(headPositionColor)
+                            .frame(minWidth: 24, alignment: .leading)
+                            .baselineOffset(-1)
+                    }
                 }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
@@ -870,6 +970,14 @@ private struct DriveIndicator: View {
 
         let color = drive.ledColor.displayColor
         return drive.isActive ? color : color.opacity(0.28)
+    }
+
+    private var headPositionColor: Color {
+        if drive.hasErrorStatus {
+            return .red.opacity(0.9)
+        }
+
+        return .secondary
     }
 }
 
@@ -922,6 +1030,13 @@ private struct DrivePopover: View {
                             .fill(statusColor)
                             .frame(width: 7, height: 7)
                         Text(statusTitle)
+                    }
+                }
+
+                if let headPositionText = drive.headPositionText {
+                    DriveInfoRow(title: "Track") {
+                        Text(headPositionText)
+                            .font(.system(.body, design: .monospaced))
                     }
                 }
             }

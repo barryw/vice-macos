@@ -30,6 +30,13 @@ static int drive_status_led_color[NUM_DISK_UNITS] = {
 };
 static unsigned int drive_status_led_pwm1[NUM_DISK_UNITS] = { 0, 0, 0, 0 };
 static unsigned int drive_status_led_pwm2[NUM_DISK_UNITS] = { 0, 0, 0, 0 };
+static unsigned int drive_status_track_valid[NUM_DISK_UNITS][NUM_DRIVES] = { { 0 } };
+static unsigned int drive_status_half_track[NUM_DISK_UNITS][NUM_DRIVES] = { { 0 } };
+static unsigned int drive_status_disk_side[NUM_DISK_UNITS][NUM_DRIVES] = { { 0 } };
+static unsigned int drive_status_sector_valid[NUM_DISK_UNITS][NUM_DRIVES] = { { 0 } };
+static unsigned int drive_status_sector[NUM_DISK_UNITS][NUM_DRIVES] = { { 0 } };
+static unsigned int drive_status_operation[NUM_DISK_UNITS][NUM_DRIVES] = { { 0 } };
+static unsigned int drive_status_current_base[NUM_DISK_UNITS] = { 0, 0, 0, 0 };
 static char *drive_status_image[NUM_DISK_UNITS][NUM_DRIVES] = { { 0 } };
 static char drive_status_text[NUM_DISK_UNITS][96] = { { 0 } };
 
@@ -88,8 +95,43 @@ static const char *current_drive_status_text(unsigned int drive_number)
 
 static void publish_drive_status(unsigned int drive_number)
 {
+    unsigned int drive_base = 0;
+    unsigned int track_valid = 0;
+    unsigned int half_track = 0;
+    unsigned int disk_side = 0;
+    unsigned int sector_valid = 0;
+    unsigned int sector = 0;
+    unsigned int operation = 0;
+
     if (drive_number >= NUM_DISK_UNITS) {
         return;
+    }
+
+    if (drive_status_current_base[drive_number] < NUM_DRIVES) {
+        drive_base = drive_status_current_base[drive_number];
+    }
+
+    if (!drive_status_track_valid[drive_number][drive_base]
+        && !drive_status_sector_valid[drive_number][drive_base]
+        && drive_status_operation[drive_number][drive_base] == 0) {
+        for (drive_base = 0; drive_base < NUM_DRIVES; drive_base++) {
+            if (drive_status_track_valid[drive_number][drive_base]
+                || drive_status_sector_valid[drive_number][drive_base]
+                || drive_status_operation[drive_number][drive_base] != 0) {
+                break;
+            }
+        }
+    }
+
+    if (drive_base < NUM_DRIVES && drive_status_track_valid[drive_number][drive_base]) {
+        track_valid = 1;
+        half_track = drive_status_half_track[drive_number][drive_base];
+        disk_side = drive_status_disk_side[drive_number][drive_base];
+    }
+    if (drive_base < NUM_DRIVES) {
+        sector_valid = drive_status_sector_valid[drive_number][drive_base];
+        sector = drive_status_sector[drive_number][drive_base];
+        operation = drive_status_operation[drive_number][drive_base];
     }
 
     vicemac_publish_drive_status(drive_number + DRIVE_UNIT_MIN,
@@ -98,6 +140,13 @@ static void publish_drive_status(unsigned int drive_number)
                                  (uint32_t)drive_status_led_color[drive_number],
                                  drive_status_led_pwm1[drive_number],
                                  drive_status_led_pwm2[drive_number],
+                                 (uint32_t)track_valid,
+                                 (uint32_t)(half_track / 2),
+                                 (uint32_t)half_track,
+                                 (uint32_t)disk_side,
+                                 (uint32_t)sector_valid,
+                                 (uint32_t)sector,
+                                 (uint32_t)operation,
                                  current_drive_status_code(drive_number),
                                  current_drive_status_text(drive_number),
                                  current_drive_image(drive_number));
@@ -187,10 +236,41 @@ void ui_display_drive_track(unsigned int drive_number,
                             unsigned int half_track_number,
                             unsigned int disk_side)
 {
-    (void)drive_number;
-    (void)drive_base;
-    (void)half_track_number;
-    (void)disk_side;
+    int changed;
+
+    if (drive_number >= NUM_DISK_UNITS || drive_base >= NUM_DRIVES) {
+        return;
+    }
+
+    changed = drive_status_current_base[drive_number] != drive_base
+        || !drive_status_track_valid[drive_number][drive_base]
+        || drive_status_half_track[drive_number][drive_base] != half_track_number
+        || drive_status_disk_side[drive_number][drive_base] != disk_side;
+
+    drive_status_track_valid[drive_number][drive_base] = 1;
+    drive_status_half_track[drive_number][drive_base] = half_track_number;
+    drive_status_disk_side[drive_number][drive_base] = disk_side;
+    drive_status_current_base[drive_number] = drive_base;
+
+    if (changed) {
+        publish_drive_status(drive_number);
+    }
+}
+
+void ui_display_drive_sector(unsigned int drive_number,
+                             unsigned int drive_base,
+                             unsigned int sector_valid,
+                             unsigned int sector,
+                             unsigned int operation)
+{
+    if (drive_number >= NUM_DISK_UNITS || drive_base >= NUM_DRIVES) {
+        return;
+    }
+
+    drive_status_sector_valid[drive_number][drive_base] = sector_valid ? 1 : 0;
+    drive_status_sector[drive_number][drive_base] = sector;
+    drive_status_operation[drive_number][drive_base] = operation;
+    drive_status_current_base[drive_number] = drive_base;
 }
 
 void ui_enable_drive_status(ui_drive_enable_t state, int *drive_led_color)
@@ -211,6 +291,9 @@ void ui_enable_drive_status(ui_drive_enable_t state, int *drive_led_color)
         if ((state & (1 << unit)) == 0) {
             drive_status_led_pwm1[unit] = 0;
             drive_status_led_pwm2[unit] = 0;
+            memset(drive_status_track_valid[unit], 0, sizeof(drive_status_track_valid[unit]));
+            memset(drive_status_sector_valid[unit], 0, sizeof(drive_status_sector_valid[unit]));
+            memset(drive_status_operation[unit], 0, sizeof(drive_status_operation[unit]));
         }
 
         publish_drive_status(unit);
@@ -227,6 +310,11 @@ void ui_display_drive_current_image(unsigned int unit_number,
 
     lib_free(drive_status_image[unit_number][drive_number]);
     drive_status_image[unit_number][drive_number] = lib_strdup(image != 0 ? image : "");
+    if (image == 0 || image[0] == '\0') {
+        drive_status_track_valid[unit_number][drive_number] = 0;
+        drive_status_sector_valid[unit_number][drive_number] = 0;
+        drive_status_operation[unit_number][drive_number] = 0;
+    }
     publish_drive_status(unit_number);
 }
 

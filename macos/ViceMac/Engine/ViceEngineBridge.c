@@ -19,6 +19,9 @@ typedef struct ViceEngineStartArguments {
     int32_t soundVolume;
     int32_t speedPercent;
     bool warpEnabled;
+    char *basicROM;
+    char *kernalROM;
+    char *characterROM;
 } ViceEngineStartArguments;
 
 static pthread_t engineThread;
@@ -59,6 +62,13 @@ static void driveStatusTrampoline(const vicemac_drive_status_t *status, void *co
     bridgedStatus.ledColor = status->led_color;
     bridgedStatus.ledIntensity = status->led_pwm1;
     bridgedStatus.errorIntensity = status->led_pwm2;
+    bridgedStatus.trackValid = status->track_valid != 0;
+    bridgedStatus.track = status->track;
+    bridgedStatus.halfTrack = status->half_track;
+    bridgedStatus.diskSide = status->disk_side;
+    bridgedStatus.sectorValid = status->sector_valid != 0;
+    bridgedStatus.sector = status->sector;
+    bridgedStatus.operation = status->operation;
     bridgedStatus.driveStatusCode = status->drive_status_code;
     bridgedStatus.driveStatusText = status->drive_status_text;
     bridgedStatus.imagePath = status->image_path;
@@ -137,6 +147,24 @@ bool ViceEngineSetIntResource(const char *name, int32_t value)
     }
 
     return vicemac_queue_resource_int(name, (int)value) != 0;
+}
+
+bool ViceEngineSetStringResource(const char *name, const char *value)
+{
+    if (!atomic_load(&engineRunning)) {
+        return false;
+    }
+
+    return vicemac_queue_resource_string(name, value) != 0;
+}
+
+bool ViceEngineSetJoystickValue(uint32_t port, uint32_t value)
+{
+    if (!atomic_load(&engineRunning)) {
+        return false;
+    }
+
+    return vicemac_queue_joystick_value(port, value) != 0;
 }
 
 bool ViceEngineSetPauseEnabled(bool paused)
@@ -233,6 +261,12 @@ static void *engineThreadMain(void *opaque)
         soundVolumeArgument,
         "-sidmodel",
         sidModelArgument,
+        "-basic",
+        arguments->basicROM,
+        "-kernal",
+        arguments->kernalROM,
+        "-chargen",
+        arguments->characterROM,
         NULL
     };
     int argc = (int)(sizeof(argv) / sizeof(argv[0])) - 1;
@@ -247,6 +281,9 @@ static void *engineThreadMain(void *opaque)
     atomic_store(&engineRunning, false);
     free(arguments->executablePath);
     free(arguments->dataDirectory);
+    free(arguments->basicROM);
+    free(arguments->kernalROM);
+    free(arguments->characterROM);
     free(arguments);
     return NULL;
 }
@@ -257,12 +294,19 @@ bool ViceEngineStartX64SC(const char *executablePath,
                           bool soundEnabled,
                           int32_t soundVolume,
                           int32_t speedPercent,
-                          bool warpEnabled)
+                          bool warpEnabled,
+                          const char *basicROM,
+                          const char *kernalROM,
+                          const char *characterROM)
 {
     ViceEngineStartArguments *arguments;
     bool expected = false;
 
-    if (executablePath == NULL || dataDirectory == NULL) {
+    if (executablePath == NULL
+        || dataDirectory == NULL
+        || basicROM == NULL
+        || kernalROM == NULL
+        || characterROM == NULL) {
         return false;
     }
 
@@ -283,9 +327,19 @@ bool ViceEngineStartX64SC(const char *executablePath,
     arguments->warpEnabled = warpEnabled;
     arguments->executablePath = strdup(executablePath);
     arguments->dataDirectory = strdup(dataDirectory);
-    if (arguments->executablePath == NULL || arguments->dataDirectory == NULL) {
+    arguments->basicROM = strdup(basicROM);
+    arguments->kernalROM = strdup(kernalROM);
+    arguments->characterROM = strdup(characterROM);
+    if (arguments->executablePath == NULL
+        || arguments->dataDirectory == NULL
+        || arguments->basicROM == NULL
+        || arguments->kernalROM == NULL
+        || arguments->characterROM == NULL) {
         free(arguments->executablePath);
         free(arguments->dataDirectory);
+        free(arguments->basicROM);
+        free(arguments->kernalROM);
+        free(arguments->characterROM);
         free(arguments);
         atomic_store(&engineRunning, false);
         return false;
@@ -294,6 +348,9 @@ bool ViceEngineStartX64SC(const char *executablePath,
     if (pthread_create(&engineThread, NULL, engineThreadMain, arguments) != 0) {
         free(arguments->executablePath);
         free(arguments->dataDirectory);
+        free(arguments->basicROM);
+        free(arguments->kernalROM);
+        free(arguments->characterROM);
         free(arguments);
         atomic_store(&engineRunning, false);
         return false;

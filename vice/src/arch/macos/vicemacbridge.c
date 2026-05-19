@@ -16,6 +16,7 @@
 #include "cartridge.h"
 #include "crt.h"
 #include "drive.h"
+#include "joystick.h"
 #include "keyboard.h"
 #include "machine.h"
 #include "resources.h"
@@ -26,6 +27,7 @@
 #define VICEMAC_INPUT_QUEUE_CAPACITY 1024
 #define VICEMAC_RESOURCE_QUEUE_CAPACITY 256
 #define VICEMAC_RESOURCE_NAME_CAPACITY 64
+#define VICEMAC_JOYSTICK_QUEUE_CAPACITY 256
 #define VICEMAC_MACHINE_COMMAND_QUEUE_CAPACITY 64
 #define VICEMAC_DRIVE_COMMAND_QUEUE_CAPACITY 64
 #define VICEMAC_CARTRIDGE_COMMAND_QUEUE_CAPACITY 16
@@ -58,6 +60,16 @@ typedef struct vicemac_resource_int_event_s {
     char name[VICEMAC_RESOURCE_NAME_CAPACITY];
     int value;
 } vicemac_resource_int_event_t;
+
+typedef struct vicemac_resource_string_event_s {
+    char name[VICEMAC_RESOURCE_NAME_CAPACITY];
+    char value[VICEMAC_PATH_CAPACITY];
+} vicemac_resource_string_event_t;
+
+typedef struct vicemac_joystick_event_s {
+    uint32_t port;
+    uint32_t value;
+} vicemac_joystick_event_t;
 
 typedef struct vicemac_machine_command_s {
     vicemac_machine_command_type_t type;
@@ -92,6 +104,14 @@ static pthread_mutex_t resource_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 static vicemac_resource_int_event_t resource_queue[VICEMAC_RESOURCE_QUEUE_CAPACITY];
 static unsigned int resource_queue_read = 0;
 static unsigned int resource_queue_write = 0;
+static pthread_mutex_t resource_string_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
+static vicemac_resource_string_event_t resource_string_queue[VICEMAC_RESOURCE_QUEUE_CAPACITY];
+static unsigned int resource_string_queue_read = 0;
+static unsigned int resource_string_queue_write = 0;
+static pthread_mutex_t joystick_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
+static vicemac_joystick_event_t joystick_queue[VICEMAC_JOYSTICK_QUEUE_CAPACITY];
+static unsigned int joystick_queue_read = 0;
+static unsigned int joystick_queue_write = 0;
 static pthread_mutex_t machine_command_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 static vicemac_machine_command_t machine_command_queue[VICEMAC_MACHINE_COMMAND_QUEUE_CAPACITY];
 static unsigned int machine_command_queue_read = 0;
@@ -113,6 +133,16 @@ static unsigned int input_queue_next(unsigned int index)
 static unsigned int resource_queue_next(unsigned int index)
 {
     return (index + 1) % VICEMAC_RESOURCE_QUEUE_CAPACITY;
+}
+
+static unsigned int resource_string_queue_next(unsigned int index)
+{
+    return (index + 1) % VICEMAC_RESOURCE_QUEUE_CAPACITY;
+}
+
+static unsigned int joystick_queue_next(unsigned int index)
+{
+    return (index + 1) % VICEMAC_JOYSTICK_QUEUE_CAPACITY;
 }
 
 static unsigned int machine_command_queue_next(unsigned int index)
@@ -183,6 +213,13 @@ void vicemac_publish_drive_status(uint32_t unit,
                                   uint32_t led_color,
                                   uint32_t led_pwm1,
                                   uint32_t led_pwm2,
+                                  uint32_t track_valid,
+                                  uint32_t track,
+                                  uint32_t half_track,
+                                  uint32_t disk_side,
+                                  uint32_t sector_valid,
+                                  uint32_t sector,
+                                  uint32_t operation,
                                   int32_t drive_status_code,
                                   const char *drive_status_text,
                                   const char *image_path)
@@ -199,6 +236,13 @@ void vicemac_publish_drive_status(uint32_t unit,
     status.led_color = led_color;
     status.led_pwm1 = led_pwm1;
     status.led_pwm2 = led_pwm2;
+    status.track_valid = track_valid ? 1U : 0U;
+    status.track = track;
+    status.half_track = half_track;
+    status.disk_side = disk_side;
+    status.sector_valid = sector_valid ? 1U : 0U;
+    status.sector = sector;
+    status.operation = operation;
     status.drive_status_code = drive_status_code;
     status.drive_status_text = drive_status_text;
     status.image_path = image_path;
@@ -388,6 +432,58 @@ int vicemac_queue_resource_int(const char *name, int value)
     return 1;
 }
 
+int vicemac_queue_resource_string(const char *name, const char *value)
+{
+    unsigned int next_write;
+
+    if (name == 0 || name[0] == '\0' || value == 0) {
+        return 0;
+    }
+
+    pthread_mutex_lock(&resource_string_queue_mutex);
+
+    next_write = resource_string_queue_next(resource_string_queue_write);
+    if (next_write == resource_string_queue_read) {
+        resource_string_queue_read = resource_string_queue_next(resource_string_queue_read);
+    }
+
+    strncpy(resource_string_queue[resource_string_queue_write].name,
+            name,
+            sizeof(resource_string_queue[resource_string_queue_write].name) - 1);
+    resource_string_queue[resource_string_queue_write].name[sizeof(resource_string_queue[resource_string_queue_write].name) - 1] = '\0';
+    strncpy(resource_string_queue[resource_string_queue_write].value,
+            value,
+            sizeof(resource_string_queue[resource_string_queue_write].value) - 1);
+    resource_string_queue[resource_string_queue_write].value[sizeof(resource_string_queue[resource_string_queue_write].value) - 1] = '\0';
+    resource_string_queue_write = next_write;
+
+    pthread_mutex_unlock(&resource_string_queue_mutex);
+    return 1;
+}
+
+int vicemac_queue_joystick_value(uint32_t port, uint32_t value)
+{
+    unsigned int next_write;
+
+    if (port >= JOYPORT_MAX_PORTS) {
+        return 0;
+    }
+
+    pthread_mutex_lock(&joystick_queue_mutex);
+
+    next_write = joystick_queue_next(joystick_queue_write);
+    if (next_write == joystick_queue_read) {
+        joystick_queue_read = joystick_queue_next(joystick_queue_read);
+    }
+
+    joystick_queue[joystick_queue_write].port = port;
+    joystick_queue[joystick_queue_write].value = value;
+    joystick_queue_write = next_write;
+
+    pthread_mutex_unlock(&joystick_queue_mutex);
+    return 1;
+}
+
 static int vicemac_queue_machine_command(vicemac_machine_command_type_t type, int value)
 {
     unsigned int next_write;
@@ -561,6 +657,38 @@ static int vicemac_pop_resource_int_event(vicemac_resource_int_event_t *event)
     return has_event;
 }
 
+static int vicemac_pop_resource_string_event(vicemac_resource_string_event_t *event)
+{
+    int has_event = 0;
+
+    pthread_mutex_lock(&resource_string_queue_mutex);
+
+    if (resource_string_queue_read != resource_string_queue_write) {
+        *event = resource_string_queue[resource_string_queue_read];
+        resource_string_queue_read = resource_string_queue_next(resource_string_queue_read);
+        has_event = 1;
+    }
+
+    pthread_mutex_unlock(&resource_string_queue_mutex);
+    return has_event;
+}
+
+static int vicemac_pop_joystick_event(vicemac_joystick_event_t *event)
+{
+    int has_event = 0;
+
+    pthread_mutex_lock(&joystick_queue_mutex);
+
+    if (joystick_queue_read != joystick_queue_write) {
+        *event = joystick_queue[joystick_queue_read];
+        joystick_queue_read = joystick_queue_next(joystick_queue_read);
+        has_event = 1;
+    }
+
+    pthread_mutex_unlock(&joystick_queue_mutex);
+    return has_event;
+}
+
 static int vicemac_pop_machine_command(vicemac_machine_command_t *command)
 {
     int has_command = 0;
@@ -611,10 +739,15 @@ static int vicemac_pop_cartridge_command(vicemac_cartridge_command_t *command)
 
 static void vicemac_dispatch_queued_resources(void)
 {
-    vicemac_resource_int_event_t event;
+    vicemac_resource_int_event_t int_event;
+    vicemac_resource_string_event_t string_event;
 
-    while (vicemac_pop_resource_int_event(&event)) {
-        (void)resources_set_int(event.name, event.value);
+    while (vicemac_pop_resource_int_event(&int_event)) {
+        (void)resources_set_int(int_event.name, int_event.value);
+    }
+
+    while (vicemac_pop_resource_string_event(&string_event)) {
+        (void)resources_set_string(string_event.name, string_event.value);
     }
 }
 
@@ -629,6 +762,17 @@ static void vicemac_dispatch_queued_input(void)
             keyboard_key_pressed(event.key, event.mod);
         } else {
             keyboard_key_released(event.key, event.mod);
+        }
+    }
+}
+
+static void vicemac_dispatch_queued_joystick_events(void)
+{
+    vicemac_joystick_event_t event;
+
+    while (vicemac_pop_joystick_event(&event)) {
+        if (event.port < JOYPORT_MAX_PORTS) {
+            joystick_set_value_absolute((int)event.port, (uint16_t)(event.value & 0x0fffU));
         }
     }
 }
@@ -736,5 +880,6 @@ void vicemac_dispatch_queued_events(void)
     vicemac_dispatch_queued_machine_commands();
     vicemac_dispatch_queued_cartridge_commands();
     vicemac_dispatch_queued_drive_commands();
+    vicemac_dispatch_queued_joystick_events();
     vicemac_dispatch_queued_input();
 }

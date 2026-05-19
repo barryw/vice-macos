@@ -77,6 +77,9 @@ for framework in CoreAudio AudioToolbox AudioUnit; do
     fi
 done
 
+make -C "$BUILD_DIR/src" gcr.o V=1
+make -C "$BUILD_DIR/src/drive" V=1
+make -C "$BUILD_DIR/src/vdrive" V=1
 make -C "$BUILD_DIR/src/arch/macos" V=1
 make -C "$BUILD_DIR/src/lib/linenoise-ng" V=1
 

@@ -24,6 +24,13 @@ typedef struct ViceEngineDriveStatus {
     uint32_t ledColor;
     uint32_t ledIntensity;
     uint32_t errorIntensity;
+    bool trackValid;
+    uint32_t track;
+    uint32_t halfTrack;
+    uint32_t diskSide;
+    bool sectorValid;
+    uint32_t sector;
+    uint32_t operation;
     int32_t driveStatusCode;
     const char *driveStatusText;
     const char *imagePath;
@@ -59,11 +66,16 @@ bool ViceEngineStartX64SC(const char *executablePath,
                           bool soundEnabled,
                           int32_t soundVolume,
                           int32_t speedPercent,
-                          bool warpEnabled);
+                          bool warpEnabled,
+                          const char *basicROM,
+                          const char *kernalROM,
+                          const char *characterROM);
 bool ViceEngineIsRunning(void);
 void ViceEngineSendKeyEvent(int64_t key, int32_t modifiers, bool pressed);
 void ViceEngineReleaseAllKeys(void);
 bool ViceEngineSetIntResource(const char *name, int32_t value);
+bool ViceEngineSetStringResource(const char *name, const char *value);
+bool ViceEngineSetJoystickValue(uint32_t port, uint32_t value);
 bool ViceEngineSetPauseEnabled(bool paused);
 bool ViceEngineTriggerMachineReset(bool hardReset);
 bool ViceEngineSetWarpMode(bool enabled);
