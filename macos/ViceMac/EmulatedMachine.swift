@@ -71,6 +71,7 @@ struct MachineStartupConfiguration {
     let soundVolume: Int
     let emulationSpeed: EmulatorSession.EmulationSpeed
     let romImages: ROMImageConfiguration
+    let ramExpansion: RAMExpansion
 }
 
 struct ViceIntResourceAssignment: Equatable {
@@ -127,6 +128,14 @@ struct EmulatedMachine: Identifiable, Equatable {
             arguments += [
                 "-sidmodel",
                 "\(configuration.sidModel.rawValue)"
+            ]
+        }
+
+        if id == .xvic,
+           let memorySpec = configuration.ramExpansion.vic20MemorySpec {
+            arguments += [
+                "-memory",
+                memorySpec
             ]
         }
 
@@ -212,7 +221,7 @@ extension EmulatedMachine {
             ),
             startupOptions: [],
             romSlots: [.c64Basic, .c64Kernal, .c64Character],
-            ramExpansions: RAMExpansion.allCases,
+            ramExpansions: RAMExpansion.c64Options,
             capabilities: MachineCapabilities(supportsVideoStandardSelection: true,
                                               supportsSIDModelSelection: true,
                                               supportsCartridges: true,
@@ -246,11 +255,11 @@ extension EmulatedMachine {
             ),
             startupOptions: ["-VICborders", "normal"],
             romSlots: [.vic20Basic, .vic20Kernal, .vic20Character],
-            ramExpansions: [.none],
+            ramExpansions: RAMExpansion.vic20Options,
             capabilities: MachineCapabilities(supportsVideoStandardSelection: true,
                                               supportsSIDModelSelection: false,
                                               supportsCartridges: true,
-                                              supportsRAMExpansion: false,
+                                              supportsRAMExpansion: true,
                                               controlPorts: [.one],
                                               driveUnits: [8, 9, 10, 11]),
             videoStandardResources: [

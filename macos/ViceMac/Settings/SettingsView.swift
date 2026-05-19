@@ -67,7 +67,14 @@ private struct MachineSettingsPane: View {
                 Section("Memory") {
                     Picker("RAM expansion", selection: $emulator.ramExpansion) {
                         ForEach(emulator.machine.ramExpansions) { expansion in
-                            Text(expansion.title).tag(expansion)
+                            Text(expansion.displayTitle(for: emulator.machine.id)).tag(expansion)
+                        }
+                    }
+
+                    if emulator.machine.id == .xvic {
+                        LabeledContent("Blocks") {
+                            Text(emulator.ramExpansion.detailTitle(for: emulator.machine.id))
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }

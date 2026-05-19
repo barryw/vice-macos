@@ -54,6 +54,10 @@ struct ContentView: View {
                     .help("Video standard")
                 }
 
+                if emulator.machine.id == .xvic {
+                    VIC20MemoryToolbarMenu()
+                }
+
                 SoundToolbarControls()
 
                 VideoFilterPresetPicker()
@@ -464,6 +468,42 @@ private struct DisplayToolbarControls: View {
     }
 }
 
+private struct VIC20MemoryToolbarMenu: View {
+    @EnvironmentObject private var emulator: EmulatorSession
+
+    var body: some View {
+        Menu {
+            ForEach(emulator.machine.ramExpansions) { expansion in
+                Button {
+                    emulator.ramExpansion = expansion
+                } label: {
+                    if emulator.ramExpansion == expansion {
+                        Label(expansion.displayTitle(for: emulator.machine.id), systemImage: "checkmark")
+                    } else {
+                        Text(expansion.displayTitle(for: emulator.machine.id))
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "memorychip")
+                    .font(.system(size: 15, weight: .semibold))
+                    .symbolRenderingMode(.hierarchical)
+
+                Text(toolbarTitle)
+                    .font(.callout.weight(.semibold))
+                    .monospacedDigit()
+            }
+            .frame(width: 78)
+        }
+        .help("VIC-20 memory")
+    }
+
+    private var toolbarTitle: String {
+        emulator.ramExpansion == .none ? "5K" : emulator.ramExpansion.chipTitle
+    }
+}
+
 enum WindowActions {
     static func toggleFullScreen() {
         let window = NSApp.keyWindow ?? NSApp.mainWindow
@@ -851,7 +891,7 @@ private struct RAMExpansionStatusChip: View {
     }
 
     private var helpText: String {
-        "\(emulator.ramExpansion.title) configured"
+        "\(emulator.ramExpansion.displayTitle(for: emulator.machine.id)) configured"
     }
 }
 

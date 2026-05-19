@@ -897,6 +897,18 @@ enum MachineResetKind {
 
 enum RAMExpansion: String, CaseIterable, Identifiable {
     case none
+    case vic20_3k
+    case vic20_8kBlock1
+    case vic20_8kBlock2
+    case vic20_8kBlock3
+    case vic20_8kBlock5
+    case vic20_11k
+    case vic20_16k
+    case vic20_19k
+    case vic20_24k
+    case vic20_27k
+    case vic20_32k
+    case vic20_35k
     case reu128
     case reu256
     case reu512
@@ -927,10 +939,81 @@ enum RAMExpansion: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    static let c64Options: [RAMExpansion] = [
+        .none,
+        .reu128,
+        .reu256,
+        .reu512,
+        .reu1024,
+        .reu2048,
+        .reu4096,
+        .reu8192,
+        .reu16384,
+        .georam512,
+        .georam1024,
+        .georam2048,
+        .georam4096,
+        .ramcart64,
+        .ramcart128,
+        .dqbb16,
+        .dqbb32,
+        .dqbb64,
+        .dqbb128,
+        .dqbb256,
+        .isepic,
+        .c64_256kDE00,
+        .c64_256kDE80,
+        .c64_256kDF00,
+        .c64_256kDF80,
+        .plus60kD040,
+        .plus60kD100,
+        .plus256k
+    ]
+
+    static let vic20Options: [RAMExpansion] = [
+        .none,
+        .vic20_3k,
+        .vic20_8kBlock1,
+        .vic20_8kBlock2,
+        .vic20_8kBlock3,
+        .vic20_8kBlock5,
+        .vic20_11k,
+        .vic20_16k,
+        .vic20_19k,
+        .vic20_24k,
+        .vic20_27k,
+        .vic20_32k,
+        .vic20_35k
+    ]
+
     var title: String {
         switch self {
         case .none:
             return "None"
+        case .vic20_3k:
+            return "VIC-20 3K"
+        case .vic20_8kBlock1:
+            return "VIC-20 8K BLK1"
+        case .vic20_8kBlock2:
+            return "VIC-20 8K BLK2"
+        case .vic20_8kBlock3:
+            return "VIC-20 8K BLK3"
+        case .vic20_8kBlock5:
+            return "VIC-20 8K BLK5"
+        case .vic20_11k:
+            return "VIC-20 11K"
+        case .vic20_16k:
+            return "VIC-20 16K"
+        case .vic20_19k:
+            return "VIC-20 19K"
+        case .vic20_24k:
+            return "VIC-20 24K"
+        case .vic20_27k:
+            return "VIC-20 27K"
+        case .vic20_32k:
+            return "VIC-20 32K"
+        case .vic20_35k:
+            return "VIC-20 35K"
         case .reu128, .reu256, .reu512, .reu1024, .reu2048, .reu4096, .reu8192, .reu16384:
             return "REU \(sizeTitle)"
         case .georam512, .georam1024, .georam2048, .georam4096:
@@ -962,10 +1045,71 @@ enum RAMExpansion: String, CaseIterable, Identifiable {
         self == .none ? "disabled" : title
     }
 
+    func displayTitle(for machineID: MachineID) -> String {
+        guard machineID == .xvic else {
+            return title
+        }
+
+        switch self {
+        case .none:
+            return "VIC-20 5K (unexpanded)"
+        case .vic20_3k:
+            return "VIC-20 3K (BLK0)"
+        case .vic20_8kBlock1:
+            return "VIC-20 8K (BLK1)"
+        case .vic20_8kBlock2:
+            return "VIC-20 8K (BLK2)"
+        case .vic20_8kBlock3:
+            return "VIC-20 8K (BLK3)"
+        case .vic20_8kBlock5:
+            return "VIC-20 8K (BLK5)"
+        case .vic20_11k:
+            return "VIC-20 11K (BLK0 + BLK1)"
+        case .vic20_16k:
+            return "VIC-20 16K (BLK1 + BLK2)"
+        case .vic20_19k:
+            return "VIC-20 19K (BLK0 + BLK1 + BLK2)"
+        case .vic20_24k:
+            return "VIC-20 24K (BASIC max)"
+        case .vic20_27k:
+            return "VIC-20 27K (24K BASIC + BLK0)"
+        case .vic20_32k:
+            return "VIC-20 32K (24K BASIC + BLK5)"
+        case .vic20_35k:
+            return "VIC-20 35K (24K BASIC + BLK0 + BLK5)"
+        default:
+            return title
+        }
+    }
+
     var chipTitle: String {
         switch self {
         case .none:
             return ""
+        case .vic20_3k:
+            return "3K"
+        case .vic20_8kBlock1:
+            return "8K B1"
+        case .vic20_8kBlock2:
+            return "8K B2"
+        case .vic20_8kBlock3:
+            return "8K B3"
+        case .vic20_8kBlock5:
+            return "8K B5"
+        case .vic20_11k:
+            return "11K"
+        case .vic20_16k:
+            return "16K"
+        case .vic20_19k:
+            return "19K"
+        case .vic20_24k:
+            return "24K"
+        case .vic20_27k:
+            return "27K"
+        case .vic20_32k:
+            return "32K"
+        case .vic20_35k:
+            return "35K"
         case .c64_256kDE00, .c64_256kDE80, .c64_256kDF00, .c64_256kDF80:
             return "C64 256K"
         case .plus60kD040, .plus60kD100:
@@ -979,6 +1123,10 @@ enum RAMExpansion: String, CaseIterable, Identifiable {
         switch self {
         case .none:
             return .none
+        case .vic20_3k, .vic20_8kBlock1, .vic20_8kBlock2, .vic20_8kBlock3, .vic20_8kBlock5,
+             .vic20_11k, .vic20_16k, .vic20_19k, .vic20_24k, .vic20_27k, .vic20_32k,
+             .vic20_35k:
+            return .vic20Blocks
         case .reu128, .reu256, .reu512, .reu1024, .reu2048, .reu4096, .reu8192, .reu16384:
             return .reu
         case .georam512, .georam1024, .georam2048, .georam4096:
@@ -1020,7 +1168,9 @@ enum RAMExpansion: String, CaseIterable, Identifiable {
         case .dqbb32:
             return 32
         case .none, .isepic, .c64_256kDE00, .c64_256kDE80, .c64_256kDF00, .c64_256kDF80,
-             .plus60kD040, .plus60kD100, .plus256k:
+             .plus60kD040, .plus60kD100, .plus256k, .vic20_3k, .vic20_8kBlock1,
+             .vic20_8kBlock2, .vic20_8kBlock3, .vic20_8kBlock5, .vic20_11k, .vic20_16k,
+             .vic20_19k, .vic20_24k, .vic20_27k, .vic20_32k, .vic20_35k:
             return nil
         }
     }
@@ -1035,7 +1185,10 @@ enum RAMExpansion: String, CaseIterable, Identifiable {
             return 3
         case .none, .reu128, .reu256, .reu512, .reu1024, .reu2048, .reu4096, .reu8192, .reu16384,
              .georam512, .georam1024, .georam2048, .georam4096, .ramcart64, .ramcart128,
-             .dqbb16, .dqbb32, .dqbb64, .dqbb128, .dqbb256, .isepic:
+             .dqbb16, .dqbb32, .dqbb64, .dqbb128, .dqbb256, .isepic, .vic20_3k,
+             .vic20_8kBlock1, .vic20_8kBlock2, .vic20_8kBlock3, .vic20_8kBlock5,
+             .vic20_11k, .vic20_16k, .vic20_19k, .vic20_24k, .vic20_27k, .vic20_32k,
+             .vic20_35k:
             return 0
         }
     }
@@ -1056,8 +1209,103 @@ enum RAMExpansion: String, CaseIterable, Identifiable {
             return 0xd100
         case .none, .reu128, .reu256, .reu512, .reu1024, .reu2048, .reu4096, .reu8192, .reu16384,
              .georam512, .georam1024, .georam2048, .georam4096, .ramcart64, .ramcart128,
-             .dqbb16, .dqbb32, .dqbb64, .dqbb128, .dqbb256, .isepic, .plus256k:
+             .dqbb16, .dqbb32, .dqbb64, .dqbb128, .dqbb256, .isepic, .plus256k, .vic20_3k,
+             .vic20_8kBlock1, .vic20_8kBlock2, .vic20_8kBlock3, .vic20_8kBlock5,
+             .vic20_11k, .vic20_16k, .vic20_19k, .vic20_24k, .vic20_27k, .vic20_32k,
+             .vic20_35k:
             return nil
+        }
+    }
+
+    var detailTitle: String {
+        switch self {
+        case .none:
+            return "Unexpanded"
+        case .vic20_3k, .vic20_8kBlock1, .vic20_8kBlock2, .vic20_8kBlock3, .vic20_8kBlock5,
+             .vic20_11k, .vic20_16k, .vic20_19k, .vic20_24k, .vic20_27k, .vic20_32k,
+             .vic20_35k:
+            return vic20BlockTitle
+        default:
+            return title
+        }
+    }
+
+    func detailTitle(for machineID: MachineID) -> String {
+        guard machineID == .xvic else {
+            return detailTitle
+        }
+
+        switch self {
+        case .vic20_24k:
+            return "\(vic20BlockTitle); BASIC shows 28159 bytes free"
+        case .vic20_27k, .vic20_32k, .vic20_35k:
+            return "\(vic20BlockTitle); BASIC still shows 28159 bytes free"
+        default:
+            return detailTitle
+        }
+    }
+
+    var vic20MemorySpec: String? {
+        switch self {
+        case .none:
+            return "none"
+        case .vic20_3k:
+            return "3k"
+        case .vic20_8kBlock1:
+            return "8k"
+        case .vic20_8kBlock2:
+            return "2"
+        case .vic20_8kBlock3:
+            return "3"
+        case .vic20_8kBlock5:
+            return "5"
+        case .vic20_11k:
+            return "3k,8k"
+        case .vic20_16k:
+            return "16k"
+        case .vic20_19k:
+            return "3k,16k"
+        case .vic20_24k:
+            return "24k"
+        case .vic20_27k:
+            return "3k,24k"
+        case .vic20_32k:
+            return "1,2,3,5"
+        case .vic20_35k:
+            return "all"
+        default:
+            return nil
+        }
+    }
+
+    fileprivate var vic20RAMBlocks: Set<Int> {
+        switch self {
+        case .vic20_3k:
+            return [0]
+        case .vic20_8kBlock1:
+            return [1]
+        case .vic20_8kBlock2:
+            return [2]
+        case .vic20_8kBlock3:
+            return [3]
+        case .vic20_8kBlock5:
+            return [5]
+        case .vic20_11k:
+            return [0, 1]
+        case .vic20_16k:
+            return [1, 2]
+        case .vic20_19k:
+            return [0, 1, 2]
+        case .vic20_24k:
+            return [1, 2, 3]
+        case .vic20_27k:
+            return [0, 1, 2, 3]
+        case .vic20_32k:
+            return [1, 2, 3, 5]
+        case .vic20_35k:
+            return [0, 1, 2, 3, 5]
+        default:
+            return []
         }
     }
 
@@ -1072,10 +1320,24 @@ enum RAMExpansion: String, CaseIterable, Identifiable {
 
         return "\(sizeKiB)K"
     }
+
+    private var vic20BlockTitle: String {
+        let blocks = vic20RAMBlocks.sorted()
+
+        guard !blocks.isEmpty else {
+            return "Unexpanded"
+        }
+
+        let names = blocks.map { block in
+            block == 0 ? "BLK0" : "BLK\(block)"
+        }
+        return names.joined(separator: " + ")
+    }
 }
 
 fileprivate enum RAMExpansionDevice {
     case none
+    case vic20Blocks
     case reu
     case georam
     case ramcart
@@ -1572,7 +1834,8 @@ final class EmulatorSession: ObservableObject {
                                                                soundEnabled: soundEnabled,
                                                                soundVolume: soundVolume,
                                                                emulationSpeed: emulationSpeed,
-                                                               romImages: romImages)
+                                                               romImages: romImages,
+                                                               ramExpansion: ramExpansion)
         let startupArguments = machine.startupArguments(configuration: startupConfiguration)
         let started = machine.id.rawValue.withCString { machineIDPointer in
             dynamicLibraryPath.withCString { dynamicLibraryPathPointer in
@@ -1888,6 +2151,8 @@ final class EmulatorSession: ObservableObject {
         switch ramExpansion.device {
         case .none:
             break
+        case .vic20Blocks:
+            applyVIC20RAMBlocks(ramExpansion.vic20RAMBlocks)
         case .reu:
             if let sizeKiB = ramExpansion.sizeKiB {
                 setVICEIntResource(ViceResource.reuSize, value: sizeKiB)
@@ -1927,11 +2192,19 @@ final class EmulatorSession: ObservableObject {
         }
 
         if updateStatus {
+            if machine.id == .xvic {
+                _ = ViceEngineTriggerMachineReset(true)
+            }
             statusText = "RAM expansion \(ramExpansion.statusTitle)"
         }
     }
 
     private func disableRAMExpansionResources() {
+        if machine.id == .xvic {
+            disableVIC20RAMExpansionResources()
+            return
+        }
+
         setVICEIntResource(ViceResource.reu, value: 0)
         setVICEIntResource(ViceResource.georam, value: 0)
         setVICEIntResource(ViceResource.ramCart, value: 0)
@@ -1939,6 +2212,17 @@ final class EmulatorSession: ObservableObject {
         setVICEIntResource(ViceResource.isepicCartridgeEnabled, value: 0)
         setVICEIntResource(ViceResource.isepicSwitch, value: 0)
         setVICEIntResource(ViceResource.memoryHack, value: 0)
+    }
+
+    private func disableVIC20RAMExpansionResources() {
+        applyVIC20RAMBlocks([])
+    }
+
+    private func applyVIC20RAMBlocks(_ blocks: Set<Int>) {
+        for resource in ViceResource.vic20RAMBlocks {
+            setVICEIntResource(resource.name,
+                               value: blocks.contains(resource.block) ? 1 : 0)
+        }
     }
 
     private func applyControlPorts() {
@@ -2363,6 +2647,13 @@ private enum ViceResource {
     static let memoryHack = "MemoryHack"
     static let c64_256kBase = "C64_256Kbase"
     static let plus60kBase = "PLUS60Kbase"
+    static let vic20RAMBlocks: [(block: Int, name: String)] = [
+        (0, "RAMBlock0"),
+        (1, "RAMBlock1"),
+        (2, "RAMBlock2"),
+        (3, "RAMBlock3"),
+        (5, "RAMBlock5")
+    ]
 }
 
 private enum ViceJoyPortDevice {
@@ -2490,7 +2781,12 @@ private enum EmulatorDefaults {
             return .none
         }
 
-        return RAMExpansion(rawValue: rawValue) ?? .none
+        guard let expansion = RAMExpansion(rawValue: rawValue),
+              machine.ramExpansions.contains(expansion) else {
+            return .none
+        }
+
+        return expansion
     }
 
     static func saveRAMExpansion(_ expansion: RAMExpansion, for machine: EmulatedMachine) {
