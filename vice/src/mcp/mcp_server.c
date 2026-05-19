@@ -42,6 +42,8 @@
 static int mcp_enabled = 0;
 static int mcp_port = MCP_DEFAULT_PORT;
 static char *mcp_host = NULL;
+static char *mcp_auth_token = NULL;
+static char *mcp_cors_origin = NULL;
 static int mcp_running = 0;
 
 static log_t mcp_log = LOG_DEFAULT;
@@ -134,9 +136,76 @@ static int set_mcp_host(const char *val, void *param)
     return 0;
 }
 
+static int set_mcp_auth_token(const char *val, void *param)
+{
+    char *old_token;
+
+    (void)param;
+
+    old_token = mcp_auth_token;
+    mcp_auth_token = (val != NULL && val[0] != '\0') ? lib_strdup(val) : NULL;
+
+    /* Restart server if running so new auth policy is active immediately. */
+    if (mcp_running) {
+        mcp_server_stop();
+        if (mcp_server_start(mcp_host ? mcp_host : MCP_DEFAULT_HOST, mcp_port) < 0) {
+            if (mcp_auth_token) {
+                lib_free(mcp_auth_token);
+            }
+            mcp_auth_token = old_token;
+            mcp_server_start(mcp_host ? mcp_host : MCP_DEFAULT_HOST, mcp_port);
+            return -1;
+        }
+    }
+
+    if (old_token) {
+        lib_free(old_token);
+    }
+
+    return 0;
+}
+
+static int set_mcp_cors_origin(const char *val, void *param)
+{
+    char *old_origin;
+
+    (void)param;
+
+    if (val != NULL && strcmp(val, "*") == 0) {
+        log_error(mcp_log, "MCPServerCORSOrigin does not allow wildcard '*'");
+        return -1;
+    }
+
+    old_origin = mcp_cors_origin;
+    mcp_cors_origin = (val != NULL && val[0] != '\0') ? lib_strdup(val) : NULL;
+
+    /* Restart server if running so new CORS policy is active immediately. */
+    if (mcp_running) {
+        mcp_server_stop();
+        if (mcp_server_start(mcp_host ? mcp_host : MCP_DEFAULT_HOST, mcp_port) < 0) {
+            if (mcp_cors_origin) {
+                lib_free(mcp_cors_origin);
+            }
+            mcp_cors_origin = old_origin;
+            mcp_server_start(mcp_host ? mcp_host : MCP_DEFAULT_HOST, mcp_port);
+            return -1;
+        }
+    }
+
+    if (old_origin) {
+        lib_free(old_origin);
+    }
+
+    return 0;
+}
+
 static const resource_string_t resources_string[] = {
     { "MCPServerHost", MCP_DEFAULT_HOST, RES_EVENT_NO, NULL,
       &mcp_host, set_mcp_host, NULL },
+    { "MCPServerToken", "", RES_EVENT_NO, NULL,
+      &mcp_auth_token, set_mcp_auth_token, NULL },
+    { "MCPServerCORSOrigin", "", RES_EVENT_NO, NULL,
+      &mcp_cors_origin, set_mcp_cors_origin, NULL },
     RESOURCE_STRING_LIST_END
 };
 
@@ -174,6 +243,12 @@ static const cmdline_option_t cmdline_options[] =
     { "-mcpserverhost", SET_RESOURCE, CMDLINE_ATTRIB_NEED_ARGS,
       NULL, NULL, "MCPServerHost", NULL,
       "<host>", "Set MCP server host (default 127.0.0.1)" },
+    { "-mcpservertoken", SET_RESOURCE, CMDLINE_ATTRIB_NEED_ARGS,
+      NULL, NULL, "MCPServerToken", NULL,
+      "<token>", "Require bearer token for MCP HTTP requests" },
+    { "-mcpservercorsorigin", SET_RESOURCE, CMDLINE_ATTRIB_NEED_ARGS,
+      NULL, NULL, "MCPServerCORSOrigin", NULL,
+      "<origin>", "Enable CORS for one exact origin (requires MCPServerToken)" },
     CMDLINE_LIST_END
 };
 
@@ -227,10 +302,18 @@ void mcp_server_shutdown(void)
     mcp_tools_shutdown();
     mcp_transport_shutdown();
 
-    /* Note: mcp_host is owned by the resource system (resource_string_t
-     * stores &mcp_host). The resource system will free it during its own
-     * shutdown. Do NOT free it here to avoid a double-free. */
+    if (mcp_host) {
+        lib_free(mcp_host);
+    }
+    if (mcp_auth_token) {
+        lib_free(mcp_auth_token);
+    }
+    if (mcp_cors_origin) {
+        lib_free(mcp_cors_origin);
+    }
     mcp_host = NULL;
+    mcp_auth_token = NULL;
+    mcp_cors_origin = NULL;
 
     log_message(mcp_log, "MCP server shut down");
 }
@@ -244,7 +327,7 @@ int mcp_server_start(const char *host, int port)
 
     log_message(mcp_log, "Starting MCP server on %s:%d", host, port);
 
-    if (mcp_transport_start(host, port) < 0) {
+    if (mcp_transport_start(host, port, mcp_auth_token, mcp_cors_origin) < 0) {
         log_error(mcp_log, "Failed to start MCP transport");
         return -1;
     }

@@ -60,13 +60,17 @@ The MCP server can be configured via resources or command-line options:
 - `MCPServerEnabled` (0/1) - Enable/disable MCP server
 - `MCPServerPort` (1024-65535) - Port to listen on (default: 6510)
 - `MCPServerHost` (string) - Host to bind to (default: 127.0.0.1)
+- `MCPServerToken` (string) - Optional bearer token. Required for non-loopback binds and CORS.
+- `MCPServerCORSOrigin` (string) - Optional exact CORS origin. Wildcards are rejected.
 
 **Command-line:**
 ```bash
 x64sc -mcpserver                  # Enable MCP server
 x64sc +mcpserver                  # Disable MCP server
 x64sc -mcpserverport 6510         # Set port
-x64sc -mcpserverhost 0.0.0.0      # Allow remote connections
+x64sc -mcpservertoken secret      # Require Authorization: Bearer secret
+x64sc -mcpserverhost 0.0.0.0 -mcpservertoken secret
+x64sc -mcpservercorsorigin http://localhost:3000 -mcpservertoken secret
 ```
 
 ## HTTP Transport Layer
@@ -81,6 +85,7 @@ Accepts JSON-RPC 2.0 requests and returns responses.
 ```bash
 curl -X POST http://127.0.0.1:6510/mcp \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer secret" \
   -d '{
     "jsonrpc": "2.0",
     "method": "vice.ping",
@@ -116,39 +121,22 @@ curl -X POST http://127.0.0.1:6510/mcp \
 
 ### GET /events - Server-Sent Events (SSE)
 
-Streams real-time notifications from VICE (breakpoints, execution state changes).
-
-**Example Usage:**
-```javascript
-const events = new EventSource('http://127.0.0.1:6510/events');
-events.addEventListener('breakpoint', (e) => {
-  console.log('Breakpoint hit:', JSON.parse(e.data));
-});
-events.addEventListener('execution_stopped', (e) => {
-  console.log('Execution stopped:', JSON.parse(e.data));
-});
-```
-
-**Phase 2 Note:** Current implementation establishes SSE connections but cannot push events after initial response due to libmicrohttpd limitations. Full streaming requires upgrade to response callbacks or WebSockets.
+SSE is not implemented in this transport. The endpoint returns `501 Not Implemented`
+until it can stream real events instead of pretending to work.
 
 ### Transport Configuration
 
 - **Maximum request size:** 10MB
 - **Connection limit:** 100 concurrent connections
 - **Connection timeout:** 30 seconds
-- **SSE connection limit:** 10 concurrent event streams
-- **CORS:** Configurable (default: `*` for development)
-
-To change CORS policy, edit `CORS_ALLOW_ORIGIN` in `mcp_transport.c`:
-```c
-#define CORS_ALLOW_ORIGIN "http://localhost:3000"  // Specific origin
-#define CORS_ALLOW_ORIGIN NULL                     // Disable CORS
-```
+- **CORS:** Disabled by default. Enable only with `MCPServerCORSOrigin` and `MCPServerToken`.
 
 ## Security
 
 - **Default binding:** localhost-only (127.0.0.1)
-- **Remote access:** Requires explicit configuration with `-mcpserverhost`
+- **Remote access:** Requires explicit configuration with `-mcpserverhost` and `MCPServerToken`
+- **Authentication:** Optional on loopback, required for non-loopback binds and CORS
+- **CORS:** Disabled by default; only one exact origin can be allowed
 - **Port range:** Restricted to 1024-65535 (no privileged ports)
 - **DoS protection:** Request size limits, connection limits, timeouts
 - **Input validation:** Content-Type validation, JSON parsing errors
@@ -156,9 +144,8 @@ To change CORS policy, edit `CORS_ALLOW_ORIGIN` in `mcp_transport.c`:
 - **Thread safety:** Mutex-protected shared state
 
 **Security Warnings:**
-- No built-in authentication - use reverse proxy (nginx, Apache) for auth
-- No HTTPS support - terminate TLS at reverse proxy level
-- CORS default is permissive (`*`) - restrict for production
+- No HTTPS support - terminate TLS at reverse proxy level for remote access
+- Command-line tokens may be visible to local process-list tools. Prefer resource files or a wrapper when that matters.
 
 **Recommended Production Setup:**
 ```nginx

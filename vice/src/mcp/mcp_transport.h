@@ -49,26 +49,28 @@ extern void mcp_transport_shutdown(void);
 
 /** @brief Start the HTTP server for MCP requests.
  *
- *  Starts libmicrohttpd daemon listening for HTTP POST requests at /mcp
- *  and SSE connections at /sse. Requests are dispatched via VICE's trap
+ *  Starts libmicrohttpd daemon listening for HTTP POST requests at /mcp.
+ *  Requests are dispatched via VICE's trap
  *  mechanism for thread-safe execution on the main emulator thread.
  *
  *  @param host  IP address to bind to
  *  @param port  TCP port number
+ *  @param auth_token  Optional bearer token. Required for non-loopback binds and CORS.
+ *  @param cors_origin Optional exact CORS origin. Wildcards are rejected.
  *  @return 0 on success, -1 on failure
  */
-extern int mcp_transport_start(const char *host, int port);
+extern int mcp_transport_start(const char *host, int port,
+                               const char *auth_token, const char *cors_origin);
 
 /** @brief Stop the HTTP server.
  *
- *  Closes all SSE connections and stops the libmicrohttpd daemon.
+ *  Stops the libmicrohttpd daemon.
  */
 extern void mcp_transport_stop(void);
 
 /** @brief Send an event to all connected SSE clients.
  *
- *  Broadcasts a Server-Sent Event to all active SSE connections.
- *  Used for asynchronous notifications (breakpoints, execution state).
+ *  SSE streaming is not implemented yet; this returns -1.
  *
  *  @param event_type  Event type string (e.g., "breakpoint", "state")
  *  @param data        JSON data payload

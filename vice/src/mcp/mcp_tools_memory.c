@@ -51,13 +51,15 @@
 cJSON* mcp_tool_memory_read(cJSON *params)
 {
     cJSON *response, *data_array;
-    cJSON *addr_item, *size_item, *bank_item;
+    cJSON *addr_item, *size_item, *bank_item, *encoding_item;
     uint16_t address;
     unsigned int i;
     int size;
     int bank = -1;  /* -1 = use default CPU view */
     uint8_t value;
     char hex_str[3];
+    const char hex_digits[] = "0123456789ABCDEF";
+    const char *encoding = "array";
     const char *bank_name = NULL;
     const char *error_msg;
     int resolved;
@@ -72,6 +74,7 @@ cJSON* mcp_tool_memory_read(cJSON *params)
     addr_item = cJSON_GetObjectItem(params, "address");
     size_item = cJSON_GetObjectItem(params, "size");
     bank_item = cJSON_GetObjectItem(params, "bank");
+    encoding_item = cJSON_GetObjectItem(params, "encoding");
 
     /* Resolve address - can be number, hex string, or symbol */
     if (addr_item == NULL) {
@@ -93,6 +96,17 @@ cJSON* mcp_tool_memory_read(cJSON *params)
     /* Validate size early - prevents negative values from integer issues */
     if (size < 1 || size > 65535) {
         return mcp_error(MCP_ERROR_INVALID_PARAMS, "Size out of range (must be 1-65535)");
+    }
+
+    if (encoding_item != NULL) {
+        if (!cJSON_IsString(encoding_item)) {
+            return mcp_error(MCP_ERROR_INVALID_PARAMS, "encoding must be a string: 'array' or 'hex'");
+        }
+        if (strcmp(encoding_item->valuestring, "array") != 0 &&
+            strcmp(encoding_item->valuestring, "hex") != 0) {
+            return mcp_error(MCP_ERROR_INVALID_PARAMS, "encoding must be 'array' or 'hex'");
+        }
+        encoding = encoding_item->valuestring;
     }
 
     /* Handle optional bank parameter */
@@ -132,41 +146,66 @@ cJSON* mcp_tool_memory_read(cJSON *params)
             cJSON_AddStringToObject(response, "bank_name", bank_name);
         }
     }
+    cJSON_AddStringToObject(response, "encoding", encoding);
 
-    data_array = cJSON_CreateArray();
-    if (data_array == NULL) {
-        cJSON_Delete(response);
-        return mcp_error(MCP_ERROR_INTERNAL_ERROR, "Out of memory");
-    }
-
-    /* Read memory with explicit wrapping at 64KB boundary */
-    for (i = 0; i < (unsigned int)size; i++) {
-        cJSON *hex_item;
-        uint16_t addr;
-
-        addr = (uint16_t)(address + i);  /* Wrap at 64KB */
-
-        /* Use bank-specific peek to avoid side effects on HW registers
-         * (e.g. VIC-II collision regs cleared on read, CIA timer latches,
-         * SID write-only regs).  Bank 0 = default CPU-visible mapping. */
-        if (bank >= 0) {
-            value = mem_bank_peek(bank, addr, NULL);
-        } else {
-            value = mem_bank_peek(0, addr, NULL);
-        }
-        snprintf(hex_str, sizeof(hex_str), "%02X", value);
-
-        hex_item = cJSON_CreateString(hex_str);
-        if (hex_item == NULL) {
-            cJSON_Delete(data_array);
+    if (strcmp(encoding, "hex") == 0) {
+        char *hex_data = lib_malloc((size_t)size * 2 + 1);
+        if (hex_data == NULL) {
             cJSON_Delete(response);
             return mcp_error(MCP_ERROR_INTERNAL_ERROR, "Out of memory");
         }
 
-        cJSON_AddItemToArray(data_array, hex_item);
-    }
+        for (i = 0; i < (unsigned int)size; i++) {
+            uint16_t addr = (uint16_t)(address + i);
 
-    cJSON_AddItemToObject(response, "data", data_array);
+            if (bank >= 0) {
+                value = mem_bank_peek(bank, addr, NULL);
+            } else {
+                value = mem_bank_peek(0, addr, NULL);
+            }
+            hex_data[i * 2] = hex_digits[value >> 4];
+            hex_data[i * 2 + 1] = hex_digits[value & 0x0f];
+        }
+        hex_data[(size_t)size * 2] = '\0';
+
+        cJSON_AddStringToObject(response, "data_hex", hex_data);
+        lib_free(hex_data);
+    } else {
+        data_array = cJSON_CreateArray();
+        if (data_array == NULL) {
+            cJSON_Delete(response);
+            return mcp_error(MCP_ERROR_INTERNAL_ERROR, "Out of memory");
+        }
+
+        /* Read memory with explicit wrapping at 64KB boundary */
+        for (i = 0; i < (unsigned int)size; i++) {
+            cJSON *hex_item;
+            uint16_t addr;
+
+            addr = (uint16_t)(address + i);  /* Wrap at 64KB */
+
+            /* Use bank-specific peek to avoid side effects on HW registers
+             * (e.g. VIC-II collision regs cleared on read, CIA timer latches,
+             * SID write-only regs).  Bank 0 = default CPU-visible mapping. */
+            if (bank >= 0) {
+                value = mem_bank_peek(bank, addr, NULL);
+            } else {
+                value = mem_bank_peek(0, addr, NULL);
+            }
+            snprintf(hex_str, sizeof(hex_str), "%02X", value);
+
+            hex_item = cJSON_CreateString(hex_str);
+            if (hex_item == NULL) {
+                cJSON_Delete(data_array);
+                cJSON_Delete(response);
+                return mcp_error(MCP_ERROR_INTERNAL_ERROR, "Out of memory");
+            }
+
+            cJSON_AddItemToArray(data_array, hex_item);
+        }
+
+        cJSON_AddItemToObject(response, "data", data_array);
+    }
 
     return response;
 }
@@ -189,7 +228,7 @@ cJSON* mcp_tool_memory_write(cJSON *params)
     uint16_t address;
     int i;
     int array_size;
-    uint8_t byte_val;
+    uint8_t *bytes;
     const char *error_msg;
     int resolved;
 
@@ -225,22 +264,42 @@ cJSON* mcp_tool_memory_write(cJSON *params)
         return mcp_error(MCP_ERROR_INVALID_PARAMS, "Data array size out of range (must be 1-65535)");
     }
 
-    /* Write to memory with validation */
-    for (i = 0; i < array_size; i++) {
-        value_item = cJSON_GetArrayItem(data_item, i);
+    bytes = lib_malloc((size_t)array_size);
+    if (bytes == NULL) {
+        return mcp_error(MCP_ERROR_INTERNAL_ERROR, "Out of memory");
+    }
+
+    /* Validate the full payload before mutating emulator memory. */
+    i = 0;
+    cJSON_ArrayForEach(value_item, data_item) {
+        if (i >= array_size) {
+            lib_free(bytes);
+            return mcp_error(MCP_ERROR_INVALID_PARAMS, "Data array size mismatch");
+        }
 
         if (!cJSON_IsNumber(value_item)) {
+            lib_free(bytes);
             return mcp_error(MCP_ERROR_INVALID_PARAMS, "Data array must contain only numbers");
         }
 
         /* Validate byte range */
         if (value_item->valueint < 0 || value_item->valueint > 0xFF) {
+            lib_free(bytes);
             return mcp_error(MCP_ERROR_INVALID_PARAMS, "Byte values must be 0-255");
         }
 
-        byte_val = (uint8_t)value_item->valueint;
-        mem_store((uint16_t)(address + i), byte_val);
+        bytes[i++] = (uint8_t)value_item->valueint;
     }
+
+    if (i != array_size) {
+        lib_free(bytes);
+        return mcp_error(MCP_ERROR_INVALID_PARAMS, "Data array size mismatch");
+    }
+
+    for (i = 0; i < array_size; i++) {
+        mem_store((uint16_t)(address + i), bytes[i]);
+    }
+    lib_free(bytes);
 
     /* Build success response */
     response = cJSON_CreateObject();

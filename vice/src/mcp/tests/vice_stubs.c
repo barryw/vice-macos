@@ -12,6 +12,8 @@
 #include <stdarg.h>
 #include <stdint.h>
 #include <string.h>
+#include <strings.h>
+#include <dirent.h>
 
 /* Forward declarations - avoid including VICE headers */
 typedef signed int log_t;
@@ -189,6 +191,12 @@ int kbdbuf_feed_string(const char *s)
 {
     (void)s;
     return 0;  /* Return 0 on success, -1 on failure */
+}
+
+int kbdbuf_feed(const char *s)
+{
+    (void)s;
+    return 0;
 }
 
 void keyboard_key_pressed(signed long key, int mod)
@@ -750,6 +758,40 @@ int archdep_mkdir(const char *pathname, int mode)
     (void)pathname;
     (void)mode;
     return 0;  /* Success */
+}
+
+void *archdep_opendir(const char *path, int mode)
+{
+    (void)mode;
+    return opendir(path);
+}
+
+const char *archdep_readdir(void *dir)
+{
+    struct dirent *entry;
+
+    if (dir == NULL) {
+        return NULL;
+    }
+
+    entry = readdir((DIR *)dir);
+    if (entry == NULL) {
+        return NULL;
+    }
+
+    return entry->d_name;
+}
+
+void archdep_closedir(void *dir)
+{
+    if (dir != NULL) {
+        closedir((DIR *)dir);
+    }
+}
+
+char *archdep_tmpnam(void)
+{
+    return lib_strdup("/tmp/vice-mcp-test-screenshot");
 }
 
 /* util_join_paths stub - simple concatenation for testing */

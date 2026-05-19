@@ -79,10 +79,6 @@
 /* Maximum concurrent connections - prevents DoS via thread exhaustion */
 #define MAX_CONNECTIONS 100
 
-/* CORS policy - change to specific origin (e.g., "http://localhost:3000") or
- * set to NULL to disable CORS headers entirely */
-#define CORS_ALLOW_ORIGIN "*"
-
 /* Initial request body buffer size - most JSON-RPC requests are small */
 #define INITIAL_BODY_CAPACITY 1024
 
@@ -97,30 +93,8 @@ static pthread_mutex_t transport_mutex = PTHREAD_MUTEX_INITIALIZER;
 /* HTTP server state - owned by mcp_transport, cleaned up in shutdown */
 static struct MHD_Daemon *http_daemon = NULL;
 static int server_running = 0;  /* 1 when HTTP server is active */
-
-/* SSE connection tracking (Phase 2 requires manual pause before use)
- * Lifecycle:
- * - Slots set to {NULL, 0} when freed
- * - Must call MHD_Connection cleanup before setting to NULL
- * - All connections must be closed before daemon shutdown
- */
-/* Maximum concurrent SSE connections. Typical usage expects 1-3 clients
- * (Claude, web UI, debug tools). 10 provides headroom without excessive
- * memory overhead (10 * sizeof(struct) = 160 bytes on 64-bit). */
-#define MAX_SSE_CONNECTIONS 10
-
-/* SSE connection tracking */
-typedef struct sse_connection_s {
-    struct MHD_Connection *connection;  /* libmicrohttpd connection handle */
-    int active;                          /* 1 if connection is open, 0 if free slot */
-    time_t registered_time;              /* When connection was registered (for staleness detection) */
-} sse_connection_t;
-
-/* SSE connection staleness timeout in seconds - connections older than this
- * without activity may be considered stale. Used for cleanup on unclean disconnect. */
-#define SSE_STALE_TIMEOUT_SEC 300
-
-static sse_connection_t sse_connections[MAX_SSE_CONNECTIONS] = {{0}};
+static char *transport_auth_token = NULL;       /* Optional bearer token, copied at start */
+static char *transport_cors_origin = NULL;      /* Optional exact CORS origin, copied at start */
 
 /* Request context for POST body accumulation */
 struct request_context_s {
@@ -137,6 +111,172 @@ static void request_context_free(struct request_context_s *ctx)
         }
         lib_free(ctx);
     }
+}
+
+static int mcp_string_is_set(const char *value)
+{
+    return value != NULL && value[0] != '\0';
+}
+
+static int mcp_constant_time_streq(const char *a, const char *b)
+{
+    size_t a_len, b_len, max_len, i;
+    unsigned char diff;
+
+    if (a == NULL || b == NULL) {
+        return 0;
+    }
+
+    a_len = strlen(a);
+    b_len = strlen(b);
+    max_len = (a_len > b_len) ? a_len : b_len;
+    diff = (unsigned char)(a_len ^ b_len);
+
+    for (i = 0; i < max_len; i++) {
+        unsigned char ac = (i < a_len) ? (unsigned char)a[i] : 0;
+        unsigned char bc = (i < b_len) ? (unsigned char)b[i] : 0;
+        diff |= (unsigned char)(ac ^ bc);
+    }
+
+    return diff == 0;
+}
+
+static int mcp_auth_configured(void)
+{
+    return mcp_string_is_set(transport_auth_token);
+}
+
+static void mcp_transport_settings_clear(void)
+{
+    if (transport_auth_token != NULL) {
+        lib_free(transport_auth_token);
+        transport_auth_token = NULL;
+    }
+    if (transport_cors_origin != NULL) {
+        lib_free(transport_cors_origin);
+        transport_cors_origin = NULL;
+    }
+}
+
+static int mcp_is_loopback_address(const struct in_addr *addr)
+{
+    uint32_t host_addr;
+
+    if (addr == NULL) {
+        return 0;
+    }
+
+    host_addr = ntohl(addr->s_addr);
+    return (host_addr & 0xff000000U) == 0x7f000000U;
+}
+
+static int mcp_request_is_authorized(struct MHD_Connection *connection)
+{
+    const char *authorization;
+    const char *prefix = "Bearer ";
+    size_t prefix_len = 7;
+
+    if (!mcp_auth_configured()) {
+        return 1;
+    }
+
+    authorization = MHD_lookup_connection_value(connection, MHD_HEADER_KIND, "Authorization");
+    if (authorization == NULL || strncasecmp(authorization, prefix, prefix_len) != 0) {
+        return 0;
+    }
+
+    return mcp_constant_time_streq(authorization + prefix_len, transport_auth_token);
+}
+
+static int mcp_cors_origin_allowed(struct MHD_Connection *connection)
+{
+    const char *origin;
+
+    if (!mcp_string_is_set(transport_cors_origin)) {
+        return 0;
+    }
+
+    origin = MHD_lookup_connection_value(connection, MHD_HEADER_KIND, "Origin");
+    return origin != NULL && strcmp(origin, transport_cors_origin) == 0;
+}
+
+static void mcp_add_cors_headers(struct MHD_Response *response,
+                                 struct MHD_Connection *connection)
+{
+    if (mcp_cors_origin_allowed(connection)) {
+        MHD_add_response_header(response, "Access-Control-Allow-Origin", transport_cors_origin);
+        MHD_add_response_header(response, "Vary", "Origin");
+    }
+}
+
+static enum MHD_Result mcp_queue_json_response(struct MHD_Connection *connection,
+                                               unsigned int status_code,
+                                               const char *json_body)
+{
+    struct MHD_Response *response;
+    enum MHD_Result ret;
+
+    response = MHD_create_response_from_buffer(
+        strlen(json_body),
+        (void *)json_body,
+        MHD_RESPMEM_PERSISTENT);
+    if (response == NULL) {
+        return MHD_NO;
+    }
+
+    MHD_add_response_header(response, "Content-Type", "application/json");
+    mcp_add_cors_headers(response, connection);
+    ret = MHD_queue_response(connection, status_code, response);
+    MHD_destroy_response(response);
+    return ret;
+}
+
+static enum MHD_Result mcp_queue_auth_required(struct MHD_Connection *connection)
+{
+    const char *error_msg = "{\"error\":\"Unauthorized\",\"message\":\"MCP bearer token required\"}";
+    struct MHD_Response *response;
+    enum MHD_Result ret;
+
+    response = MHD_create_response_from_buffer(
+        strlen(error_msg),
+        (void *)error_msg,
+        MHD_RESPMEM_PERSISTENT);
+    if (response == NULL) {
+        return MHD_NO;
+    }
+
+    MHD_add_response_header(response, "Content-Type", "application/json");
+    MHD_add_response_header(response, "WWW-Authenticate", "Bearer");
+    mcp_add_cors_headers(response, connection);
+    ret = MHD_queue_response(connection, 401, response);
+    MHD_destroy_response(response);
+    return ret;
+}
+
+static enum MHD_Result mcp_handle_options_request(struct MHD_Connection *connection)
+{
+    struct MHD_Response *response;
+    enum MHD_Result ret;
+
+    if (!mcp_cors_origin_allowed(connection)) {
+        return mcp_queue_json_response(connection, 403,
+            "{\"error\":\"Forbidden\",\"message\":\"CORS origin is not allowed\"}");
+    }
+
+    response = MHD_create_response_from_buffer(0, NULL, MHD_RESPMEM_PERSISTENT);
+    if (response == NULL) {
+        return MHD_NO;
+    }
+
+    MHD_add_response_header(response, "Access-Control-Allow-Origin", transport_cors_origin);
+    MHD_add_response_header(response, "Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    MHD_add_response_header(response, "Access-Control-Allow-Headers", "Content-Type, Authorization");
+    MHD_add_response_header(response, "Access-Control-Max-Age", "86400");
+    MHD_add_response_header(response, "Vary", "Origin");
+
+    ret = MHD_queue_response(connection, 204, response);
+    MHD_destroy_response(response);
+    return ret;
 }
 
 /* ============================================================================
@@ -573,92 +713,6 @@ static char* process_jsonrpc_request(const char *request_body, size_t body_size)
     }
 }
 
-/* Register SSE connection in tracking array */
-static int register_sse_connection(struct MHD_Connection *connection)
-{
-    int i;
-    time_t now;
-
-    pthread_mutex_lock(&transport_mutex);
-
-    now = time(NULL);
-
-    /* Find free slot */
-    for (i = 0; i < MAX_SSE_CONNECTIONS; i++) {
-        if (!sse_connections[i].active) {
-            sse_connections[i].connection = connection;
-            sse_connections[i].active = 1;
-            sse_connections[i].registered_time = now;
-            pthread_mutex_unlock(&transport_mutex);
-            log_message(mcp_transport_log, "SSE connection registered in slot %d", i);
-            return i;
-        }
-    }
-
-    pthread_mutex_unlock(&transport_mutex);
-    log_warning(mcp_transport_log, "SSE connection limit reached (%d)", MAX_SSE_CONNECTIONS);
-    return -1;
-}
-
-/* Clean up stale SSE connections that may have disconnected without proper cleanup.
- * This handles the case where a client disconnects uncleanly and request_completed
- * callback doesn't fire. Called periodically or when registering new connections. */
-static void cleanup_stale_sse_connections(void)
-{
-    int i;
-    time_t now;
-    int cleaned = 0;
-
-    pthread_mutex_lock(&transport_mutex);
-
-    now = time(NULL);
-
-    for (i = 0; i < MAX_SSE_CONNECTIONS; i++) {
-        if (sse_connections[i].active) {
-            time_t age = now - sse_connections[i].registered_time;
-            if (age > SSE_STALE_TIMEOUT_SEC) {
-                /* Connection is stale - mark as inactive.
-                 * Note: We can't actually close the MHD connection here as that
-                 * requires MHD_Connection cleanup which happens in request_completed.
-                 * We just mark the slot as free so a new connection can use it. */
-                log_warning(mcp_transport_log, "Cleaning up stale SSE connection in slot %d (age: %ld sec)",
-                           i, (long)age);
-                sse_connections[i].connection = NULL;
-                sse_connections[i].active = 0;
-                sse_connections[i].registered_time = 0;
-                cleaned++;
-            }
-        }
-    }
-
-    pthread_mutex_unlock(&transport_mutex);
-
-    if (cleaned > 0) {
-        log_message(mcp_transport_log, "Cleaned up %d stale SSE connections", cleaned);
-    }
-}
-
-/* Unregister SSE connection from tracking array */
-static void unregister_sse_connection(struct MHD_Connection *connection)
-{
-    int i;
-
-    pthread_mutex_lock(&transport_mutex);
-
-    for (i = 0; i < MAX_SSE_CONNECTIONS; i++) {
-        if (sse_connections[i].active && sse_connections[i].connection == connection) {
-            sse_connections[i].connection = NULL;
-            sse_connections[i].active = 0;
-            sse_connections[i].registered_time = 0;
-            pthread_mutex_unlock(&transport_mutex);
-            log_message(mcp_transport_log, "SSE connection unregistered from slot %d", i);
-            return;
-        }
-    }
-
-    pthread_mutex_unlock(&transport_mutex);
-}
-
 /* Called when request processing is complete */
 static void request_completed(void *cls,
                               struct MHD_Connection *connection,
@@ -668,10 +722,8 @@ static void request_completed(void *cls,
     struct request_context_s *ctx;
 
     (void)cls;
+    (void)connection;
     (void)toe;
-
-    /* Unregister SSE connection if registered */
-    unregister_sse_connection(connection);
 
     ctx = (struct request_context_s *)*con_cls;
     if (ctx != NULL) {
@@ -697,26 +749,7 @@ static enum MHD_Result http_handler(void *cls,
 
     /* Handle CORS preflight for all endpoints */
     if (strcmp(method, "OPTIONS") == 0) {
-        const char *empty_response = "";
-        struct MHD_Response *response;
-        enum MHD_Result ret;
-
-        response = MHD_create_response_from_buffer(
-            0,
-            (void *)empty_response,
-            MHD_RESPMEM_PERSISTENT);
-
-        /* Add CORS headers for preflight */
-#ifdef CORS_ALLOW_ORIGIN
-        MHD_add_response_header(response, "Access-Control-Allow-Origin", CORS_ALLOW_ORIGIN);
-        MHD_add_response_header(response, "Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-        MHD_add_response_header(response, "Access-Control-Allow-Headers", "Content-Type");
-        MHD_add_response_header(response, "Access-Control-Max-Age", "86400");  /* 24 hours */
-#endif
-
-        ret = MHD_queue_response(connection, 204, response);
-        MHD_destroy_response(response);
-        return ret;
+        return mcp_handle_options_request(connection);
     }
 
     /* Route requests */
@@ -728,28 +761,22 @@ static enum MHD_Result http_handler(void *cls,
             const char *content_type;
             const char *accept;
 
+            if (!mcp_request_is_authorized(connection)) {
+                log_warning(mcp_transport_log, "Unauthorized MCP POST request");
+                return mcp_queue_auth_required(connection);
+            }
+
             /* Validate Content-Type header */
             content_type = MHD_lookup_connection_value(
                 connection, MHD_HEADER_KIND, "Content-Type");
 
             if (content_type == NULL ||
                 strncasecmp(content_type, "application/json", 16) != 0) {
-                const char *error_msg = "{\"error\":\"Unsupported Media Type\",\"message\":\"Content-Type must be application/json\"}";
-                struct MHD_Response *response;
-                enum MHD_Result ret;
-
                 log_warning(mcp_transport_log, "Invalid Content-Type for /mcp: %s (expected application/json)",
                            content_type ? content_type : "(none)");
 
-                response = MHD_create_response_from_buffer(
-                    strlen(error_msg),
-                    (void *)error_msg,
-                    MHD_RESPMEM_PERSISTENT);
-
-                MHD_add_response_header(response, "Content-Type", "application/json");
-                ret = MHD_queue_response(connection, 415, response);
-                MHD_destroy_response(response);
-                return ret;
+                return mcp_queue_json_response(connection, 415,
+                    "{\"error\":\"Unsupported Media Type\",\"message\":\"Content-Type must be application/json\"}");
             }
 
             /* Validate Accept header - POST /mcp returns JSON, so only require application/json.
@@ -760,22 +787,11 @@ static enum MHD_Result http_handler(void *cls,
             if (accept != NULL &&
                 strstr(accept, "application/json") == NULL &&
                 strstr(accept, "*/*") == NULL) {
-                const char *error_msg = "{\"jsonrpc\":\"2.0\",\"id\":null,\"error\":{\"code\":-32000,\"message\":\"Not Acceptable: Client must accept application/json\"}}";
-                struct MHD_Response *response;
-                enum MHD_Result ret;
-
                 log_warning(mcp_transport_log, "Invalid Accept header for POST /mcp: %s (must accept application/json)",
                            accept ? accept : "(none)");
 
-                response = MHD_create_response_from_buffer(
-                    strlen(error_msg),
-                    (void *)error_msg,
-                    MHD_RESPMEM_PERSISTENT);
-
-                MHD_add_response_header(response, "Content-Type", "application/json");
-                ret = MHD_queue_response(connection, 406, response);
-                MHD_destroy_response(response);
-                return ret;
+                return mcp_queue_json_response(connection, 406,
+                    "{\"jsonrpc\":\"2.0\",\"id\":null,\"error\":{\"code\":-32000,\"message\":\"Not Acceptable: Client must accept application/json\"}}");
             }
 
             /* lib_calloc/lib_malloc abort on OOM - no NULL check needed */
@@ -857,6 +873,7 @@ static enum MHD_Result http_handler(void *cls,
                 /* Return HTTP 202 Accepted with no body for notifications */
                 response = MHD_create_response_from_buffer(
                     0, NULL, MHD_RESPMEM_PERSISTENT);
+                mcp_add_cors_headers(response, connection);
                 ret = MHD_queue_response(connection, 202, response);
                 MHD_destroy_response(response);
                 return ret;
@@ -885,10 +902,7 @@ static enum MHD_Result http_handler(void *cls,
             }
 
             MHD_add_response_header(response, "Content-Type", "application/json");
-
-#ifdef CORS_ALLOW_ORIGIN
-            MHD_add_response_header(response, "Access-Control-Allow-Origin", CORS_ALLOW_ORIGIN);
-#endif
+            mcp_add_cors_headers(response, connection);
 
             /* Queue response */
             ret = MHD_queue_response(connection, 200, response);
@@ -897,93 +911,16 @@ static enum MHD_Result http_handler(void *cls,
             return ret;
         }
     } else if ((strcmp(url, "/mcp") == 0 || strcmp(url, "/events") == 0) && strcmp(method, "GET") == 0) {
-        /* SSE endpoint for server-sent events - MCP spec requires GET /mcp support */
-        const char *accept;
-        int slot;
-        const char *sse_init;
-        struct MHD_Response *response;
-        enum MHD_Result ret;
-
-        /* Validate Accept header for GET /mcp - must accept text/event-stream */
-        accept = MHD_lookup_connection_value(connection, MHD_HEADER_KIND, "Accept");
-        if (accept == NULL ||
-            (strstr(accept, "text/event-stream") == NULL && strstr(accept, "*/*") == NULL)) {
-            const char *error_msg = "{\"jsonrpc\":\"2.0\",\"id\":\"\",\"error\":{\"code\":-32000,\"message\":\"Not Acceptable: Client must accept text/event-stream\"}}";
-
-            log_warning(mcp_transport_log, "Invalid Accept header for GET /mcp: %s (must accept text/event-stream)",
-                       accept ? accept : "(none)");
-
-            response = MHD_create_response_from_buffer(
-                strlen(error_msg),
-                (void *)error_msg,
-                MHD_RESPMEM_PERSISTENT);
-
-            MHD_add_response_header(response, "Content-Type", "application/json; charset=utf-8");
-            ret = MHD_queue_response(connection, 406, response);
-            MHD_destroy_response(response);
-            return ret;
+        if (!mcp_request_is_authorized(connection)) {
+            log_warning(mcp_transport_log, "Unauthorized MCP GET request");
+            return mcp_queue_auth_required(connection);
         }
 
-        /* Register this connection for SSE streaming */
-        slot = register_sse_connection(connection);
-        if (slot < 0) {
-            /* Connection limit reached */
-            const char *error_msg = "{\"error\":\"SSE connection limit reached\"}";
-
-            response = MHD_create_response_from_buffer(
-                strlen(error_msg),
-                (void *)error_msg,
-                MHD_RESPMEM_PERSISTENT);
-
-            MHD_add_response_header(response, "Content-Type", "application/json");
-            ret = MHD_queue_response(connection, 503, response);
-            MHD_destroy_response(response);
-            return ret;
-        }
-
-        /* Create SSE response with keep-alive message */
-        sse_init = ": SSE connection established\n\n";
-        response = MHD_create_response_from_buffer(
-            strlen(sse_init),
-            (void *)sse_init,
-            MHD_RESPMEM_PERSISTENT);
-
-        /* Add SSE headers */
-        MHD_add_response_header(response, "Content-Type", "text/event-stream");
-        MHD_add_response_header(response, "Cache-Control", "no-cache");
-        MHD_add_response_header(response, "Connection", "keep-alive");
-#ifdef CORS_ALLOW_ORIGIN
-        MHD_add_response_header(response, "Access-Control-Allow-Origin", CORS_ALLOW_ORIGIN);
-#endif
-
-        /* Note: libmicrohttpd limitation - cannot push additional events after
-         * initial response. This implementation:
-         * 1. Registers the connection for tracking
-         * 2. Sends initial SSE headers and comment
-         * 3. Connection is unregistered in request_completed callback
-         *
-         * Phase 2 will upgrade to MHD_create_response_from_callback for true
-         * streaming, or switch to WebSockets for bi-directional communication.
-         */
-
-        ret = MHD_queue_response(connection, 200, response);
-        MHD_destroy_response(response);
-        return ret;
+        return mcp_queue_json_response(connection, 501,
+            "{\"error\":\"Not Implemented\",\"message\":\"SSE streaming is not implemented in this transport\"}");
     } else {
         /* 404 Not Found */
-        const char *not_found = "{\"error\":\"Not Found\"}";
-        struct MHD_Response *response;
-        enum MHD_Result ret;
-
-        response = MHD_create_response_from_buffer(
-            strlen(not_found),
-            (void *)not_found,
-            MHD_RESPMEM_PERSISTENT);
-
-        MHD_add_response_header(response, "Content-Type", "application/json");
-        ret = MHD_queue_response(connection, 404, response);
-        MHD_destroy_response(response);
-        return ret;
+        return mcp_queue_json_response(connection, 404, "{\"error\":\"Not Found\"}");
     }
 }
 
@@ -1007,15 +944,9 @@ int mcp_transport_init(void)
 
 void mcp_transport_shutdown(void)
 {
-    int i;
-
     log_message(mcp_transport_log, "MCP transport shutting down...");
 
-    /* Clear SSE connection tracking to prevent stale pointers on restart */
-    for (i = 0; i < MAX_SSE_CONNECTIONS; i++) {
-        sse_connections[i].connection = NULL;
-        sse_connections[i].active = 0;
-    }
+    mcp_transport_settings_clear();
 
     /* Destroy mutex */
     pthread_mutex_destroy(&transport_mutex);
@@ -1023,7 +954,8 @@ void mcp_transport_shutdown(void)
     log_message(mcp_transport_log, "MCP transport shut down");
 }
 
-int mcp_transport_start(const char *host, int port)
+int mcp_transport_start(const char *host, int port,
+                        const char *auth_token, const char *cors_origin)
 {
     struct sockaddr_in addr;
 
@@ -1059,6 +991,36 @@ int mcp_transport_start(const char *host, int port)
         return -1;
     }
 
+    mcp_transport_settings_clear();
+    if (mcp_string_is_set(auth_token)) {
+        transport_auth_token = lib_strdup(auth_token);
+    }
+    if (mcp_string_is_set(cors_origin)) {
+        if (strcmp(cors_origin, "*") == 0) {
+            mcp_transport_settings_clear();
+            pthread_mutex_unlock(&transport_mutex);
+            log_error(mcp_transport_log, "Wildcard CORS origin is not allowed");
+            return -1;
+        }
+        transport_cors_origin = lib_strdup(cors_origin);
+    }
+
+    if (!mcp_is_loopback_address(&addr.sin_addr) && !mcp_auth_configured()) {
+        mcp_transport_settings_clear();
+        pthread_mutex_unlock(&transport_mutex);
+        log_error(mcp_transport_log,
+                  "Refusing non-loopback MCP bind without MCPServerToken");
+        return -1;
+    }
+
+    if (mcp_string_is_set(transport_cors_origin) && !mcp_auth_configured()) {
+        mcp_transport_settings_clear();
+        pthread_mutex_unlock(&transport_mutex);
+        log_error(mcp_transport_log,
+                  "Refusing CORS-enabled MCP server without MCPServerToken");
+        return -1;
+    }
+
     /* Start HTTP daemon bound to specified host */
     http_daemon = MHD_start_daemon(
         MHD_USE_THREAD_PER_CONNECTION | MHD_USE_INTERNAL_POLLING_THREAD,
@@ -1073,6 +1035,7 @@ int mcp_transport_start(const char *host, int port)
 
     if (http_daemon == NULL) {
         server_running = 0;  /* Reset state on failure */
+        mcp_transport_settings_clear();
         pthread_mutex_unlock(&transport_mutex);
         log_error(mcp_transport_log, "Failed to start HTTP server on port %d", port);
         return -1;
@@ -1101,8 +1064,7 @@ void mcp_transport_stop(void)
 
     /* Capture daemon pointer and clear global state while holding lock.
      * MHD_stop_daemon must be called outside the lock because it waits
-     * for connection handler threads to finish, and those threads may
-     * need transport_mutex (e.g., unregister_sse_connection). */
+     * for connection handler threads to finish. */
     local_daemon = http_daemon;
     http_daemon = NULL;
     server_running = 0;
@@ -1114,70 +1076,19 @@ void mcp_transport_stop(void)
         MHD_stop_daemon(local_daemon);
     }
 
+    pthread_mutex_lock(&transport_mutex);
+    mcp_transport_settings_clear();
+    pthread_mutex_unlock(&transport_mutex);
+
     log_message(mcp_transport_log, "MCP transport stopped");
 }
 
-/* TODO Phase 2: Upgrade SSE implementation to use MHD response callbacks
- * for true streaming. Current implementation tracks connections but cannot
- * push events after initial response. This requires either:
- * 1. Using MHD_create_response_from_callback with chunked encoding
- * 2. Upgrading to newer libmicrohttpd with better streaming support
- * 3. Using a separate WebSocket library instead of SSE
- */
 int mcp_transport_sse_send_event(const char *event_type, const char *data)
 {
-    int i;
-    int active_count = 0;
-    int running;
-    char *event_message;
-    size_t msg_len;
+    (void)data;
 
-    /* Check server_running under lock to avoid racing with start/stop */
-    pthread_mutex_lock(&transport_mutex);
-    running = server_running;
-    pthread_mutex_unlock(&transport_mutex);
-
-    if (!running) {
-        log_warning(mcp_transport_log, "Cannot send SSE event - server not running");
-        return -1;
-    }
-
-    /* Clean up any stale connections before attempting to send */
-    cleanup_stale_sse_connections();
-
-    /* Format SSE message: "event: <type>\ndata: <data>\n\n" */
-    /* Message format overhead: "event: " (7) + "\n" (1) + "data: " (6) + "\n\n" (2) = 16 bytes
-     * Plus null terminator (1) and safety margin (4) = 21 bytes */
-    msg_len = strlen(event_type) + strlen(data) + 21;
-    event_message = (char *)lib_malloc(msg_len);
-
-    snprintf(event_message, msg_len, "event: %s\ndata: %s\n\n", event_type, data);
-
-    log_message(mcp_transport_log, "Broadcasting SSE event: %s", event_type);
-
-    pthread_mutex_lock(&transport_mutex);
-
-    /* Count active connections and log broadcast intent */
-    for (i = 0; i < MAX_SSE_CONNECTIONS; i++) {
-        if (sse_connections[i].active && sse_connections[i].connection != NULL) {
-            /* Note: With current libmicrohttpd version, we can't actually send
-             * data on an existing connection - this would require upgrading
-             * to use response callbacks or a different streaming approach.
-             * For now, log that we would send the event. */
-            log_message(mcp_transport_log, "Would send to SSE slot %d: %s", i, event_type);
-            active_count++;
-        }
-    }
-
-    pthread_mutex_unlock(&transport_mutex);
-
-    lib_free(event_message);
-
-    if (active_count > 0) {
-        log_message(mcp_transport_log, "SSE event broadcast to %d connections (logged only - Phase 2 needed for actual send)", active_count);
-    } else {
-        log_message(mcp_transport_log, "No active SSE connections - event not sent");
-    }
-
-    return active_count;
+    log_warning(mcp_transport_log,
+                "SSE event '%s' not sent: SSE streaming is not implemented",
+                event_type ? event_type : "(null)");
+    return -1;
 }

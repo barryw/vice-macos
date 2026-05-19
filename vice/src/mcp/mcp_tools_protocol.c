@@ -193,17 +193,9 @@ cJSON* mcp_tool_tools_call(cJSON *params)
     cJSON *name_item, *args_item;
     const char *tool_name;
     int i;
-    char *params_str, *args_str;
     int args_created = 0;
 
     log_message(mcp_tools_log, "Handling tools/call");
-
-    /* Debug: dump full params */
-    params_str = cJSON_PrintUnformatted(params);
-    if (params_str != NULL) {
-        log_message(mcp_tools_log, "tools/call params: %s", params_str);
-        free(params_str);
-    }
 
     /* Extract tool name from params */
     name_item = cJSON_GetObjectItem(params, "name");
@@ -219,13 +211,6 @@ cJSON* mcp_tool_tools_call(cJSON *params)
         log_message(mcp_tools_log, "tools/call: no 'arguments' found, creating empty object");
         args_item = cJSON_CreateObject();  /* Empty args */
         args_created = 1;
-    }
-
-    /* Debug: dump arguments being passed */
-    args_str = cJSON_PrintUnformatted(args_item);
-    if (args_str != NULL) {
-        log_message(mcp_tools_log, "tools/call: arguments = %s", args_str);
-        free(args_str);
     }
 
     log_message(mcp_tools_log, "tools/call: invoking tool '%s'", tool_name);
@@ -499,6 +484,7 @@ cJSON* mcp_tool_tools_list(cJSON *params)
             cJSON_AddItemToObject(props, "address", mcp_prop_string("Address: number, hex string ($1000), or symbol name"));
             cJSON_AddItemToObject(props, "size", mcp_prop_number("Bytes to read (1-65535)"));
             cJSON_AddItemToObject(props, "bank", mcp_prop_string("Optional: Memory bank name (e.g., 'ram' to read RAM under ROM). Use vice.memory.banks to list available banks."));
+            cJSON_AddItemToObject(props, "encoding", mcp_prop_string("Optional: 'array' for legacy per-byte hex strings, or 'hex' for one compact hex string."));
             required = cJSON_CreateArray();
             cJSON_AddItemToArray(required, cJSON_CreateString("address"));
             cJSON_AddItemToArray(required, cJSON_CreateString("size"));
@@ -816,80 +802,6 @@ cJSON* mcp_tool_tools_list(cJSON *params)
 
         } else if (strcmp(name, "vice.checkpoint.group.list") == 0) {
             schema = mcp_schema_empty();
-
-        } else if (strcmp(name, "vice.checkpoint.set_auto_snapshot") == 0) {
-            props = cJSON_CreateObject();
-            cJSON_AddItemToObject(props, "checkpoint_id", mcp_prop_number(
-                "Checkpoint ID to configure auto-snapshot for"));
-            cJSON_AddItemToObject(props, "snapshot_prefix", mcp_prop_string(
-                "Filename prefix for snapshots (e.g., 'ai_move' -> ai_move_001.vsf)"));
-            cJSON_AddItemToObject(props, "max_snapshots", mcp_prop_number(
-                "Ring buffer size - oldest deleted when exceeded (default: 10)"));
-            cJSON_AddItemToObject(props, "include_disks", mcp_prop_boolean(
-                "Include disk state in snapshots (default: false)"));
-            required = cJSON_CreateArray();
-            cJSON_AddItemToArray(required, cJSON_CreateString("checkpoint_id"));
-            cJSON_AddItemToArray(required, cJSON_CreateString("snapshot_prefix"));
-            schema = mcp_schema_object(props, required);
-
-        } else if (strcmp(name, "vice.checkpoint.clear_auto_snapshot") == 0) {
-            props = cJSON_CreateObject();
-            cJSON_AddItemToObject(props, "checkpoint_id", mcp_prop_number(
-                "Checkpoint ID to clear auto-snapshot configuration from"));
-            required = cJSON_CreateArray();
-            cJSON_AddItemToArray(required, cJSON_CreateString("checkpoint_id"));
-            schema = mcp_schema_object(props, required);
-
-        } else if (strcmp(name, "vice.trace.start") == 0) {
-            props = cJSON_CreateObject();
-            cJSON_AddItemToObject(props, "output_file", mcp_prop_string(
-                "Path to output file for trace data"));
-            cJSON_AddItemToObject(props, "pc_filter_start", mcp_prop_number(
-                "Start address for PC filter (default: 0)"));
-            cJSON_AddItemToObject(props, "pc_filter_end", mcp_prop_number(
-                "End address for PC filter (default: 65535)"));
-            cJSON_AddItemToObject(props, "max_instructions", mcp_prop_number(
-                "Maximum instructions to record (default: 10000)"));
-            cJSON_AddItemToObject(props, "include_registers", mcp_prop_boolean(
-                "Include register state in output (default: false)"));
-            required = cJSON_CreateArray();
-            cJSON_AddItemToArray(required, cJSON_CreateString("output_file"));
-            schema = mcp_schema_object(props, required);
-
-        } else if (strcmp(name, "vice.trace.stop") == 0) {
-            props = cJSON_CreateObject();
-            cJSON_AddItemToObject(props, "trace_id", mcp_prop_string(
-                "The trace ID returned from trace.start"));
-            required = cJSON_CreateArray();
-            cJSON_AddItemToArray(required, cJSON_CreateString("trace_id"));
-            schema = mcp_schema_object(props, required);
-
-        } else if (strcmp(name, "vice.interrupt.log.start") == 0) {
-            props = cJSON_CreateObject();
-            cJSON_AddItemToObject(props, "types", mcp_prop_array("string",
-                "Interrupt types to log ('irq', 'nmi', 'brk'). Default: all types"));
-            cJSON_AddItemToObject(props, "max_entries", mcp_prop_number(
-                "Maximum entries to store (default: 1000, max: 10000)"));
-            /* No required params - all optional */
-            schema = mcp_schema_object(props, NULL);
-
-        } else if (strcmp(name, "vice.interrupt.log.stop") == 0) {
-            props = cJSON_CreateObject();
-            cJSON_AddItemToObject(props, "log_id", mcp_prop_string(
-                "The log ID returned from interrupt.log.start"));
-            required = cJSON_CreateArray();
-            cJSON_AddItemToArray(required, cJSON_CreateString("log_id"));
-            schema = mcp_schema_object(props, required);
-
-        } else if (strcmp(name, "vice.interrupt.log.read") == 0) {
-            props = cJSON_CreateObject();
-            cJSON_AddItemToObject(props, "log_id", mcp_prop_string(
-                "The log ID returned from interrupt.log.start"));
-            cJSON_AddItemToObject(props, "since_index", mcp_prop_number(
-                "Return only entries from this index onwards (for incremental reads)"));
-            required = cJSON_CreateArray();
-            cJSON_AddItemToArray(required, cJSON_CreateString("log_id"));
-            schema = mcp_schema_object(props, required);
 
         } else if (strcmp(name, "vice.keyboard.restore") == 0) {
             props = cJSON_CreateObject();
