@@ -147,6 +147,13 @@ private struct EmulatorDisplaySurface: View {
                                   onFocusLost: emulator.releaseAllKeys)
                     .frame(width: displaySize.width,
                            height: displaySize.height)
+                    .overlay {
+                        if emulator.isPaused {
+                            PausedDisplayOverlay()
+                                .transition(.opacity)
+                        }
+                    }
+                    .animation(.easeOut(duration: 0.14), value: emulator.isPaused)
             }
         }
         .frame(minWidth: nativeSize.width, minHeight: nativeSize.height)
@@ -168,6 +175,29 @@ private struct EmulatorDisplaySurface: View {
             return CGSize(width: max(containerSize.width, 1),
                           height: max(containerSize.height, 1))
         }
+    }
+}
+
+private struct PausedDisplayOverlay: View {
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(Color.black.opacity(0.24))
+
+            Image(systemName: "pause.fill")
+                .font(.system(size: 54, weight: .semibold))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(.white.opacity(0.94))
+                .frame(width: 112, height: 112)
+                .background(.ultraThinMaterial, in: Circle())
+                .overlay {
+                    Circle()
+                        .stroke(.white.opacity(0.18), lineWidth: 1)
+                }
+                .shadow(color: .black.opacity(0.36), radius: 24, y: 12)
+        }
+        .allowsHitTesting(false)
+        .accessibilityLabel("Paused")
     }
 }
 
