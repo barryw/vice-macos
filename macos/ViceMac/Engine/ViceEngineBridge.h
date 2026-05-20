@@ -21,9 +21,12 @@ typedef struct ViceEngineDriveStatus {
     uint32_t unit;
     bool enabled;
     int32_t driveType;
+    uint32_t activeDriveNumber;
     uint32_t ledColor;
     uint32_t ledIntensity;
     uint32_t errorIntensity;
+    uint32_t drive0LEDIntensity;
+    uint32_t drive1LEDIntensity;
     bool trackValid;
     uint32_t track;
     uint32_t halfTrack;
@@ -31,6 +34,8 @@ typedef struct ViceEngineDriveStatus {
     int32_t driveStatusCode;
     const char *driveStatusText;
     const char *imagePath;
+    const char *drive0ImagePath;
+    const char *drive1ImagePath;
 } ViceEngineDriveStatus;
 
 typedef struct ViceEngineCartridgeStatus {
@@ -71,7 +76,7 @@ bool ViceEngineSetPauseEnabled(bool paused);
 bool ViceEngineTriggerMachineReset(bool hardReset);
 bool ViceEngineSetWarpMode(bool enabled);
 bool ViceEngineResetDrive(uint32_t unit);
-bool ViceEngineAttachDisk(uint32_t unit, const char *path, bool autorun);
+bool ViceEngineAttachDisk(uint32_t unit, uint32_t drive, const char *path, bool autorun);
 bool ViceEngineAttachCartridge(const char *path);
 bool ViceEngineDetachCartridge(void);
 

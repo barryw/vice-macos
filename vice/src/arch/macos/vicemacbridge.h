@@ -27,9 +27,12 @@ typedef struct vicemac_drive_status_s {
     uint32_t unit;
     uint32_t enabled;
     int32_t drive_type;
+    uint32_t active_drive_number;
     uint32_t led_color;
     uint32_t led_pwm1;
     uint32_t led_pwm2;
+    uint32_t drive0_led_intensity;
+    uint32_t drive1_led_intensity;
     uint32_t track_valid;
     uint32_t track;
     uint32_t half_track;
@@ -37,6 +40,8 @@ typedef struct vicemac_drive_status_s {
     int32_t drive_status_code;
     const char *drive_status_text;
     const char *image_path;
+    const char *drive0_image_path;
+    const char *drive1_image_path;
 } vicemac_drive_status_t;
 
 typedef struct vicemac_cartridge_status_s {
@@ -73,16 +78,21 @@ void vicemac_publish_video_frame(uint32_t width,
 void vicemac_publish_drive_status(uint32_t unit,
                                   uint32_t enabled,
                                   int32_t drive_type,
+                                  uint32_t active_drive_number,
                                   uint32_t led_color,
                                   uint32_t led_pwm1,
                                   uint32_t led_pwm2,
+                                  uint32_t drive0_led_intensity,
+                                  uint32_t drive1_led_intensity,
                                   uint32_t track_valid,
                                   uint32_t track,
                                   uint32_t half_track,
                                   uint32_t disk_side,
                                   int32_t drive_status_code,
                                   const char *drive_status_text,
-                                  const char *image_path);
+                                  const char *image_path,
+                                  const char *drive0_image_path,
+                                  const char *drive1_image_path);
 int vicemac_queue_key_event(signed long key, int mod, int pressed);
 int vicemac_queue_keyboard_clear(void);
 int vicemac_queue_resource_int(const char *name, int value);

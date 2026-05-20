@@ -210,16 +210,21 @@ void vicemac_publish_video_frame(uint32_t width,
 void vicemac_publish_drive_status(uint32_t unit,
                                   uint32_t enabled,
                                   int32_t drive_type,
+                                  uint32_t active_drive_number,
                                   uint32_t led_color,
                                   uint32_t led_pwm1,
                                   uint32_t led_pwm2,
+                                  uint32_t drive0_led_intensity,
+                                  uint32_t drive1_led_intensity,
                                   uint32_t track_valid,
                                   uint32_t track,
                                   uint32_t half_track,
                                   uint32_t disk_side,
                                   int32_t drive_status_code,
                                   const char *drive_status_text,
-                                  const char *image_path)
+                                  const char *image_path,
+                                  const char *drive0_image_path,
+                                  const char *drive1_image_path)
 {
     vicemac_drive_status_t status;
 
@@ -230,9 +235,12 @@ void vicemac_publish_drive_status(uint32_t unit,
     status.unit = unit;
     status.enabled = enabled ? 1U : 0U;
     status.drive_type = drive_type;
+    status.active_drive_number = active_drive_number;
     status.led_color = led_color;
     status.led_pwm1 = led_pwm1;
     status.led_pwm2 = led_pwm2;
+    status.drive0_led_intensity = drive0_led_intensity;
+    status.drive1_led_intensity = drive1_led_intensity;
     status.track_valid = track_valid ? 1U : 0U;
     status.track = track;
     status.half_track = half_track;
@@ -240,6 +248,8 @@ void vicemac_publish_drive_status(uint32_t unit,
     status.drive_status_code = drive_status_code;
     status.drive_status_text = drive_status_text;
     status.image_path = image_path;
+    status.drive0_image_path = drive0_image_path;
+    status.drive1_image_path = drive1_image_path;
 
     drive_status_callback(&status, drive_status_context);
 }

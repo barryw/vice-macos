@@ -716,9 +716,40 @@ enum DriveType: Int32, CaseIterable, Codable, Identifiable {
     case c1581 = 1581
     case fd2000 = 2000
     case fd4000 = 4000
+    case c2031 = 2031
+    case c2040 = 2040
+    case c3040 = 3040
+    case c4040 = 4040
+    case sfd1001 = 1001
+    case c8050 = 8050
+    case c8250 = 8250
+    case d9090d9060 = 9000
     case cmdHD = 4844
 
     var id: Int32 { rawValue }
+
+    static let iecOptions: [DriveType] = [
+        .c1540,
+        .c1541,
+        .c1541II,
+        .c1570,
+        .c1571,
+        .c1581,
+        .fd2000,
+        .fd4000,
+        .cmdHD
+    ]
+
+    static let petOptions: [DriveType] = [
+        .c2031,
+        .c2040,
+        .c3040,
+        .c4040,
+        .sfd1001,
+        .c8050,
+        .c8250,
+        .d9090d9060
+    ]
 
     var title: String {
         switch self {
@@ -738,15 +769,61 @@ enum DriveType: Int32, CaseIterable, Codable, Identifiable {
             return "FD-2000"
         case .fd4000:
             return "FD-4000"
+        case .c2031:
+            return "2031"
+        case .c2040:
+            return "2040"
+        case .c3040:
+            return "3040"
+        case .c4040:
+            return "4040"
+        case .sfd1001:
+            return "SFD-1001"
+        case .c8050:
+            return "8050"
+        case .c8250:
+            return "8250"
+        case .d9090d9060:
+            return "D9090/D9060"
         case .cmdHD:
             return "CMD HD"
         }
     }
 
-    var defaultLEDColor: DriveLEDColor {
+    var busTitle: String {
         switch self {
-        case .c1540, .c1541, .c1570:
+        case .c2031, .c2040, .c3040, .c4040, .sfd1001, .c8050, .c8250, .d9090d9060:
+            return "IEEE-488"
+        default:
+            return "IEC serial"
+        }
+    }
+
+    var slotCount: Int {
+        switch self {
+        case .c2040, .c3040, .c4040, .c8050, .c8250:
+            return 2
+        default:
+            return 1
+        }
+    }
+
+    var driveNumbers: [Int] {
+        Array(0..<slotCount)
+    }
+
+    var defaultLEDColor: DriveLEDColor {
+        ledColor(forDriveNumber: 0)
+    }
+
+    func ledColor(forDriveNumber driveNumber: Int) -> DriveLEDColor {
+        switch self {
+        case .c1540, .c1541, .c1570, .c2031, .c2040, .c3040, .c4040, .sfd1001, .d9090d9060:
             return .red
+        case .c8050:
+            return .green
+        case .c8250:
+            return driveNumber == 0 ? .red : .green
         case .c1541II, .c1571, .c1581, .fd2000, .fd4000, .cmdHD:
             return .green
         }
@@ -762,6 +839,12 @@ enum DriveType: Int32, CaseIterable, Codable, Identifiable {
             return [.d81]
         case .fd2000, .fd4000:
             return [.d81, .d1m, .d2m, .d4m]
+        case .c2031, .c2040, .c3040, .c4040:
+            return [.d64, .d67]
+        case .sfd1001, .c8050, .c8250:
+            return [.d80, .d82]
+        case .d9090d9060:
+            return [.d90]
         case .cmdHD:
             return [.dhd]
         }
@@ -784,7 +867,10 @@ enum DiskImageFileType: String, CaseIterable, Identifiable {
     case d64
     case d67
     case d71
+    case d80
     case d81
+    case d82
+    case d90
     case d1m
     case d2m
     case d4m
@@ -816,6 +902,8 @@ struct DriveActivity: Identifiable, Equatable {
     var isConfigured: Bool
     var driveType: DriveType
     var accessMode: DriveAccessMode
+    var activeDriveNumber: Int
+    var slots: [DriveSlotActivity]
     var ledColor: DriveLEDColor
     var ledIntensity: UInt32
     var errorIntensity: UInt32
@@ -830,9 +918,10 @@ struct DriveActivity: Identifiable, Equatable {
     var isActive: Bool { ledIntensity > 0 }
     var isFastAccessEnabled: Bool { accessMode == .fast }
     var hasErrorStatus: Bool {
-        errorIntensity > 0 || (driveStatusCode != DriveStatusCode.ok
-            && driveStatusCode != DriveStatusCode.dosVersion)
+        driveStatusCode != DriveStatusCode.ok
+            && driveStatusCode != DriveStatusCode.dosVersion
     }
+    var hasMultipleSlots: Bool { driveType.slotCount > 1 }
 
     var headPositionText: String? {
         guard let track else {
@@ -845,6 +934,17 @@ struct DriveActivity: Identifiable, Equatable {
     private static func paddedHeadValue(_ value: UInt32) -> String {
         String(format: "%02u", value)
     }
+}
+
+struct DriveSlotActivity: Identifiable, Equatable {
+    let driveNumber: Int
+    var ledColor: DriveLEDColor
+    var ledIntensity: UInt32
+    var imagePath: String?
+
+    var id: Int { driveNumber }
+    var isActive: Bool { ledIntensity > 0 }
+    var hasDiskImage: Bool { imagePath?.isEmpty == false }
 }
 
 struct CartridgeStatus: Equatable {
@@ -1465,6 +1565,12 @@ final class EmulatorSession: ObservableObject {
     }
     @Published var driveConfigurations: [DriveConfiguration] {
         didSet {
+            let normalizedConfigurations = Self.normalizedDriveConfigurations(driveConfigurations, for: machine)
+            guard driveConfigurations == normalizedConfigurations else {
+                driveConfigurations = normalizedConfigurations
+                return
+            }
+
             EmulatorDefaults.saveDriveConfigurations(driveConfigurations, for: machine)
             applyDriveConfigurationChanges(from: oldValue)
         }
@@ -1482,6 +1588,23 @@ final class EmulatorSession: ObservableObject {
     private var keyboardJoystickPressedKeys: [UUID: Set<UInt16>] = [:]
     private var lastJoystickValues: [UUID: UInt16] = [:]
     private var gameControllerObservers: [NSObjectProtocol] = []
+
+    nonisolated static func normalizedDriveConfigurations(_ configurations: [DriveConfiguration],
+                                                          for machine: EmulatedMachine) -> [DriveConfiguration] {
+        let defaults = machine.defaultDriveConfigurations()
+
+        return machine.capabilities.driveUnits.enumerated().map { index, unit in
+            guard var configuration = configurations.first(where: { $0.unit == unit }) else {
+                return defaults[index]
+            }
+
+            if !machine.capabilities.driveTypes.contains(configuration.driveType) {
+                configuration.driveType = defaults[index].driveType
+            }
+
+            return configuration
+        }
+    }
 
     enum DisplayMode: String, CaseIterable, Identifiable {
         case native
@@ -1649,6 +1772,7 @@ final class EmulatorSession: ObservableObject {
                 activity.isConfigured = true
                 activity.driveType = configuration.driveType
                 activity.accessMode = configuration.accessMode
+                activity.slots = normalizedDriveSlots(activity.slots, for: configuration.driveType)
                 return activity
             }
 
@@ -1656,6 +1780,8 @@ final class EmulatorSession: ObservableObject {
                                  isConfigured: true,
                                  driveType: configuration.driveType,
                                  accessMode: configuration.accessMode,
+                                 activeDriveNumber: 0,
+                                 slots: defaultDriveSlots(for: configuration.driveType),
                                  ledColor: configuration.driveType.defaultLEDColor,
                                  ledIntensity: 0,
                                  errorIntensity: 0,
@@ -1665,6 +1791,29 @@ final class EmulatorSession: ObservableObject {
                                  driveStatusCode: 0,
                                  driveStatusText: nil,
                                  imagePath: nil)
+        }
+    }
+
+    private func defaultDriveSlots(for driveType: DriveType) -> [DriveSlotActivity] {
+        driveType.driveNumbers.map { driveNumber in
+            DriveSlotActivity(driveNumber: driveNumber,
+                              ledColor: driveType.ledColor(forDriveNumber: driveNumber),
+                              ledIntensity: 0,
+                              imagePath: nil)
+        }
+    }
+
+    private func normalizedDriveSlots(_ slots: [DriveSlotActivity], for driveType: DriveType) -> [DriveSlotActivity] {
+        driveType.driveNumbers.map { driveNumber in
+            if var slot = slots.first(where: { $0.driveNumber == driveNumber }) {
+                slot.ledColor = driveType.ledColor(forDriveNumber: driveNumber)
+                return slot
+            }
+
+            return DriveSlotActivity(driveNumber: driveNumber,
+                                     ledColor: driveType.ledColor(forDriveNumber: driveNumber),
+                                     ledIntensity: 0,
+                                     imagePath: nil)
         }
     }
 
@@ -1959,10 +2108,19 @@ final class EmulatorSession: ObservableObject {
             return
         }
 
+        let slots = driveType.driveNumbers.map { driveNumber in
+            DriveSlotActivity(driveNumber: driveNumber,
+                              ledColor: driveType.ledColor(forDriveNumber: driveNumber),
+                              ledIntensity: driveNumber == 0 ? status.drive0LEDIntensity : status.drive1LEDIntensity,
+                              imagePath: driveNumber == 0 ? status.drive0ImagePath : status.drive1ImagePath)
+        }
+
         let activity = DriveActivity(unit: status.unit,
                                      isConfigured: status.enabled,
                                      driveType: driveType,
                                      accessMode: driveAccessMode(for: Int(status.unit)),
+                                     activeDriveNumber: Int(status.activeDriveNumber),
+                                     slots: slots,
                                      ledColor: DriveLEDColor(viceColor: status.ledColor),
                                      ledIntensity: status.ledIntensity,
                                      errorIntensity: status.errorIntensity,
@@ -1998,6 +2156,10 @@ final class EmulatorSession: ObservableObject {
     }
 
     func attachDisk(to unit: Int, url: URL, autorun: Bool) {
+        attachDisk(to: unit, driveNumber: 0, url: url, autorun: autorun)
+    }
+
+    func attachDisk(to unit: Int, driveNumber: Int, url: URL, autorun: Bool) {
         guard unit >= 8 && unit <= 11 else {
             return
         }
@@ -2005,6 +2167,11 @@ final class EmulatorSession: ObservableObject {
         guard let configuration = driveConfigurations.first(where: { $0.unit == unit }),
               configuration.isAttached else {
             statusText = "Drive \(unit) is disabled"
+            return
+        }
+
+        guard configuration.driveType.driveNumbers.contains(driveNumber) else {
+            statusText = "Drive \(unit):\(driveNumber) is not available on \(configuration.driveType.title)"
             return
         }
 
@@ -2016,7 +2183,7 @@ final class EmulatorSession: ObservableObject {
         }
 
         url.path.withCString { path in
-            _ = ViceEngineAttachDisk(UInt32(unit), path, autorun)
+            _ = ViceEngineAttachDisk(UInt32(unit), UInt32(driveNumber), path, autorun)
         }
     }
 
@@ -2606,15 +2773,20 @@ struct DriveStatusSnapshot {
     let unit: Int
     let enabled: Bool
     let driveType: Int32
+    let activeDriveNumber: UInt32
     let ledColor: UInt32
     let ledIntensity: UInt32
     let errorIntensity: UInt32
+    let drive0LEDIntensity: UInt32
+    let drive1LEDIntensity: UInt32
     let track: UInt32?
     let halfTrack: UInt32?
     let diskSide: UInt32
     let driveStatusCode: Int32
     let driveStatusText: String?
     let imagePath: String?
+    let drive0ImagePath: String?
+    let drive1ImagePath: String?
 }
 
 struct CartridgeStatusSnapshot {
@@ -2819,7 +2991,7 @@ private enum EmulatorDefaults {
             return machine.defaultDriveConfigurations()
         }
 
-        return configurations
+        return EmulatorSession.normalizedDriveConfigurations(configurations, for: machine)
     }
 
     static func saveDriveConfigurations(_ configurations: [DriveConfiguration], for machine: EmulatedMachine) {
@@ -3100,12 +3272,26 @@ private let viceDriveStatusCallback: @convention(c) (
     let status = statusPointer.pointee
     let session = Unmanaged<EmulatorSession>.fromOpaque(context).takeUnretainedValue()
     let imagePath: String?
+    let drive0ImagePath: String?
+    let drive1ImagePath: String?
     let driveStatusText: String?
 
     if let imagePathPointer = status.imagePath, imagePathPointer.pointee != 0 {
         imagePath = String(cString: imagePathPointer)
     } else {
         imagePath = nil
+    }
+
+    if let drive0ImagePathPointer = status.drive0ImagePath, drive0ImagePathPointer.pointee != 0 {
+        drive0ImagePath = String(cString: drive0ImagePathPointer)
+    } else {
+        drive0ImagePath = nil
+    }
+
+    if let drive1ImagePathPointer = status.drive1ImagePath, drive1ImagePathPointer.pointee != 0 {
+        drive1ImagePath = String(cString: drive1ImagePathPointer)
+    } else {
+        drive1ImagePath = nil
     }
 
     if let driveStatusTextPointer = status.driveStatusText, driveStatusTextPointer.pointee != 0 {
@@ -3117,15 +3303,20 @@ private let viceDriveStatusCallback: @convention(c) (
     let snapshot = DriveStatusSnapshot(unit: Int(status.unit),
                                        enabled: status.enabled,
                                        driveType: status.driveType,
+                                       activeDriveNumber: status.activeDriveNumber,
                                        ledColor: status.ledColor,
                                        ledIntensity: status.ledIntensity,
                                        errorIntensity: status.errorIntensity,
+                                       drive0LEDIntensity: status.drive0LEDIntensity,
+                                       drive1LEDIntensity: status.drive1LEDIntensity,
                                        track: status.trackValid ? status.track : nil,
                                        halfTrack: status.trackValid ? status.halfTrack : nil,
                                        diskSide: status.diskSide,
                                        driveStatusCode: status.driveStatusCode,
                                        driveStatusText: driveStatusText,
-                                       imagePath: imagePath)
+                                       imagePath: imagePath,
+                                       drive0ImagePath: drive0ImagePath,
+                                       drive1ImagePath: drive1ImagePath)
 
     Task { @MainActor in
         session.handleDriveStatus(snapshot)

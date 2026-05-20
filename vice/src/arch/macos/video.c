@@ -66,6 +66,56 @@ static int ensure_frame_buffer(size_t size)
     return 0;
 }
 
+static unsigned int render_scale_for_axis(unsigned int scale,
+                                          unsigned int canvas_size,
+                                          unsigned int limit)
+{
+    if (scale > 1 && (limit == 0 || canvas_size <= limit)) {
+        return scale;
+    }
+
+    return 1;
+}
+
+static void sync_render_config_from_cap(video_canvas_t *canvas)
+{
+    video_render_config_t *config;
+    video_chip_cap_t *cap;
+    cap_render_t *cap_render;
+
+    if (canvas == NULL || canvas->draw_buffer == NULL || canvas->videoconfig == NULL) {
+        return;
+    }
+
+    config = canvas->videoconfig;
+    cap = config->cap;
+    if (cap == NULL) {
+        return;
+    }
+
+    cap_render = config->double_size_enabled ? &cap->double_mode : &cap->single_mode;
+    if (cap_render->rmode == VIDEO_RENDER_NULL) {
+        return;
+    }
+
+    config->rendermode = cap_render->rmode;
+    config->scalex = render_scale_for_axis(cap_render->sizex,
+                                           canvas->draw_buffer->canvas_width,
+                                           cap->dsize_limit_width);
+    config->scaley = render_scale_for_axis(cap_render->sizey,
+                                           canvas->draw_buffer->canvas_height,
+                                           cap->dsize_limit_height);
+
+    if (canvas->draw_buffer->canvas_width > 0) {
+        canvas->draw_buffer->canvas_physical_width =
+            canvas->draw_buffer->canvas_width * config->scalex;
+    }
+    if (canvas->draw_buffer->canvas_height > 0) {
+        canvas->draw_buffer->canvas_physical_height =
+            canvas->draw_buffer->canvas_height * config->scaley;
+    }
+}
+
 static void calculate_visible_area(video_canvas_t *canvas,
                                    unsigned int *first_x_out,
                                    unsigned int *first_line_out,
@@ -226,10 +276,13 @@ video_canvas_t *video_canvas_create(video_canvas_t *canvas,
     if (width != NULL && height != NULL && *width > 0 && *height > 0) {
         canvas->draw_buffer->canvas_width = *width;
         canvas->draw_buffer->canvas_height = *height;
+        sync_render_config_from_cap(canvas);
         canvas->draw_buffer->canvas_physical_width =
             *width * canvas->videoconfig->scalex;
         canvas->draw_buffer->canvas_physical_height =
             *height * canvas->videoconfig->scaley;
+    } else {
+        sync_render_config_from_cap(canvas);
     }
 
     canvas->created = 1;
@@ -277,6 +330,8 @@ void video_canvas_refresh(struct video_canvas_s *canvas,
         canvas->geometry == NULL) {
         return;
     }
+
+    sync_render_config_from_cap(canvas);
 
     width = canvas->draw_buffer->canvas_physical_width;
     height = canvas->draw_buffer->canvas_physical_height;
@@ -345,6 +400,8 @@ void video_canvas_resize(struct video_canvas_s *canvas, char resize_canvas)
     if (canvas == NULL || canvas->draw_buffer == NULL || canvas->videoconfig == NULL) {
         return;
     }
+
+    sync_render_config_from_cap(canvas);
 
     if (canvas->draw_buffer->canvas_physical_width == 0 &&
         canvas->draw_buffer->canvas_width > 0) {

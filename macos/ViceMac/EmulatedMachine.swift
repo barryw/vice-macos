@@ -4,6 +4,7 @@ import Foundation
 enum MachineID: String, CaseIterable, Codable, Identifiable {
     case x64sc
     case xvic
+    case xpet
 
     var id: String { rawValue }
 }
@@ -60,6 +61,8 @@ struct MachineCapabilities: Equatable {
     let supportsRAMExpansion: Bool
     let controlPorts: [ControlPort]
     let driveUnits: [Int]
+    let driveTypes: [DriveType]
+    let defaultDriveType: DriveType
 }
 
 struct MachineStartupConfiguration {
@@ -157,7 +160,7 @@ struct EmulatedMachine: Identifiable, Equatable {
         capabilities.driveUnits.enumerated().map { index, unit in
             DriveConfiguration(unit: unit,
                                isAttached: index == 0,
-                               driveType: .c1541,
+                               driveType: capabilities.defaultDriveType,
                                soundEnabled: false,
                                soundVolume: 1000)
         }
@@ -204,6 +207,31 @@ extension MachineROMSlot {
                                                defaultFileName: "chargen-901460-03.bin",
                                                startupOption: "-chargen",
                                                systemImage: "textformat")
+
+    static let petBasic = MachineROMSlot(id: "pet.basic",
+                                         title: "BASIC",
+                                         resourceName: "BasicName",
+                                         defaultFileName: "basic-4.901465-23-20-21.bin",
+                                         startupOption: "-basic",
+                                         systemImage: "terminal")
+    static let petKernal = MachineROMSlot(id: "pet.kernal",
+                                          title: "KERNAL",
+                                          resourceName: "KernalName",
+                                          defaultFileName: "kernal-4.901465-22.bin",
+                                          startupOption: "-kernal",
+                                          systemImage: "cpu")
+    static let petEditor = MachineROMSlot(id: "pet.editor",
+                                          title: "Editor",
+                                          resourceName: "EditorName",
+                                          defaultFileName: "edit-4-40-n-50Hz.901498-01.bin",
+                                          startupOption: "-editor",
+                                          systemImage: "rectangle.and.pencil.and.ellipsis")
+    static let petCharacter = MachineROMSlot(id: "pet.character",
+                                             title: "Character",
+                                             resourceName: "ChargenName",
+                                             defaultFileName: "characters-2.901447-10.bin",
+                                             startupOption: "-chargen",
+                                             systemImage: "textformat")
 }
 
 extension EmulatedMachine {
@@ -227,7 +255,9 @@ extension EmulatedMachine {
                                               supportsCartridges: true,
                                               supportsRAMExpansion: true,
                                               controlPorts: [.one, .two],
-                                              driveUnits: [8, 9, 10, 11]),
+                                              driveUnits: [8, 9, 10, 11],
+                                              driveTypes: DriveType.iecOptions,
+                                              defaultDriveType: .c1541),
             videoStandardResources: [
                 .ntsc: [
                     ViceIntResourceAssignment(name: "VICIIModel", value: ViceVICIIModel.mos8562),
@@ -261,7 +291,45 @@ extension EmulatedMachine {
                                               supportsCartridges: true,
                                               supportsRAMExpansion: true,
                                               controlPorts: [.one],
-                                              driveUnits: [8, 9, 10, 11]),
+                                              driveUnits: [8, 9, 10, 11],
+                                              driveTypes: DriveType.iecOptions,
+                                              defaultDriveType: .c1541),
+            videoStandardResources: [
+                .ntsc: [
+                    ViceIntResourceAssignment(name: "MachineVideoStandard",
+                                              value: ViceMachineVideoStandard.ntsc)
+                ],
+                .pal: [
+                    ViceIntResourceAssignment(name: "MachineVideoStandard",
+                                              value: ViceMachineVideoStandard.pal)
+                ]
+            ]
+        )
+    }
+
+    static var xpet: EmulatedMachine {
+        EmulatedMachine(
+            id: .xpet,
+            displayName: "PET 4032",
+            shortName: "xpet",
+            viceTarget: "xpet",
+            dynamicLibraryName: "libvicemacxpet.dylib",
+            displayProfile: MachineDisplayProfile(
+                bootFrame: MachineBootFrame(resourceName: "xpet-ready",
+                                            fileExtension: "png",
+                                            pixelSize: CGSize(width: 384, height: 272))
+            ),
+            startupOptions: ["-model", "4032"],
+            romSlots: [.petBasic, .petKernal, .petEditor, .petCharacter],
+            ramExpansions: [.none],
+            capabilities: MachineCapabilities(supportsVideoStandardSelection: true,
+                                              supportsSIDModelSelection: false,
+                                              supportsCartridges: false,
+                                              supportsRAMExpansion: false,
+                                              controlPorts: [],
+                                              driveUnits: [8, 9, 10, 11],
+                                              driveTypes: DriveType.petOptions,
+                                              defaultDriveType: .c4040),
             videoStandardResources: [
                 .ntsc: [
                     ViceIntResourceAssignment(name: "MachineVideoStandard",
@@ -276,14 +344,24 @@ extension EmulatedMachine {
     }
 
     static var current: EmulatedMachine {
-        #if VICE_MAC_MACHINE_XVIC
+        #if VICE_MAC_MACHINE_XPET
+        return .xpet
+        #elseif VICE_MAC_MACHINE_XVIC
         return .xvic
         #else
         return .x64sc
         #endif
     }
 
-    static var planned: [EmulatedMachine] { [.x64sc, .xvic] }
+    static var planned: [EmulatedMachine] {
+        #if VICE_MAC_MACHINE_XVIC
+        return [.x64sc, .xvic]
+        #elseif VICE_MAC_MACHINE_XPET
+        return [.x64sc, .xvic, .xpet]
+        #else
+        return [.x64sc]
+        #endif
+    }
 }
 
 private enum ViceVICIIModel {

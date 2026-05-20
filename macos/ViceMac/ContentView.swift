@@ -1130,11 +1130,17 @@ private struct DriveIndicator: View {
                 isPresented.toggle()
             } label: {
                 HStack(spacing: 6) {
-                    Circle()
-                        .fill(indicatorColor(blinkOn: blinkOn))
-                        .frame(width: 8, height: 8)
-                        .shadow(color: indicatorColor(blinkOn: blinkOn).opacity(drive.isActive ? 0.45 : 0),
-                                radius: 4)
+                    if drive.hasMultipleSlots {
+                        DriveSlotLEDStack(drive: drive, blinkOn: blinkOn)
+                    } else {
+                        let color = indicatorColor(blinkOn: blinkOn)
+
+                        Circle()
+                            .fill(color)
+                            .frame(width: 8, height: 8)
+                            .shadow(color: color.opacity(drive.isActive ? 0.45 : 0),
+                                    radius: 4)
+                    }
 
                     Text("\(drive.unit)")
                         .foregroundStyle(.secondary)
@@ -1185,6 +1191,35 @@ private struct DriveIndicator: View {
     }
 }
 
+private struct DriveSlotLEDStack: View {
+    let drive: DriveActivity
+    let blinkOn: Bool
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(drive.slots) { slot in
+                let color = indicatorColor(for: slot)
+
+                Circle()
+                    .fill(color)
+                    .frame(width: 5, height: 5)
+                    .shadow(color: color.opacity(slot.isActive ? 0.5 : 0),
+                            radius: 3)
+            }
+        }
+        .frame(width: 14, alignment: .leading)
+    }
+
+    private func indicatorColor(for slot: DriveSlotActivity) -> Color {
+        if drive.hasErrorStatus {
+            return blinkOn ? .red : .red.opacity(0.25)
+        }
+
+        let color = slot.ledColor.displayColor
+        return slot.isActive ? color : color.opacity(0.28)
+    }
+}
+
 private struct DrivePopover: View {
     @EnvironmentObject private var emulator: EmulatorSession
     @Binding var isPresented: Bool
@@ -1202,7 +1237,7 @@ private struct DrivePopover: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Drive \(drive.unit)")
                         .font(.headline)
-                    Text(drive.driveType.title)
+                    Text("\(drive.driveType.title) • \(drive.driveType.busTitle)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -1211,19 +1246,14 @@ private struct DrivePopover: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                DriveInfoRow(title: "Disk") {
-                    HStack(spacing: 6) {
-                        Text(diskTitle)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-
-                        if let diskKind {
-                            Text(diskKind)
-                                .font(.caption2.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 2)
-                                .background(.quaternary, in: Capsule())
+                VStack(spacing: 6) {
+                    ForEach(drive.slots) { slot in
+                        DriveSlotPopoverRow(slot: slot,
+                                            unit: drive.unit,
+                                            showsDriveNumber: drive.hasMultipleSlots,
+                                            isActive: slot.isActive,
+                                            hasError: drive.hasErrorStatus) {
+                            openDiskPanel(for: slot.driveNumber)
                         }
                     }
                 }
@@ -1273,36 +1303,10 @@ private struct DrivePopover: View {
                 } label: {
                     Label("Reset", systemImage: "arrow.counterclockwise")
                 }
-
-                Button {
-                    openDiskPanel()
-                } label: {
-                    Label("Attach Disk...", systemImage: "externaldrive.badge.plus")
-                }
-                .buttonStyle(.borderedProminent)
-                .help("Attach \(diskImageFormatDescription) to drive \(drive.unit)")
             }
         }
         .padding(16)
-        .frame(width: 300)
-    }
-
-    private var diskTitle: String {
-        guard hasDiskImage,
-              let imagePath = drive.imagePath else {
-            return "No disk attached"
-        }
-
-        return URL(fileURLWithPath: imagePath).lastPathComponent
-    }
-
-    private var diskKind: String? {
-        guard let imagePath = drive.imagePath else {
-            return nil
-        }
-
-        let pathExtension = URL(fileURLWithPath: imagePath).pathExtension
-        return pathExtension.isEmpty ? nil : pathExtension.uppercased()
+        .frame(width: 340)
     }
 
     private var statusTitle: String {
@@ -1331,11 +1335,7 @@ private struct DrivePopover: View {
     }
 
     private var hasDiskImage: Bool {
-        guard let imagePath = drive.imagePath else {
-            return false
-        }
-
-        return !imagePath.isEmpty
+        drive.slots.contains { $0.hasDiskImage }
     }
 
     private var accessModeBinding: Binding<DriveAccessMode> {
@@ -1355,10 +1355,10 @@ private struct DrivePopover: View {
         }
     }
 
-    private func openDiskPanel() {
+    private func openDiskPanel(for driveNumber: Int) {
         let panel = NSOpenPanel()
         panel.title = "Attach Disk"
-        panel.message = "Choose a \(diskImageFormatDescription) image for drive \(drive.unit)."
+        panel.message = "Choose a \(diskImageFormatDescription) image for \(driveAddress(for: driveNumber))."
         panel.prompt = "Attach"
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
@@ -1374,7 +1374,11 @@ private struct DrivePopover: View {
             return
         }
 
-        emulator.attachDisk(to: drive.unit, url: url, autorun: autorun)
+        emulator.attachDisk(to: drive.unit, driveNumber: driveNumber, url: url, autorun: autorun)
+    }
+
+    private func driveAddress(for driveNumber: Int) -> String {
+        drive.hasMultipleSlots ? "drive \(drive.unit):\(driveNumber)" : "drive \(drive.unit)"
     }
 
     private var diskImageFormatDescription: String {
@@ -1387,6 +1391,90 @@ private struct DrivePopover: View {
         }
 
         return types.isEmpty ? [.data] : types
+    }
+}
+
+private struct DriveSlotPopoverRow: View {
+    let slot: DriveSlotActivity
+    let unit: Int
+    let showsDriveNumber: Bool
+    let isActive: Bool
+    let hasError: Bool
+    let onAttach: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Circle()
+                .fill(indicatorColor)
+                .frame(width: 8, height: 8)
+                .shadow(color: indicatorColor.opacity(isActive ? 0.45 : 0),
+                        radius: 4)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.callout.weight(.medium))
+
+                Text(diskTitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+
+            Spacer(minLength: 8)
+
+            if let diskKind {
+                Text(diskKind)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(.quaternary, in: Capsule())
+            }
+
+            Button {
+                onAttach()
+            } label: {
+                Label("Attach", systemImage: "externaldrive.badge.plus")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .help("Attach disk to \(title.lowercased())")
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(.quaternary.opacity(0.55), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var title: String {
+        showsDriveNumber ? "Drive \(unit):\(slot.driveNumber)" : "Disk"
+    }
+
+    private var diskTitle: String {
+        guard let imagePath = slot.imagePath,
+              !imagePath.isEmpty else {
+            return "No disk attached"
+        }
+
+        return URL(fileURLWithPath: imagePath).lastPathComponent
+    }
+
+    private var diskKind: String? {
+        guard let imagePath = slot.imagePath else {
+            return nil
+        }
+
+        let pathExtension = URL(fileURLWithPath: imagePath).pathExtension
+        return pathExtension.isEmpty ? nil : pathExtension.uppercased()
+    }
+
+    private var indicatorColor: Color {
+        if hasError {
+            return .red
+        }
+
+        let color = slot.ledColor.displayColor
+        return isActive ? color : color.opacity(0.28)
     }
 }
 

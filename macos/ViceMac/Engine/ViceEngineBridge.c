@@ -102,9 +102,12 @@ static void driveStatusTrampoline(const vicemac_drive_status_t *status, void *co
     bridgedStatus.unit = status->unit;
     bridgedStatus.enabled = status->enabled != 0;
     bridgedStatus.driveType = status->drive_type;
+    bridgedStatus.activeDriveNumber = status->active_drive_number;
     bridgedStatus.ledColor = status->led_color;
     bridgedStatus.ledIntensity = status->led_pwm1;
     bridgedStatus.errorIntensity = status->led_pwm2;
+    bridgedStatus.drive0LEDIntensity = status->drive0_led_intensity;
+    bridgedStatus.drive1LEDIntensity = status->drive1_led_intensity;
     bridgedStatus.trackValid = status->track_valid != 0;
     bridgedStatus.track = status->track;
     bridgedStatus.halfTrack = status->half_track;
@@ -112,6 +115,8 @@ static void driveStatusTrampoline(const vicemac_drive_status_t *status, void *co
     bridgedStatus.driveStatusCode = status->drive_status_code;
     bridgedStatus.driveStatusText = status->drive_status_text;
     bridgedStatus.imagePath = status->image_path;
+    bridgedStatus.drive0ImagePath = status->drive0_image_path;
+    bridgedStatus.drive1ImagePath = status->drive1_image_path;
 
     driveStatusCallback(&bridgedStatus, context);
 }
@@ -353,13 +358,13 @@ bool ViceEngineResetDrive(uint32_t unit)
     return runtimeSymbols.queueDriveReset(unit) != 0;
 }
 
-bool ViceEngineAttachDisk(uint32_t unit, const char *path, bool autorun)
+bool ViceEngineAttachDisk(uint32_t unit, uint32_t drive, const char *path, bool autorun)
 {
     if (!atomic_load(&engineRunning) || runtimeSymbols.queueDriveAttachDisk == NULL) {
         return false;
     }
 
-    return runtimeSymbols.queueDriveAttachDisk(unit, 0, path, autorun ? 1 : 0) != 0;
+    return runtimeSymbols.queueDriveAttachDisk(unit, drive, path, autorun ? 1 : 0) != 0;
 }
 
 bool ViceEngineAttachCartridge(const char *path)

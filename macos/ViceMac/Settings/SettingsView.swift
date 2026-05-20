@@ -776,6 +776,8 @@ private struct DriveSettingsPane: View {
 }
 
 private struct DriveSettingsSection: View {
+    @EnvironmentObject private var emulator: EmulatorSession
+
     @Binding var drive: DriveConfiguration
 
     var body: some View {
@@ -783,9 +785,23 @@ private struct DriveSettingsSection: View {
             Toggle("Attached", isOn: $drive.isAttached)
 
             Picker("Type", selection: $drive.driveType) {
-                ForEach(DriveType.allCases) { type in
+                ForEach(emulator.machine.capabilities.driveTypes) { type in
                     Text(type.title).tag(type)
                 }
+            }
+            .disabled(!drive.isAttached)
+
+            LabeledContent("Hardware") {
+                Text(hardwareDetail)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .disabled(!drive.isAttached)
+
+            LabeledContent("Formats") {
+                Text(drive.driveType.supportedDiskImageDescription)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
             .disabled(!drive.isAttached)
 
@@ -820,6 +836,11 @@ private struct DriveSettingsSection: View {
         } set: { value in
             drive.soundVolume = Int(value.rounded())
         }
+    }
+
+    private var hardwareDetail: String {
+        let mechanism = drive.driveType.slotCount == 1 ? "single drive" : "\(drive.driveType.slotCount) drives"
+        return "\(drive.driveType.busTitle), \(mechanism)"
     }
 }
 
