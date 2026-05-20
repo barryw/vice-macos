@@ -779,6 +779,7 @@ private struct DriveSettingsSection: View {
     @EnvironmentObject private var emulator: EmulatorSession
 
     @Binding var drive: DriveConfiguration
+    @State private var volumeBeforeEdit: Int?
 
     var body: some View {
         Section("Drive \(drive.unit)") {
@@ -819,13 +820,15 @@ private struct DriveSettingsSection: View {
             HStack(spacing: 12) {
                 Text("Sound volume")
 
-                Slider(value: volumeBinding, in: 0...4000)
+                Slider(value: volumeBinding,
+                       in: 0...100,
+                       onEditingChanged: handleVolumeEditingChanged)
                     .disabled(!drive.isAttached || !drive.soundEnabled)
 
-                Text("\(drive.soundVolume)")
+                Text("\(drive.soundVolume)%")
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
-                    .frame(width: 44, alignment: .trailing)
+                    .frame(width: 48, alignment: .trailing)
             }
         }
     }
@@ -834,8 +837,26 @@ private struct DriveSettingsSection: View {
         Binding {
             Double(drive.soundVolume)
         } set: { value in
-            drive.soundVolume = Int(value.rounded())
+            drive.soundVolume = min(max(Int(value.rounded()), 0), 100)
         }
+    }
+
+    private func handleVolumeEditingChanged(_ isEditing: Bool) {
+        if isEditing {
+            volumeBeforeEdit = drive.soundVolume
+            return
+        }
+
+        defer {
+            volumeBeforeEdit = nil
+        }
+
+        guard let volumeBeforeEdit,
+              volumeBeforeEdit != drive.soundVolume else {
+            return
+        }
+
+        emulator.previewDriveSound(for: drive)
     }
 
     private var hardwareDetail: String {

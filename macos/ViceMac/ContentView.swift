@@ -54,6 +54,10 @@ struct ContentView: View {
                     .help("Video standard")
                 }
 
+                if emulator.machine.supportsDisplayOutputSelection {
+                    DisplayOutputToolbarPicker()
+                }
+
                 if emulator.machine.id == .xvic {
                     VIC20MemoryToolbarMenu()
                 }
@@ -96,6 +100,9 @@ private struct EmulatorStatusBar: View {
             }
             if emulator.machine.capabilities.supportsSIDModelSelection {
                 StatusPill(text: emulator.sidModel.title)
+            }
+            if emulator.machine.supportsDisplayOutputSelection {
+                StatusPill(text: emulator.displayOutput.statusTitle)
             }
             StatusPill(text: emulator.isPaused ? "Paused" : "READY")
             StatusPill(text: emulator.filterSettings.preset.rawValue)
@@ -465,6 +472,22 @@ private struct DisplayToolbarControls: View {
         }
         .frame(width: 58)
         .help("Display size")
+    }
+}
+
+private struct DisplayOutputToolbarPicker: View {
+    @EnvironmentObject private var emulator: EmulatorSession
+
+    var body: some View {
+        Picker("Display Output", selection: $emulator.displayOutput) {
+            ForEach(emulator.machine.displayOutputs) { output in
+                Label(output.toolbarTitle, systemImage: output.systemImage)
+                    .tag(output)
+            }
+        }
+        .pickerStyle(.segmented)
+        .frame(width: 96)
+        .help("C128 display output")
     }
 }
 

@@ -225,5 +225,5 @@ void arch_ui_activate(void)
 
 video_canvas_t *ui_get_active_canvas(void)
 {
-    return NULL;
+    return vicemac_video_active_canvas();
 }

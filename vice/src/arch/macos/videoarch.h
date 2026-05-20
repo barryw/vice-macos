@@ -45,5 +45,6 @@ typedef struct vice_renderer_backend_s {
 } vice_renderer_backend_t;
 
 void vicemac_video_refresh_if_idle(void);
+video_canvas_t *vicemac_video_active_canvas(void);
 
 #endif

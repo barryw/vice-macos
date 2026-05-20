@@ -20,6 +20,13 @@
 		A1000000000000000000001B /* VideoFilterControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002C /* VideoFilterControls.swift */; };
 		A1000000000000000000001C /* ViceEngineBridge.c in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002E /* ViceEngineBridge.c */; };
 		A1000000000000000000001D /* EmulatedMachine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000037 /* EmulatedMachine.swift */; };
+		A1000000000000000000001E /* EmulatorShaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000029 /* EmulatorShaders.metal */; };
+		A10000000000000000000050 /* EmulatorDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000038 /* EmulatorDefaults.swift */; };
+		A10000000000000000000051 /* KeyboardMapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000039 /* KeyboardMapping.swift */; };
+		A10000000000000000000052 /* ViceCallbacks.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003A /* ViceCallbacks.swift */; };
+		A10000000000000000000053 /* ControlConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003B /* ControlConfiguration.swift */; };
+		A10000000000000000000054 /* DriveConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003C /* DriveConfiguration.swift */; };
+		A10000000000000000000055 /* MediaConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003D /* MediaConfiguration.swift */; };
 		B20000000000000000000010 /* ViceMacApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000020 /* ViceMacApp.swift */; };
 		B20000000000000000000011 /* EmulatorSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000021 /* EmulatorSession.swift */; };
 		B20000000000000000000012 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000022 /* ContentView.swift */; };
@@ -32,6 +39,13 @@
 		B2000000000000000000001B /* VideoFilterControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002C /* VideoFilterControls.swift */; };
 		B2000000000000000000001C /* ViceEngineBridge.c in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002E /* ViceEngineBridge.c */; };
 		B2000000000000000000001D /* EmulatedMachine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000037 /* EmulatedMachine.swift */; };
+		B2000000000000000000001E /* EmulatorShaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000029 /* EmulatorShaders.metal */; };
+		B20000000000000000000050 /* EmulatorDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000038 /* EmulatorDefaults.swift */; };
+		B20000000000000000000051 /* KeyboardMapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000039 /* KeyboardMapping.swift */; };
+		B20000000000000000000052 /* ViceCallbacks.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003A /* ViceCallbacks.swift */; };
+		B20000000000000000000053 /* ControlConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003B /* ControlConfiguration.swift */; };
+		B20000000000000000000054 /* DriveConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003C /* DriveConfiguration.swift */; };
+		B20000000000000000000055 /* MediaConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003D /* MediaConfiguration.swift */; };
 		C30000000000000000000010 /* ViceMacApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000020 /* ViceMacApp.swift */; };
 		C30000000000000000000011 /* EmulatorSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000021 /* EmulatorSession.swift */; };
 		C30000000000000000000012 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000022 /* ContentView.swift */; };
@@ -44,6 +58,13 @@
 		C3000000000000000000001B /* VideoFilterControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002C /* VideoFilterControls.swift */; };
 		C3000000000000000000001C /* ViceEngineBridge.c in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002E /* ViceEngineBridge.c */; };
 		C3000000000000000000001D /* EmulatedMachine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000037 /* EmulatedMachine.swift */; };
+		C3000000000000000000001E /* EmulatorShaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000029 /* EmulatorShaders.metal */; };
+		C30000000000000000000050 /* EmulatorDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000038 /* EmulatorDefaults.swift */; };
+		C30000000000000000000051 /* KeyboardMapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000039 /* KeyboardMapping.swift */; };
+		C30000000000000000000052 /* ViceCallbacks.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003A /* ViceCallbacks.swift */; };
+		C30000000000000000000053 /* ControlConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003B /* ControlConfiguration.swift */; };
+		C30000000000000000000054 /* DriveConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003C /* DriveConfiguration.swift */; };
+		C30000000000000000000055 /* MediaConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003D /* MediaConfiguration.swift */; };
 		D40000000000000000000010 /* ViceMacApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000020 /* ViceMacApp.swift */; };
 		D40000000000000000000011 /* EmulatorSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000021 /* EmulatorSession.swift */; };
 		D40000000000000000000012 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000022 /* ContentView.swift */; };
@@ -56,6 +77,45 @@
 		D4000000000000000000001B /* VideoFilterControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002C /* VideoFilterControls.swift */; };
 		D4000000000000000000001C /* ViceEngineBridge.c in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002E /* ViceEngineBridge.c */; };
 		D4000000000000000000001D /* EmulatedMachine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000037 /* EmulatedMachine.swift */; };
+		D4000000000000000000001E /* EmulatorShaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000029 /* EmulatorShaders.metal */; };
+		D40000000000000000000050 /* EmulatorDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000038 /* EmulatorDefaults.swift */; };
+		D40000000000000000000051 /* KeyboardMapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000039 /* KeyboardMapping.swift */; };
+		D40000000000000000000052 /* ViceCallbacks.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003A /* ViceCallbacks.swift */; };
+		D40000000000000000000053 /* ControlConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003B /* ControlConfiguration.swift */; };
+		D40000000000000000000054 /* DriveConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003C /* DriveConfiguration.swift */; };
+		D40000000000000000000055 /* MediaConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003D /* MediaConfiguration.swift */; };
+		E50000000000000000000010 /* ViceMacApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000020 /* ViceMacApp.swift */; };
+		E50000000000000000000011 /* EmulatorSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000021 /* EmulatorSession.swift */; };
+		E50000000000000000000012 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000022 /* ContentView.swift */; };
+		E50000000000000000000013 /* EmulatorMetalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000023 /* EmulatorMetalView.swift */; };
+		E50000000000000000000014 /* EmulatorRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000024 /* EmulatorRenderer.swift */; };
+		E50000000000000000000015 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000025 /* SettingsView.swift */; };
+		E50000000000000000000016 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000026 /* Assets.xcassets */; };
+		E50000000000000000000017 /* EmulatorFrameSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000028 /* EmulatorFrameSource.swift */; };
+		E5000000000000000000001A /* VideoFilterSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002B /* VideoFilterSettings.swift */; };
+		E5000000000000000000001B /* VideoFilterControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002C /* VideoFilterControls.swift */; };
+		E5000000000000000000001C /* ViceEngineBridge.c in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002E /* ViceEngineBridge.c */; };
+		E5000000000000000000001D /* EmulatedMachine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000037 /* EmulatedMachine.swift */; };
+		E5000000000000000000001E /* EmulatorShaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000029 /* EmulatorShaders.metal */; };
+		E50000000000000000000050 /* EmulatorDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000038 /* EmulatorDefaults.swift */; };
+		E50000000000000000000051 /* KeyboardMapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000039 /* KeyboardMapping.swift */; };
+		E50000000000000000000052 /* ViceCallbacks.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003A /* ViceCallbacks.swift */; };
+		E50000000000000000000053 /* ControlConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003B /* ControlConfiguration.swift */; };
+		E50000000000000000000054 /* DriveConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003C /* DriveConfiguration.swift */; };
+		E50000000000000000000055 /* MediaConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003D /* MediaConfiguration.swift */; };
+		F60000000000000000000010 /* ModelConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000020 /* ModelConfigurationTests.swift */; };
+		F60000000000000000000011 /* EmulatorSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000021 /* EmulatorSession.swift */; };
+		F60000000000000000000012 /* EmulatedMachine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000037 /* EmulatedMachine.swift */; };
+		F60000000000000000000013 /* EmulatorFrameSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000028 /* EmulatorFrameSource.swift */; };
+		F60000000000000000000014 /* VideoFilterSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002B /* VideoFilterSettings.swift */; };
+		F60000000000000000000015 /* ViceEngineBridge.c in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002E /* ViceEngineBridge.c */; };
+		F60000000000000000000016 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F6000000000000000000002F /* XCTest.framework */; };
+		F60000000000000000000050 /* EmulatorDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000038 /* EmulatorDefaults.swift */; };
+		F60000000000000000000051 /* KeyboardMapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000039 /* KeyboardMapping.swift */; };
+		F60000000000000000000052 /* ViceCallbacks.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003A /* ViceCallbacks.swift */; };
+		F60000000000000000000053 /* ControlConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003B /* ControlConfiguration.swift */; };
+		F60000000000000000000054 /* DriveConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003C /* DriveConfiguration.swift */; };
+		F60000000000000000000055 /* MediaConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003D /* MediaConfiguration.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -76,9 +136,19 @@
 		A1000000000000000000002E /* ViceEngineBridge.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = ViceEngineBridge.c; sourceTree = "<group>"; };
 		A1000000000000000000002F /* ViceMac-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "ViceMac-Bridging-Header.h"; sourceTree = "<group>"; };
 		A10000000000000000000037 /* EmulatedMachine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmulatedMachine.swift; sourceTree = "<group>"; };
+		A10000000000000000000038 /* EmulatorDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmulatorDefaults.swift; sourceTree = "<group>"; };
+		A10000000000000000000039 /* KeyboardMapping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardMapping.swift; sourceTree = "<group>"; };
+		A1000000000000000000003A /* ViceCallbacks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViceCallbacks.swift; sourceTree = "<group>"; };
+		A1000000000000000000003B /* ControlConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlConfiguration.swift; sourceTree = "<group>"; };
+		A1000000000000000000003C /* DriveConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveConfiguration.swift; sourceTree = "<group>"; };
+		A1000000000000000000003D /* MediaConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaConfiguration.swift; sourceTree = "<group>"; };
 		B20000000000000000000027 /* VICE Mac VIC-20.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "VICE Mac VIC-20.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		C30000000000000000000027 /* VICE Mac PET.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "VICE Mac PET.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		D40000000000000000000027 /* VICE Mac Plus-4.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "VICE Mac Plus-4.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		E50000000000000000000027 /* VICE Mac C128.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "VICE Mac C128.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		F60000000000000000000020 /* ModelConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelConfigurationTests.swift; sourceTree = "<group>"; };
+		F60000000000000000000027 /* ViceMacTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ViceMacTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		F6000000000000000000002F /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -110,6 +180,21 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E50000000000000000000040 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F60000000000000000000040 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F60000000000000000000016 /* XCTest.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -117,6 +202,8 @@
 			isa = PBXGroup;
 			children = (
 				A10000000000000000000031 /* ViceMac */,
+				F60000000000000000000031 /* ViceMacTests */,
+				F60000000000000000000032 /* Frameworks */,
 				A10000000000000000000035 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -127,7 +214,13 @@
 				A10000000000000000000020 /* ViceMacApp.swift */,
 				A10000000000000000000037 /* EmulatedMachine.swift */,
 				A10000000000000000000021 /* EmulatorSession.swift */,
+				A1000000000000000000003B /* ControlConfiguration.swift */,
+				A1000000000000000000003C /* DriveConfiguration.swift */,
+				A10000000000000000000038 /* EmulatorDefaults.swift */,
 				A10000000000000000000028 /* EmulatorFrameSource.swift */,
+				A10000000000000000000039 /* KeyboardMapping.swift */,
+				A1000000000000000000003D /* MediaConfiguration.swift */,
+				A1000000000000000000003A /* ViceCallbacks.swift */,
 				A1000000000000000000002B /* VideoFilterSettings.swift */,
 				A1000000000000000000002C /* VideoFilterControls.swift */,
 				A10000000000000000000022 /* ContentView.swift */,
@@ -173,6 +266,8 @@
 				B20000000000000000000027 /* VICE Mac VIC-20.app */,
 				C30000000000000000000027 /* VICE Mac PET.app */,
 				D40000000000000000000027 /* VICE Mac Plus-4.app */,
+				E50000000000000000000027 /* VICE Mac C128.app */,
+				F60000000000000000000027 /* ViceMacTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -185,6 +280,22 @@
 				A1000000000000000000002F /* ViceMac-Bridging-Header.h */,
 			);
 			path = Engine;
+			sourceTree = "<group>";
+		};
+		F60000000000000000000031 /* ViceMacTests */ = {
+			isa = PBXGroup;
+			children = (
+				F60000000000000000000020 /* ModelConfigurationTests.swift */,
+			);
+			path = ViceMacTests;
+			sourceTree = "<group>";
+		};
+		F60000000000000000000032 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				F6000000000000000000002F /* XCTest.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -262,6 +373,40 @@
 			productReference = D40000000000000000000027 /* VICE Mac Plus-4.app */;
 			productType = "com.apple.product-type.application";
 		};
+		E50000000000000000000001 /* ViceMacC128 */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E50000000000000000000080 /* Build configuration list for PBXNativeTarget "ViceMacC128" */;
+			buildPhases = (
+				E50000000000000000000043 /* Prepare VICE Runtime */,
+				E50000000000000000000041 /* Sources */,
+				E50000000000000000000040 /* Frameworks */,
+				E50000000000000000000042 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ViceMacC128;
+			productName = ViceMacC128;
+			productReference = E50000000000000000000027 /* VICE Mac C128.app */;
+			productType = "com.apple.product-type.application";
+		};
+		F60000000000000000000001 /* ViceMacTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F60000000000000000000080 /* Build configuration list for PBXNativeTarget "ViceMacTests" */;
+			buildPhases = (
+				F60000000000000000000041 /* Sources */,
+				F60000000000000000000040 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ViceMacTests;
+			productName = ViceMacTests;
+			productReference = F60000000000000000000027 /* ViceMacTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -284,6 +429,12 @@
 					D40000000000000000000001 = {
 						CreatedOnToolsVersion = 26.5;
 					};
+					E50000000000000000000001 = {
+						CreatedOnToolsVersion = 26.5;
+					};
+					F60000000000000000000001 = {
+						CreatedOnToolsVersion = 26.5;
+					};
 				};
 			};
 			buildConfigurationList = A10000000000000000000070 /* Build configuration list for PBXProject "ViceMac" */;
@@ -303,6 +454,8 @@
 				B20000000000000000000001 /* ViceMacVIC20 */,
 				C30000000000000000000001 /* ViceMacPET */,
 				D40000000000000000000001 /* ViceMacPlus4 */,
+				E50000000000000000000001 /* ViceMacC128 */,
+				F60000000000000000000001 /* ViceMacTests */,
 			);
 		};
 /* End PBXProject section */
@@ -338,6 +491,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				D40000000000000000000016 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E50000000000000000000042 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E50000000000000000000016 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -432,6 +593,28 @@
 			shellPath = /bin/bash;
 			shellScript = "/bin/bash \"$SRCROOT/scripts/prepare-vicemac-runtime.sh\"\n";
 		};
+		E50000000000000000000043 /* Prepare VICE Runtime */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Prepare VICE Runtime";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(SRCROOT)/BuildProducts/libvicemacx128.dylib",
+				"$(TARGET_BUILD_DIR)/$(FRAMEWORKS_FOLDER_PATH)/libvicemacx128.dylib",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/VICEData",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "/bin/bash \"$SRCROOT/scripts/prepare-vicemac-runtime.sh\"\n";
+		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -441,6 +624,12 @@
 			files = (
 				A10000000000000000000010 /* ViceMacApp.swift in Sources */,
 				A10000000000000000000011 /* EmulatorSession.swift in Sources */,
+				A10000000000000000000050 /* EmulatorDefaults.swift in Sources */,
+				A10000000000000000000053 /* ControlConfiguration.swift in Sources */,
+				A10000000000000000000054 /* DriveConfiguration.swift in Sources */,
+				A10000000000000000000051 /* KeyboardMapping.swift in Sources */,
+				A10000000000000000000055 /* MediaConfiguration.swift in Sources */,
+				A10000000000000000000052 /* ViceCallbacks.swift in Sources */,
 				A10000000000000000000012 /* ContentView.swift in Sources */,
 				A10000000000000000000013 /* EmulatorMetalView.swift in Sources */,
 				A10000000000000000000014 /* EmulatorRenderer.swift in Sources */,
@@ -448,6 +637,7 @@
 				A1000000000000000000001A /* VideoFilterSettings.swift in Sources */,
 				A1000000000000000000001B /* VideoFilterControls.swift in Sources */,
 				A1000000000000000000001D /* EmulatedMachine.swift in Sources */,
+				A1000000000000000000001E /* EmulatorShaders.metal in Sources */,
 				A1000000000000000000001C /* ViceEngineBridge.c in Sources */,
 				A10000000000000000000015 /* SettingsView.swift in Sources */,
 			);
@@ -459,6 +649,12 @@
 			files = (
 				B20000000000000000000010 /* ViceMacApp.swift in Sources */,
 				B20000000000000000000011 /* EmulatorSession.swift in Sources */,
+				B20000000000000000000050 /* EmulatorDefaults.swift in Sources */,
+				B20000000000000000000053 /* ControlConfiguration.swift in Sources */,
+				B20000000000000000000054 /* DriveConfiguration.swift in Sources */,
+				B20000000000000000000051 /* KeyboardMapping.swift in Sources */,
+				B20000000000000000000055 /* MediaConfiguration.swift in Sources */,
+				B20000000000000000000052 /* ViceCallbacks.swift in Sources */,
 				B20000000000000000000012 /* ContentView.swift in Sources */,
 				B20000000000000000000013 /* EmulatorMetalView.swift in Sources */,
 				B20000000000000000000014 /* EmulatorRenderer.swift in Sources */,
@@ -466,6 +662,7 @@
 				B2000000000000000000001A /* VideoFilterSettings.swift in Sources */,
 				B2000000000000000000001B /* VideoFilterControls.swift in Sources */,
 				B2000000000000000000001D /* EmulatedMachine.swift in Sources */,
+				B2000000000000000000001E /* EmulatorShaders.metal in Sources */,
 				B2000000000000000000001C /* ViceEngineBridge.c in Sources */,
 				B20000000000000000000015 /* SettingsView.swift in Sources */,
 			);
@@ -477,6 +674,12 @@
 			files = (
 				C30000000000000000000010 /* ViceMacApp.swift in Sources */,
 				C30000000000000000000011 /* EmulatorSession.swift in Sources */,
+				C30000000000000000000050 /* EmulatorDefaults.swift in Sources */,
+				C30000000000000000000053 /* ControlConfiguration.swift in Sources */,
+				C30000000000000000000054 /* DriveConfiguration.swift in Sources */,
+				C30000000000000000000051 /* KeyboardMapping.swift in Sources */,
+				C30000000000000000000055 /* MediaConfiguration.swift in Sources */,
+				C30000000000000000000052 /* ViceCallbacks.swift in Sources */,
 				C30000000000000000000012 /* ContentView.swift in Sources */,
 				C30000000000000000000013 /* EmulatorMetalView.swift in Sources */,
 				C30000000000000000000014 /* EmulatorRenderer.swift in Sources */,
@@ -484,6 +687,7 @@
 				C3000000000000000000001A /* VideoFilterSettings.swift in Sources */,
 				C3000000000000000000001B /* VideoFilterControls.swift in Sources */,
 				C3000000000000000000001D /* EmulatedMachine.swift in Sources */,
+				C3000000000000000000001E /* EmulatorShaders.metal in Sources */,
 				C3000000000000000000001C /* ViceEngineBridge.c in Sources */,
 				C30000000000000000000015 /* SettingsView.swift in Sources */,
 			);
@@ -495,6 +699,12 @@
 			files = (
 				D40000000000000000000010 /* ViceMacApp.swift in Sources */,
 				D40000000000000000000011 /* EmulatorSession.swift in Sources */,
+				D40000000000000000000050 /* EmulatorDefaults.swift in Sources */,
+				D40000000000000000000053 /* ControlConfiguration.swift in Sources */,
+				D40000000000000000000054 /* DriveConfiguration.swift in Sources */,
+				D40000000000000000000051 /* KeyboardMapping.swift in Sources */,
+				D40000000000000000000055 /* MediaConfiguration.swift in Sources */,
+				D40000000000000000000052 /* ViceCallbacks.swift in Sources */,
 				D40000000000000000000012 /* ContentView.swift in Sources */,
 				D40000000000000000000013 /* EmulatorMetalView.swift in Sources */,
 				D40000000000000000000014 /* EmulatorRenderer.swift in Sources */,
@@ -502,8 +712,53 @@
 				D4000000000000000000001A /* VideoFilterSettings.swift in Sources */,
 				D4000000000000000000001B /* VideoFilterControls.swift in Sources */,
 				D4000000000000000000001D /* EmulatedMachine.swift in Sources */,
+				D4000000000000000000001E /* EmulatorShaders.metal in Sources */,
 				D4000000000000000000001C /* ViceEngineBridge.c in Sources */,
 				D40000000000000000000015 /* SettingsView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E50000000000000000000041 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E50000000000000000000010 /* ViceMacApp.swift in Sources */,
+				E50000000000000000000011 /* EmulatorSession.swift in Sources */,
+				E50000000000000000000050 /* EmulatorDefaults.swift in Sources */,
+				E50000000000000000000053 /* ControlConfiguration.swift in Sources */,
+				E50000000000000000000054 /* DriveConfiguration.swift in Sources */,
+				E50000000000000000000051 /* KeyboardMapping.swift in Sources */,
+				E50000000000000000000055 /* MediaConfiguration.swift in Sources */,
+				E50000000000000000000052 /* ViceCallbacks.swift in Sources */,
+				E50000000000000000000012 /* ContentView.swift in Sources */,
+				E50000000000000000000013 /* EmulatorMetalView.swift in Sources */,
+				E50000000000000000000014 /* EmulatorRenderer.swift in Sources */,
+				E50000000000000000000017 /* EmulatorFrameSource.swift in Sources */,
+				E5000000000000000000001A /* VideoFilterSettings.swift in Sources */,
+				E5000000000000000000001B /* VideoFilterControls.swift in Sources */,
+				E5000000000000000000001D /* EmulatedMachine.swift in Sources */,
+				E5000000000000000000001E /* EmulatorShaders.metal in Sources */,
+				E5000000000000000000001C /* ViceEngineBridge.c in Sources */,
+				E50000000000000000000015 /* SettingsView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F60000000000000000000041 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F60000000000000000000010 /* ModelConfigurationTests.swift in Sources */,
+				F60000000000000000000011 /* EmulatorSession.swift in Sources */,
+				F60000000000000000000050 /* EmulatorDefaults.swift in Sources */,
+				F60000000000000000000053 /* ControlConfiguration.swift in Sources */,
+				F60000000000000000000054 /* DriveConfiguration.swift in Sources */,
+				F60000000000000000000051 /* KeyboardMapping.swift in Sources */,
+				F60000000000000000000055 /* MediaConfiguration.swift in Sources */,
+				F60000000000000000000052 /* ViceCallbacks.swift in Sources */,
+				F60000000000000000000012 /* EmulatedMachine.swift in Sources */,
+				F60000000000000000000013 /* EmulatorFrameSource.swift in Sources */,
+				F60000000000000000000014 /* VideoFilterSettings.swift in Sources */,
+				F60000000000000000000015 /* ViceEngineBridge.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -931,6 +1186,150 @@
 			};
 			name = Release;
 		};
+		E50000000000000000000062 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_DEBUG_DYLIB = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/ViceMac/Engine",
+					"$(SRCROOT)/../vice/src/arch/macos",
+				);
+				INFOPLIST_KEY_CFBundleDisplayName = "VICE Mac C128";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.barrywalker.vicemac.c128;
+				PRODUCT_NAME = "VICE Mac C128";
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) VICE_MAC_MACHINE_X128";
+				SWIFT_OBJC_BRIDGING_HEADER = "ViceMac/Engine/ViceMac-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
+				VICE_MACOS_MACHINE_TARGETS = x128;
+			};
+			name = Debug;
+		};
+		E50000000000000000000063 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/ViceMac/Engine",
+					"$(SRCROOT)/../vice/src/arch/macos",
+				);
+				INFOPLIST_KEY_CFBundleDisplayName = "VICE Mac C128";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.barrywalker.vicemac.c128;
+				PRODUCT_NAME = "VICE Mac C128";
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) VICE_MAC_MACHINE_X128";
+				SWIFT_OBJC_BRIDGING_HEADER = "ViceMac/Engine/ViceMac-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
+				VALIDATE_PRODUCT = YES;
+				VICE_MACOS_MACHINE_TARGETS = x128;
+			};
+			name = Release;
+		};
+		F60000000000000000000062 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				BUNDLE_LOADER = "";
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/ViceMac/Engine",
+					"$(SRCROOT)/../vice/src/arch/macos",
+				);
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@loader_path/../Frameworks",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.barrywalker.vicemac.tests;
+				PRODUCT_NAME = ViceMacTests;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_OBJC_BRIDGING_HEADER = "ViceMac/Engine/ViceMac-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "";
+				WRAPPER_EXTENSION = xctest;
+			};
+			name = Debug;
+		};
+		F60000000000000000000063 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				BUNDLE_LOADER = "";
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/ViceMac/Engine",
+					"$(SRCROOT)/../vice/src/arch/macos",
+				);
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@loader_path/../Frameworks",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.barrywalker.vicemac.tests;
+				PRODUCT_NAME = ViceMacTests;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_OBJC_BRIDGING_HEADER = "ViceMac/Engine/ViceMac-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "";
+				VALIDATE_PRODUCT = YES;
+				WRAPPER_EXTENSION = xctest;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -975,6 +1374,24 @@
 			buildConfigurations = (
 				D40000000000000000000062 /* Debug */,
 				D40000000000000000000063 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E50000000000000000000080 /* Build configuration list for PBXNativeTarget "ViceMacC128" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E50000000000000000000062 /* Debug */,
+				E50000000000000000000063 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		F60000000000000000000080 /* Build configuration list for PBXNativeTarget "ViceMacTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F60000000000000000000062 /* Debug */,
+				F60000000000000000000063 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

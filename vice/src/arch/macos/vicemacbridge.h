@@ -106,6 +106,7 @@ int vicemac_queue_drive_attach_disk(uint32_t unit,
                                     uint32_t drive,
                                     const char *path,
                                     int autorun);
+int vicemac_queue_drive_sound_preview(uint32_t unit);
 int vicemac_queue_cartridge_attach(const char *path);
 int vicemac_queue_cartridge_detach(void);
 void vicemac_dispatch_queued_events(void);

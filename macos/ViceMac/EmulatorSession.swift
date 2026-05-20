@@ -3,984 +3,6 @@ import Combine
 import Foundation
 import GameController
 
-struct DriveConfiguration: Identifiable, Codable, Equatable {
-    let unit: Int
-    var isAttached: Bool
-    var driveType: DriveType
-    var accessMode: DriveAccessMode
-    var soundEnabled: Bool
-    var soundVolume: Int
-
-    var id: Int { unit }
-
-    init(unit: Int,
-         isAttached: Bool,
-         driveType: DriveType,
-         accessMode: DriveAccessMode = .native,
-         soundEnabled: Bool,
-         soundVolume: Int) {
-        self.unit = unit
-        self.isAttached = isAttached
-        self.driveType = driveType
-        self.accessMode = accessMode
-        self.soundEnabled = soundEnabled
-        self.soundVolume = soundVolume
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-
-        unit = try container.decode(Int.self, forKey: .unit)
-        isAttached = try container.decode(Bool.self, forKey: .isAttached)
-        driveType = try container.decode(DriveType.self, forKey: .driveType)
-        accessMode = try container.decodeIfPresent(DriveAccessMode.self, forKey: .accessMode) ?? .native
-        soundEnabled = try container.decode(Bool.self, forKey: .soundEnabled)
-        soundVolume = try container.decode(Int.self, forKey: .soundVolume)
-    }
-}
-
-enum DriveAccessMode: String, CaseIterable, Codable, Identifiable {
-    case native
-    case fast
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .native:
-            return "Native"
-        case .fast:
-            return "Fast"
-        }
-    }
-
-    var detail: String {
-        switch self {
-        case .native:
-            return "True drive emulation"
-        case .fast:
-            return "Fast disk access"
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .native:
-            return "externaldrive"
-        case .fast:
-            return "bolt.fill"
-        }
-    }
-
-    var trueDriveEmulationResourceValue: Int32 {
-        switch self {
-        case .native:
-            return 1
-        case .fast:
-            return 0
-        }
-    }
-
-    var trapDeviceResourceValue: Int32 {
-        switch self {
-        case .native:
-            return 0
-        case .fast:
-            return 1
-        }
-    }
-}
-
-struct ControlPortConfiguration: Codable, Equatable {
-    var devices: [ControlDeviceConfiguration]
-    var port1DeviceID: UUID?
-    var port2DeviceID: UUID?
-
-    static let standard: ControlPortConfiguration = {
-        let keyboardWASD = ControlDeviceConfiguration.keyboard(name: "Keyboard WASD",
-                                                               mapping: .wasdAndSpace)
-        let keyboardArrows = ControlDeviceConfiguration.keyboard(name: "Keyboard Arrows",
-                                                                 mapping: .arrowsAndSpace)
-        let gameController = ControlDeviceConfiguration.joystick(name: "Game Controller")
-
-        return ControlPortConfiguration(devices: [keyboardWASD, keyboardArrows, gameController],
-                                        port1DeviceID: nil,
-                                        port2DeviceID: gameController.id)
-    }()
-
-    func assignedDeviceID(for port: ControlPort) -> UUID? {
-        switch port {
-        case .one:
-            return port1DeviceID
-        case .two:
-            return port2DeviceID
-        }
-    }
-
-    func assignedDevice(for port: ControlPort) -> ControlDeviceConfiguration? {
-        guard let id = assignedDeviceID(for: port) else {
-            return nil
-        }
-
-        return device(id: id)
-    }
-
-    func device(id: UUID) -> ControlDeviceConfiguration? {
-        devices.first { $0.id == id }
-    }
-
-    mutating func setAssignedDeviceID(_ deviceID: UUID?, for port: ControlPort) {
-        let validDeviceID = deviceID.flatMap { id in device(id: id)?.id }
-
-        switch port {
-        case .one:
-            port1DeviceID = validDeviceID
-        case .two:
-            port2DeviceID = validDeviceID
-        }
-    }
-
-    mutating func updateDevice(_ device: ControlDeviceConfiguration) {
-        guard let index = devices.firstIndex(where: { $0.id == device.id }) else {
-            return
-        }
-
-        devices[index] = device.normalized()
-    }
-
-    mutating func removeDevice(id: UUID) {
-        devices.removeAll { $0.id == id }
-
-        if port1DeviceID == id {
-            port1DeviceID = nil
-        }
-        if port2DeviceID == id {
-            port2DeviceID = nil
-        }
-    }
-
-    func sanitized() -> ControlPortConfiguration {
-        var configuration = self
-        configuration.devices = configuration.devices.map { $0.normalized() }
-
-        if let port1DeviceID,
-           configuration.device(id: port1DeviceID) == nil {
-            configuration.port1DeviceID = nil
-        }
-        if let port2DeviceID,
-           configuration.device(id: port2DeviceID) == nil {
-            configuration.port2DeviceID = nil
-        }
-
-        return configuration
-    }
-}
-
-struct ControlDeviceConfiguration: Identifiable, Codable, Equatable {
-    var id: UUID
-    var name: String
-    var kind: ControlDeviceKind
-    var keyboard: KeyboardJoystickMapping
-    var joystick: GameControllerJoystickMapping
-
-    var systemImage: String {
-        kind.systemImage
-    }
-
-    static func keyboard(name: String,
-                         mapping: KeyboardJoystickMapping = .wasdAndSpace) -> ControlDeviceConfiguration {
-        ControlDeviceConfiguration(id: UUID(),
-                                   name: name,
-                                   kind: .keyboard,
-                                   keyboard: mapping,
-                                   joystick: .standard)
-    }
-
-    static func joystick(name: String,
-                         mapping: GameControllerJoystickMapping = .standard) -> ControlDeviceConfiguration {
-        ControlDeviceConfiguration(id: UUID(),
-                                   name: name,
-                                   kind: .joystick,
-                                   keyboard: .wasdAndSpace,
-                                   joystick: mapping)
-    }
-
-    func normalized() -> ControlDeviceConfiguration {
-        var device = self
-        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        device.name = trimmedName.isEmpty ? kind.defaultName : trimmedName
-        device.joystick = joystick.normalized()
-        return device
-    }
-}
-
-enum ControlDeviceKind: String, CaseIterable, Codable, Identifiable {
-    case keyboard
-    case joystick
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .keyboard:
-            return "Keyboard"
-        case .joystick:
-            return "Joystick"
-        }
-    }
-
-    var defaultName: String {
-        switch self {
-        case .keyboard:
-            return "Keyboard"
-        case .joystick:
-            return "Joystick"
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .keyboard:
-            return "keyboard"
-        case .joystick:
-            return "gamecontroller"
-        }
-    }
-
-    var viceJoyPortDevice: Int32 {
-        switch self {
-        case .keyboard, .joystick:
-            return ViceJoyPortDevice.joystick
-        }
-    }
-}
-
-enum ControlDeviceConnectionState: Equatable {
-    case connected
-    case unavailable(String)
-
-    var isConnected: Bool {
-        switch self {
-        case .connected:
-            return true
-        case .unavailable:
-            return false
-        }
-    }
-
-    var title: String {
-        switch self {
-        case .connected:
-            return "Connected"
-        case .unavailable(let reason):
-            return reason
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .connected:
-            return "checkmark.circle"
-        case .unavailable:
-            return "exclamationmark.triangle"
-        }
-    }
-}
-
-struct KeyboardJoystickMapping: Codable, Equatable {
-    var up: UInt16
-    var down: UInt16
-    var left: UInt16
-    var right: UInt16
-    var fire: UInt16
-
-    static let arrowsAndSpace = KeyboardJoystickMapping(up: MacJoystickKeyCode.upArrow,
-                                                        down: MacJoystickKeyCode.downArrow,
-                                                        left: MacJoystickKeyCode.leftArrow,
-                                                        right: MacJoystickKeyCode.rightArrow,
-                                                        fire: MacJoystickKeyCode.space)
-    static let wasdAndSpace = KeyboardJoystickMapping(up: MacJoystickKeyCode.w,
-                                                      down: MacJoystickKeyCode.s,
-                                                      left: MacJoystickKeyCode.a,
-                                                      right: MacJoystickKeyCode.d,
-                                                      fire: MacJoystickKeyCode.space)
-
-    func keyCode(for action: JoystickAction) -> UInt16 {
-        switch action {
-        case .up:
-            return up
-        case .down:
-            return down
-        case .left:
-            return left
-        case .right:
-            return right
-        case .fire:
-            return fire
-        }
-    }
-
-    mutating func setKeyCode(_ keyCode: UInt16, for action: JoystickAction) {
-        switch action {
-        case .up:
-            up = keyCode
-        case .down:
-            down = keyCode
-        case .left:
-            left = keyCode
-        case .right:
-            right = keyCode
-        case .fire:
-            fire = keyCode
-        }
-    }
-
-    func joystickBit(for keyCode: UInt16) -> UInt16? {
-        for action in JoystickAction.allCases where self.keyCode(for: action) == keyCode {
-            return action.bit
-        }
-
-        return nil
-    }
-}
-
-struct GameControllerJoystickMapping: Codable, Equatable {
-    var preferredControllerName: String?
-    var deadZone: Double
-    var up: GameControllerControl
-    var down: GameControllerControl
-    var left: GameControllerControl
-    var right: GameControllerControl
-    var fire: GameControllerControl
-
-    static let standard = GameControllerJoystickMapping(preferredControllerName: nil,
-                                                        deadZone: 0.28,
-                                                        up: .dpadUp,
-                                                        down: .dpadDown,
-                                                        left: .dpadLeft,
-                                                        right: .dpadRight,
-                                                        fire: .buttonSouth)
-
-    func control(for action: JoystickAction) -> GameControllerControl {
-        switch action {
-        case .up:
-            return up
-        case .down:
-            return down
-        case .left:
-            return left
-        case .right:
-            return right
-        case .fire:
-            return fire
-        }
-    }
-
-    mutating func setControl(_ control: GameControllerControl, for action: JoystickAction) {
-        switch action {
-        case .up:
-            up = control
-        case .down:
-            down = control
-        case .left:
-            left = control
-        case .right:
-            right = control
-        case .fire:
-            fire = control
-        }
-    }
-
-    func normalized() -> GameControllerJoystickMapping {
-        var mapping = self
-        mapping.deadZone = min(max(deadZone, 0.05), 0.95)
-
-        if preferredControllerName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == true {
-            mapping.preferredControllerName = nil
-        }
-
-        return mapping
-    }
-}
-
-enum GameControllerControl: String, CaseIterable, Codable, Identifiable {
-    case dpadUp
-    case dpadDown
-    case dpadLeft
-    case dpadRight
-    case leftStickUp
-    case leftStickDown
-    case leftStickLeft
-    case leftStickRight
-    case buttonSouth
-    case buttonEast
-    case buttonWest
-    case buttonNorth
-    case leftShoulder
-    case rightShoulder
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .dpadUp:
-            return "D-Pad Up"
-        case .dpadDown:
-            return "D-Pad Down"
-        case .dpadLeft:
-            return "D-Pad Left"
-        case .dpadRight:
-            return "D-Pad Right"
-        case .leftStickUp:
-            return "Left Stick Up"
-        case .leftStickDown:
-            return "Left Stick Down"
-        case .leftStickLeft:
-            return "Left Stick Left"
-        case .leftStickRight:
-            return "Left Stick Right"
-        case .buttonSouth:
-            return "South Button"
-        case .buttonEast:
-            return "East Button"
-        case .buttonWest:
-            return "West Button"
-        case .buttonNorth:
-            return "North Button"
-        case .leftShoulder:
-            return "Left Shoulder"
-        case .rightShoulder:
-            return "Right Shoulder"
-        }
-    }
-
-    func isActive(on gamepad: GCExtendedGamepad, deadZone: Float) -> Bool {
-        switch self {
-        case .dpadUp:
-            return gamepad.dpad.yAxis.value >= deadZone
-        case .dpadDown:
-            return gamepad.dpad.yAxis.value <= -deadZone
-        case .dpadLeft:
-            return gamepad.dpad.xAxis.value <= -deadZone
-        case .dpadRight:
-            return gamepad.dpad.xAxis.value >= deadZone
-        case .leftStickUp:
-            return gamepad.leftThumbstick.yAxis.value >= deadZone
-        case .leftStickDown:
-            return gamepad.leftThumbstick.yAxis.value <= -deadZone
-        case .leftStickLeft:
-            return gamepad.leftThumbstick.xAxis.value <= -deadZone
-        case .leftStickRight:
-            return gamepad.leftThumbstick.xAxis.value >= deadZone
-        case .buttonSouth:
-            return gamepad.buttonA.isPressed
-        case .buttonEast:
-            return gamepad.buttonB.isPressed
-        case .buttonWest:
-            return gamepad.buttonX.isPressed
-        case .buttonNorth:
-            return gamepad.buttonY.isPressed
-        case .leftShoulder:
-            return gamepad.leftShoulder.isPressed
-        case .rightShoulder:
-            return gamepad.rightShoulder.isPressed
-        }
-    }
-
-    func isActive(on gamepad: GCMicroGamepad, deadZone: Float) -> Bool {
-        switch self {
-        case .dpadUp:
-            return gamepad.dpad.yAxis.value >= deadZone
-        case .dpadDown:
-            return gamepad.dpad.yAxis.value <= -deadZone
-        case .dpadLeft:
-            return gamepad.dpad.xAxis.value <= -deadZone
-        case .dpadRight:
-            return gamepad.dpad.xAxis.value >= deadZone
-        case .buttonSouth:
-            return gamepad.buttonA.isPressed
-        case .buttonWest:
-            return gamepad.buttonX.isPressed
-        case .leftStickUp, .leftStickDown, .leftStickLeft, .leftStickRight,
-             .buttonEast, .buttonNorth, .leftShoulder, .rightShoulder:
-            return false
-        }
-    }
-
-    static func capturedControl(from controller: GCController, deadZone: Float) -> GameControllerControl? {
-        if let extendedGamepad = controller.extendedGamepad {
-            return capturedControl(from: extendedGamepad, deadZone: deadZone)
-        }
-        if let microGamepad = controller.microGamepad {
-            return capturedControl(from: microGamepad, deadZone: deadZone)
-        }
-
-        return nil
-    }
-
-    static func capturedControl(from gamepad: GCExtendedGamepad, deadZone: Float) -> GameControllerControl? {
-        let controls: [GameControllerControl] = [
-            .buttonSouth,
-            .buttonEast,
-            .buttonWest,
-            .buttonNorth,
-            .leftShoulder,
-            .rightShoulder,
-            .dpadUp,
-            .dpadDown,
-            .dpadLeft,
-            .dpadRight,
-            .leftStickUp,
-            .leftStickDown,
-            .leftStickLeft,
-            .leftStickRight
-        ]
-
-        return controls.first { $0.isActive(on: gamepad, deadZone: deadZone) }
-    }
-
-    static func capturedControl(from gamepad: GCMicroGamepad, deadZone: Float) -> GameControllerControl? {
-        let controls: [GameControllerControl] = [
-            .buttonSouth,
-            .buttonWest,
-            .dpadUp,
-            .dpadDown,
-            .dpadLeft,
-            .dpadRight
-        ]
-
-        return controls.first { $0.isActive(on: gamepad, deadZone: deadZone) }
-    }
-}
-
-enum JoystickAction: String, CaseIterable, Identifiable, Hashable {
-    case up
-    case down
-    case left
-    case right
-    case fire
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .up:
-            return "Up"
-        case .down:
-            return "Down"
-        case .left:
-            return "Left"
-        case .right:
-            return "Right"
-        case .fire:
-            return "Fire"
-        }
-    }
-
-    var bit: UInt16 {
-        switch self {
-        case .up:
-            return JoystickBits.up
-        case .down:
-            return JoystickBits.down
-        case .left:
-            return JoystickBits.left
-        case .right:
-            return JoystickBits.right
-        case .fire:
-            return JoystickBits.fire
-        }
-    }
-}
-
-enum ControlPort: Int, CaseIterable, Identifiable {
-    case one = 1
-    case two = 2
-
-    var id: Int { rawValue }
-    var title: String { "Port \(rawValue)" }
-    var resourceName: String { "JoyPort\(rawValue)Device" }
-    var joystickIndex: UInt32 { UInt32(rawValue - 1) }
-}
-
-enum KeyboardKeyName {
-    static func title(for keyCode: UInt16) -> String {
-        switch keyCode {
-        case MacJoystickKeyCode.a:
-            return "A"
-        case MacJoystickKeyCode.s:
-            return "S"
-        case MacJoystickKeyCode.d:
-            return "D"
-        case MacJoystickKeyCode.w:
-            return "W"
-        case MacJoystickKeyCode.space:
-            return "Space"
-        case MacJoystickKeyCode.leftArrow:
-            return "Left Arrow"
-        case MacJoystickKeyCode.rightArrow:
-            return "Right Arrow"
-        case MacJoystickKeyCode.downArrow:
-            return "Down Arrow"
-        case MacJoystickKeyCode.upArrow:
-            return "Up Arrow"
-        default:
-            return "Key \(keyCode)"
-        }
-    }
-}
-
-private enum JoystickBits {
-    static let up: UInt16 = 1 << 0
-    static let down: UInt16 = 1 << 1
-    static let left: UInt16 = 1 << 2
-    static let right: UInt16 = 1 << 3
-    static let fire: UInt16 = 1 << 4
-    static let all: UInt16 = up | down | left | right | fire
-}
-
-private enum MacJoystickKeyCode {
-    static let a: UInt16 = 0
-    static let s: UInt16 = 1
-    static let d: UInt16 = 2
-    static let w: UInt16 = 13
-    static let space: UInt16 = 49
-    static let leftArrow: UInt16 = 123
-    static let rightArrow: UInt16 = 124
-    static let downArrow: UInt16 = 125
-    static let upArrow: UInt16 = 126
-}
-
-struct ROMImageConfiguration: Codable, Equatable {
-    private var paths: [String: String]
-
-    static let standard = ROMImageConfiguration(paths: [:])
-
-    init(paths: [String: String] = [:]) {
-        self.paths = paths
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-
-        if let paths = try container.decodeIfPresent([String: String].self, forKey: .paths) {
-            self.paths = paths
-            return
-        }
-
-        var legacyPaths: [String: String] = [:]
-        if let basicPath = try container.decodeIfPresent(String.self, forKey: .basicPath) {
-            legacyPaths[MachineROMSlot.c64Basic.id] = basicPath
-        }
-        if let kernalPath = try container.decodeIfPresent(String.self, forKey: .kernalPath) {
-            legacyPaths[MachineROMSlot.c64Kernal.id] = kernalPath
-        }
-        if let characterPath = try container.decodeIfPresent(String.self, forKey: .characterPath) {
-            legacyPaths[MachineROMSlot.c64Character.id] = characterPath
-        }
-        paths = legacyPaths
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(paths, forKey: .paths)
-    }
-
-    func path(for slot: MachineROMSlot) -> String? {
-        paths[slot.id]
-    }
-
-    func resourceValue(for slot: MachineROMSlot) -> String {
-        path(for: slot) ?? slot.defaultFileName
-    }
-
-    mutating func setPath(_ path: String?, for slot: MachineROMSlot) {
-        let normalizedPath = path?.isEmpty == false ? path : nil
-        paths[slot.id] = normalizedPath
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case paths
-        case basicPath
-        case kernalPath
-        case characterPath
-    }
-}
-
-enum DriveType: Int32, CaseIterable, Codable, Identifiable {
-    case c1540 = 1540
-    case c1541 = 1541
-    case c1541II = 1542
-    case c1551 = 1551
-    case c1570 = 1570
-    case c1571 = 1571
-    case c1581 = 1581
-    case fd2000 = 2000
-    case fd4000 = 4000
-    case c2031 = 2031
-    case c2040 = 2040
-    case c3040 = 3040
-    case c4040 = 4040
-    case sfd1001 = 1001
-    case c8050 = 8050
-    case c8250 = 8250
-    case d9090d9060 = 9000
-    case cmdHD = 4844
-
-    var id: Int32 { rawValue }
-
-    static let iecOptions: [DriveType] = [
-        .c1540,
-        .c1541,
-        .c1541II,
-        .c1570,
-        .c1571,
-        .c1581,
-        .fd2000,
-        .fd4000,
-        .cmdHD
-    ]
-
-    static let plus4Options: [DriveType] = [
-        .c1551
-    ] + iecOptions
-
-    static let petOptions: [DriveType] = [
-        .c2031,
-        .c2040,
-        .c3040,
-        .c4040,
-        .sfd1001,
-        .c8050,
-        .c8250,
-        .d9090d9060
-    ]
-
-    var title: String {
-        switch self {
-        case .c1540:
-            return "1540"
-        case .c1541:
-            return "1541"
-        case .c1541II:
-            return "1541-II"
-        case .c1551:
-            return "1551"
-        case .c1570:
-            return "1570"
-        case .c1571:
-            return "1571"
-        case .c1581:
-            return "1581"
-        case .fd2000:
-            return "FD-2000"
-        case .fd4000:
-            return "FD-4000"
-        case .c2031:
-            return "2031"
-        case .c2040:
-            return "2040"
-        case .c3040:
-            return "3040"
-        case .c4040:
-            return "4040"
-        case .sfd1001:
-            return "SFD-1001"
-        case .c8050:
-            return "8050"
-        case .c8250:
-            return "8250"
-        case .d9090d9060:
-            return "D9090/D9060"
-        case .cmdHD:
-            return "CMD HD"
-        }
-    }
-
-    var busTitle: String {
-        switch self {
-        case .c1551:
-            return "TCBM"
-        case .c2031, .c2040, .c3040, .c4040, .sfd1001, .c8050, .c8250, .d9090d9060:
-            return "IEEE-488"
-        default:
-            return "IEC serial"
-        }
-    }
-
-    var slotCount: Int {
-        switch self {
-        case .c2040, .c3040, .c4040, .c8050, .c8250:
-            return 2
-        default:
-            return 1
-        }
-    }
-
-    var driveNumbers: [Int] {
-        Array(0..<slotCount)
-    }
-
-    var defaultLEDColor: DriveLEDColor {
-        ledColor(forDriveNumber: 0)
-    }
-
-    func ledColor(forDriveNumber driveNumber: Int) -> DriveLEDColor {
-        switch self {
-        case .c1540, .c1541, .c1551, .c1570, .c2031, .c2040, .c3040, .c4040, .sfd1001, .d9090d9060:
-            return .red
-        case .c8050:
-            return .green
-        case .c8250:
-            return driveNumber == 0 ? .red : .green
-        case .c1541II, .c1571, .c1581, .fd2000, .fd4000, .cmdHD:
-            return .green
-        }
-    }
-
-    var supportedDiskImageTypes: [DiskImageFileType] {
-        switch self {
-        case .c1540, .c1541, .c1541II, .c1551, .c1570:
-            return [.d64, .d67, .g64, .p64, .x64]
-        case .c1571:
-            return [.d64, .d67, .d71, .g64, .g71, .p64, .x64]
-        case .c1581:
-            return [.d81]
-        case .fd2000, .fd4000:
-            return [.d81, .d1m, .d2m, .d4m]
-        case .c2031, .c2040, .c3040, .c4040:
-            return [.d64, .d67]
-        case .sfd1001, .c8050, .c8250:
-            return [.d80, .d82]
-        case .d9090d9060:
-            return [.d90]
-        case .cmdHD:
-            return [.dhd]
-        }
-    }
-
-    var supportedDiskImageDescription: String {
-        supportedDiskImageTypes.map(\.title).joined(separator: ", ")
-    }
-
-    func supportsDiskImage(url: URL) -> Bool {
-        guard let fileType = DiskImageFileType(url: url) else {
-            return false
-        }
-
-        return supportedDiskImageTypes.contains(fileType)
-    }
-}
-
-enum DiskImageFileType: String, CaseIterable, Identifiable {
-    case d64
-    case d67
-    case d71
-    case d80
-    case d81
-    case d82
-    case d90
-    case d1m
-    case d2m
-    case d4m
-    case dhd
-    case g64
-    case g71
-    case p64
-    case x64
-
-    var id: String { rawValue }
-    var title: String { rawValue.uppercased() }
-
-    init?(url: URL) {
-        self.init(rawValue: url.pathExtension.lowercased())
-    }
-}
-
-enum DriveLEDColor: Equatable {
-    case red
-    case green
-
-    init(viceColor: UInt32) {
-        self = (viceColor & 1) == 1 ? .green : .red
-    }
-}
-
-struct DriveActivity: Identifiable, Equatable {
-    let unit: Int
-    var isConfigured: Bool
-    var driveType: DriveType
-    var accessMode: DriveAccessMode
-    var activeDriveNumber: Int
-    var slots: [DriveSlotActivity]
-    var ledColor: DriveLEDColor
-    var ledIntensity: UInt32
-    var errorIntensity: UInt32
-    var track: UInt32?
-    var halfTrack: UInt32?
-    var diskSide: UInt32
-    var driveStatusCode: Int32
-    var driveStatusText: String?
-    var imagePath: String?
-
-    var id: Int { unit }
-    var isActive: Bool { ledIntensity > 0 }
-    var isFastAccessEnabled: Bool { accessMode == .fast }
-    var hasErrorStatus: Bool {
-        driveStatusCode != DriveStatusCode.ok
-            && driveStatusCode != DriveStatusCode.dosVersion
-    }
-    var hasMultipleSlots: Bool { driveType.slotCount > 1 }
-
-    var headPositionText: String? {
-        guard let track else {
-            return nil
-        }
-
-        return "T\(Self.paddedHeadValue(track))"
-    }
-
-    private static func paddedHeadValue(_ value: UInt32) -> String {
-        String(format: "%02u", value)
-    }
-}
-
-struct DriveSlotActivity: Identifiable, Equatable {
-    let driveNumber: Int
-    var ledColor: DriveLEDColor
-    var ledIntensity: UInt32
-    var imagePath: String?
-
-    var id: Int { driveNumber }
-    var isActive: Bool { ledIntensity > 0 }
-    var hasDiskImage: Bool { imagePath?.isEmpty == false }
-}
-
-struct CartridgeStatus: Equatable {
-    var isAttached: Bool
-    var cartridgeID: Int32
-    var cartridgeFlags: UInt32
-    var romSize: UInt32
-    var chipCount: UInt32
-    var bankCount: UInt32
-    var cartridgeName: String?
-    var imagePath: String?
-
-    static let detached = CartridgeStatus(isAttached: false,
-                                          cartridgeID: -1,
-                                          cartridgeFlags: 0,
-                                          romSize: 0,
-                                          chipCount: 0,
-                                          bankCount: 0,
-                                          cartridgeName: nil,
-                                          imagePath: nil)
-}
-
-private enum DriveStatusCode {
-    static let ok: Int32 = 0
-    static let dosVersion: Int32 = 73
-}
-
 enum MachineResetKind {
     case soft
     case hard
@@ -1077,6 +99,30 @@ enum RAMExpansion: String, CaseIterable, Identifiable {
         .plus60kD040,
         .plus60kD100,
         .plus256k
+    ]
+
+    static let c128Options: [RAMExpansion] = [
+        .none,
+        .reu128,
+        .reu256,
+        .reu512,
+        .reu1024,
+        .reu2048,
+        .reu4096,
+        .reu8192,
+        .reu16384,
+        .georam512,
+        .georam1024,
+        .georam2048,
+        .georam4096,
+        .ramcart64,
+        .ramcart128,
+        .dqbb16,
+        .dqbb32,
+        .dqbb64,
+        .dqbb128,
+        .dqbb256,
+        .isepic
     ]
 
     static let vic20Options: [RAMExpansion] = [
@@ -1442,6 +488,92 @@ enum RAMExpansion: String, CaseIterable, Identifiable {
         }
         return names.joined(separator: " + ")
     }
+
+    func resourcePlan(for machineID: MachineID) -> RAMExpansionResourcePlan {
+        RAMExpansionResourcePlan(disableAssignments: Self.disableAssignments(for: machineID),
+                                 enableAssignments: enableAssignments,
+                                 requiresHardReset: machineID == .xvic)
+    }
+
+    private static func disableAssignments(for machineID: MachineID) -> [ViceIntResourceAssignment] {
+        if machineID == .xvic {
+            return vic20BlockAssignments(for: [])
+        }
+
+        return [
+            ViceIntResourceAssignment(name: ViceResource.reu, value: 0),
+            ViceIntResourceAssignment(name: ViceResource.georam, value: 0),
+            ViceIntResourceAssignment(name: ViceResource.ramCart, value: 0),
+            ViceIntResourceAssignment(name: ViceResource.dqbb, value: 0),
+            ViceIntResourceAssignment(name: ViceResource.isepicCartridgeEnabled, value: 0),
+            ViceIntResourceAssignment(name: ViceResource.isepicSwitch, value: 0),
+            ViceIntResourceAssignment(name: ViceResource.memoryHack, value: 0)
+        ]
+    }
+
+    private var enableAssignments: [ViceIntResourceAssignment] {
+        switch device {
+        case .none:
+            return []
+        case .vic20Blocks:
+            return Self.vic20BlockAssignments(for: vic20RAMBlocks)
+        case .reu:
+            return sizedDeviceAssignments(sizeResource: ViceResource.reuSize,
+                                          enableResource: ViceResource.reu)
+        case .georam:
+            return sizedDeviceAssignments(sizeResource: ViceResource.georamSize,
+                                          enableResource: ViceResource.georam)
+        case .ramcart:
+            return sizedDeviceAssignments(sizeResource: ViceResource.ramCartSize,
+                                          enableResource: ViceResource.ramCart)
+        case .dqbb:
+            var assignments = sizedDeviceAssignments(sizeResource: ViceResource.dqbbSize,
+                                                     enableResource: ViceResource.dqbb)
+            assignments.insert(ViceIntResourceAssignment(name: ViceResource.dqbbMode,
+                                                        value: ViceDQBBMode.c64),
+                               at: assignments.isEmpty ? 0 : assignments.count - 1)
+            return assignments
+        case .isepic:
+            return [
+                ViceIntResourceAssignment(name: ViceResource.isepicSwitch, value: 1),
+                ViceIntResourceAssignment(name: ViceResource.isepicCartridgeEnabled, value: 1)
+            ]
+        case .memoryHack:
+            var assignments: [ViceIntResourceAssignment] = []
+            if let baseAddress {
+                switch self {
+                case .c64_256kDE00, .c64_256kDE80, .c64_256kDF00, .c64_256kDF80:
+                    assignments.append(ViceIntResourceAssignment(name: ViceResource.c64_256kBase,
+                                                                 value: baseAddress))
+                case .plus60kD040, .plus60kD100:
+                    assignments.append(ViceIntResourceAssignment(name: ViceResource.plus60kBase,
+                                                                 value: baseAddress))
+                default:
+                    break
+                }
+            }
+            assignments.append(ViceIntResourceAssignment(name: ViceResource.memoryHack,
+                                                        value: memoryHack))
+            return assignments
+        }
+    }
+
+    private func sizedDeviceAssignments(sizeResource: String,
+                                        enableResource: String) -> [ViceIntResourceAssignment] {
+        var assignments: [ViceIntResourceAssignment] = []
+        if let sizeKiB {
+            assignments.append(ViceIntResourceAssignment(name: sizeResource, value: sizeKiB))
+        }
+        assignments.append(ViceIntResourceAssignment(name: enableResource, value: 1))
+        return assignments
+    }
+
+    private static func vic20BlockAssignments(for blocks: Set<Int>) -> [ViceIntResourceAssignment] {
+        ViceResource.vic20RAMBlocks.map { resource in
+            ViceIntResourceAssignment(name: resource.name,
+                                      value: blocks.contains(resource.block) ? 1 : 0)
+        }
+    }
 }
 
 fileprivate enum RAMExpansionDevice {
@@ -1453,6 +585,12 @@ fileprivate enum RAMExpansionDevice {
     case dqbb
     case isepic
     case memoryHack
+}
+
+struct RAMExpansionResourcePlan: Equatable {
+    let disableAssignments: [ViceIntResourceAssignment]
+    let enableAssignments: [ViceIntResourceAssignment]
+    let requiresHardReset: Bool
 }
 
 @MainActor
@@ -1488,6 +626,22 @@ final class EmulatorSession: ObservableObject {
             statusText = "Display \(displayMode.title)"
         }
     }
+    @Published var displayOutput: MachineDisplayOutput {
+        didSet {
+            let normalizedOutput = machine.displayOutput(id: displayOutput.id)
+            guard displayOutput == normalizedOutput else {
+                displayOutput = normalizedOutput
+                return
+            }
+
+            guard displayOutput != oldValue else {
+                return
+            }
+
+            EmulatorDefaults.saveDisplayOutput(displayOutput, for: machine)
+            applyDisplayOutput()
+        }
+    }
     @Published var videoStandard: VideoStandard {
         didSet {
             guard videoStandard != oldValue else {
@@ -1514,7 +668,7 @@ final class EmulatorSession: ObservableObject {
                 return
             }
 
-            EmulatorDefaults.saveSoundEnabled(soundEnabled, for: machine)
+            EmulatorDefaults.saveSoundEnabled(soundEnabled)
             applySoundSettings()
         }
     }
@@ -1530,7 +684,7 @@ final class EmulatorSession: ObservableObject {
                 return
             }
 
-            EmulatorDefaults.saveSoundVolume(soundVolume, for: machine)
+            EmulatorDefaults.saveSoundVolume(soundVolume)
             applySoundSettings()
         }
     }
@@ -1610,6 +764,8 @@ final class EmulatorSession: ObservableObject {
             if !machine.capabilities.driveTypes.contains(configuration.driveType) {
                 configuration.driveType = defaults[index].driveType
             }
+
+            configuration.soundVolume = DriveConfiguration.normalizedSoundVolumePercent(configuration.soundVolume)
 
             return configuration
         }
@@ -1740,9 +896,10 @@ final class EmulatorSession: ObservableObject {
         videoStandard = EmulatorDefaults.loadVideoStandard(for: machine)
         emulationSpeed = EmulatorDefaults.loadEmulationSpeed(for: machine)
         displayMode = EmulatorDefaults.loadDisplayMode(for: machine)
+        displayOutput = EmulatorDefaults.loadDisplayOutput(for: machine)
         sidModel = EmulatorDefaults.loadSIDModel(for: machine)
-        soundEnabled = EmulatorDefaults.loadSoundEnabled(for: machine)
-        soundVolume = EmulatorDefaults.loadSoundVolume(for: machine)
+        soundEnabled = EmulatorDefaults.loadSoundEnabled()
+        soundVolume = EmulatorDefaults.loadSoundVolume()
         romImages = EmulatorDefaults.loadROMImages(for: machine)
         ramExpansion = EmulatorDefaults.loadRAMExpansion(for: machine)
         controlPorts = EmulatorDefaults.loadControlPorts(for: machine)
@@ -1992,11 +1149,12 @@ final class EmulatorSession: ObservableObject {
                                                                soundEnabled: soundEnabled,
                                                                soundVolume: soundVolume,
                                                                emulationSpeed: emulationSpeed,
+                                                               displayOutput: displayOutput,
                                                                romImages: romImages,
                                                                ramExpansion: ramExpansion,
                                                                driveConfigurations: driveConfigurations)
         let startupArguments = machine.startupArguments(configuration: startupConfiguration)
-        let started = machine.id.rawValue.withCString { machineIDPointer in
+        let startResult = machine.id.rawValue.withCString { machineIDPointer in
             dynamicLibraryPath.withCString { dynamicLibraryPathPointer in
                 startupArguments.withCStringArray { argumentCount, argumentPointers in
                     ViceEngineStartMachine(machineIDPointer,
@@ -2006,12 +1164,26 @@ final class EmulatorSession: ObservableObject {
                 }
             }
         }
+        guard let started = startResult else {
+            didStartEngine = false
+            statusText = "Unable to prepare startup arguments"
+            return
+        }
 
-        if started || ViceEngineIsRunning() {
+        let isRunning = started || ViceEngineIsRunning()
+        didStartEngine = isRunning
+
+        if isRunning {
             applyRuntimeConfiguration()
         }
 
-        statusText = started ? "\(machine.shortName) running" : "\(machine.shortName) already running"
+        if started {
+            statusText = "\(machine.shortName) running"
+        } else if isRunning {
+            statusText = "\(machine.shortName) already running"
+        } else {
+            statusText = "Unable to start \(machine.shortName)"
+        }
     }
 
     func reset(kind: MachineResetKind = .soft) {
@@ -2165,6 +1337,20 @@ final class EmulatorSession: ObservableObject {
         _ = ViceEngineResetDrive(UInt32(unit))
     }
 
+    func previewDriveSound(for configuration: DriveConfiguration) {
+        guard ViceEngineIsRunning(),
+              configuration.isAttached,
+              configuration.soundEnabled,
+              configuration.soundVolume > 0,
+              configuration.unit >= 8,
+              configuration.unit <= 11 else {
+            return
+        }
+
+        applyDriveSoundSettings()
+        _ = ViceEnginePreviewDriveSound(UInt32(configuration.unit))
+    }
+
     func attachDisk(to unit: Int, url: URL, autorun: Bool) {
         attachDisk(to: unit, driveNumber: 0, url: url, autorun: autorun)
     }
@@ -2232,6 +1418,7 @@ final class EmulatorSession: ObservableObject {
         applySIDModel(updateStatus: false)
         applySoundSettings(updateStatus: false)
         applyEmulationSpeed(updateStatus: false)
+        applyDisplayOutput(updateStatus: false)
         applyPauseState(updateStatus: false)
         if machine.id != .xplus4 {
             applyROMImages()
@@ -2295,6 +1482,20 @@ final class EmulatorSession: ObservableObject {
         }
     }
 
+    private func applyDisplayOutput(updateStatus: Bool = true) {
+        guard ViceEngineIsRunning(),
+              machine.supportsDisplayOutputSelection,
+              let resourceName = displayOutput.resourceName else {
+            return
+        }
+
+        setVICEIntResource(resourceName, value: displayOutput.resourceValue)
+
+        if updateStatus {
+            statusText = "Display \(displayOutput.statusTitle)"
+        }
+    }
+
     private func applySoundSettings(updateStatus: Bool = true) {
         guard ViceEngineIsRunning() else {
             return
@@ -2328,82 +1529,16 @@ final class EmulatorSession: ObservableObject {
             return
         }
 
-        disableRAMExpansionResources()
-
-        switch ramExpansion.device {
-        case .none:
-            break
-        case .vic20Blocks:
-            applyVIC20RAMBlocks(ramExpansion.vic20RAMBlocks)
-        case .reu:
-            if let sizeKiB = ramExpansion.sizeKiB {
-                setVICEIntResource(ViceResource.reuSize, value: sizeKiB)
-            }
-            setVICEIntResource(ViceResource.reu, value: 1)
-        case .georam:
-            if let sizeKiB = ramExpansion.sizeKiB {
-                setVICEIntResource(ViceResource.georamSize, value: sizeKiB)
-            }
-            setVICEIntResource(ViceResource.georam, value: 1)
-        case .ramcart:
-            if let sizeKiB = ramExpansion.sizeKiB {
-                setVICEIntResource(ViceResource.ramCartSize, value: sizeKiB)
-            }
-            setVICEIntResource(ViceResource.ramCart, value: 1)
-        case .dqbb:
-            if let sizeKiB = ramExpansion.sizeKiB {
-                setVICEIntResource(ViceResource.dqbbSize, value: sizeKiB)
-            }
-            setVICEIntResource(ViceResource.dqbbMode, value: ViceDQBBMode.c64)
-            setVICEIntResource(ViceResource.dqbb, value: 1)
-        case .isepic:
-            setVICEIntResource(ViceResource.isepicSwitch, value: 1)
-            setVICEIntResource(ViceResource.isepicCartridgeEnabled, value: 1)
-        case .memoryHack:
-            if let baseAddress = ramExpansion.baseAddress {
-                switch ramExpansion {
-                case .c64_256kDE00, .c64_256kDE80, .c64_256kDF00, .c64_256kDF80:
-                    setVICEIntResource(ViceResource.c64_256kBase, value: baseAddress)
-                case .plus60kD040, .plus60kD100:
-                    setVICEIntResource(ViceResource.plus60kBase, value: baseAddress)
-                default:
-                    break
-                }
-            }
-            setVICEIntResource(ViceResource.memoryHack, value: ramExpansion.memoryHack)
+        let plan = ramExpansion.resourcePlan(for: machine.id)
+        for assignment in plan.disableAssignments + plan.enableAssignments {
+            setVICEIntResource(assignment.name, value: assignment.value)
         }
 
         if updateStatus {
-            if machine.id == .xvic {
+            if plan.requiresHardReset {
                 _ = ViceEngineTriggerMachineReset(true)
             }
             statusText = "RAM expansion \(ramExpansion.statusTitle)"
-        }
-    }
-
-    private func disableRAMExpansionResources() {
-        if machine.id == .xvic {
-            disableVIC20RAMExpansionResources()
-            return
-        }
-
-        setVICEIntResource(ViceResource.reu, value: 0)
-        setVICEIntResource(ViceResource.georam, value: 0)
-        setVICEIntResource(ViceResource.ramCart, value: 0)
-        setVICEIntResource(ViceResource.dqbb, value: 0)
-        setVICEIntResource(ViceResource.isepicCartridgeEnabled, value: 0)
-        setVICEIntResource(ViceResource.isepicSwitch, value: 0)
-        setVICEIntResource(ViceResource.memoryHack, value: 0)
-    }
-
-    private func disableVIC20RAMExpansionResources() {
-        applyVIC20RAMBlocks([])
-    }
-
-    private func applyVIC20RAMBlocks(_ blocks: Set<Int>) {
-        for resource in ViceResource.vic20RAMBlocks {
-            setVICEIntResource(resource.name,
-                               value: blocks.contains(resource.block) ? 1 : 0)
         }
     }
 
@@ -2429,15 +1564,7 @@ final class EmulatorSession: ObservableObject {
             return
         }
 
-        let driveSoundEnabled = driveConfigurations.contains { $0.soundEnabled }
-        setVICEIntResource("DriveSoundEmulation", value: driveSoundEnabled ? 1 : 0)
-        if driveSoundEnabled,
-           let volume = driveConfigurations
-               .filter(\.soundEnabled)
-               .map(\.soundVolume)
-               .max() {
-            setVICEIntResource("DriveSoundEmulationVolume", value: Int32(volume))
-        }
+        applyDriveSoundSettings()
 
         for configuration in driveConfigurations {
             let driveType = configuration.isAttached ? configuration.driveType.rawValue : 0
@@ -2462,6 +1589,7 @@ final class EmulatorSession: ObservableObject {
         }
 
         var accessModeUpdates: [DriveConfiguration] = []
+        var driveSoundSettingsChanged = false
 
         for configuration in driveConfigurations {
             guard let oldConfiguration = oldConfigurations.first(where: { $0.unit == configuration.unit }) else {
@@ -2473,22 +1601,49 @@ final class EmulatorSession: ObservableObject {
                 continue
             }
 
-            let onlyAccessModeChanged = configuration.accessMode != oldConfiguration.accessMode
-                && configuration.isAttached == oldConfiguration.isAttached
+            let driveHardwareUnchanged = configuration.isAttached == oldConfiguration.isAttached
                 && configuration.driveType == oldConfiguration.driveType
-                && configuration.soundEnabled == oldConfiguration.soundEnabled
-                && configuration.soundVolume == oldConfiguration.soundVolume
+            let accessModeChanged = configuration.accessMode != oldConfiguration.accessMode
+            let driveSoundChanged = configuration.soundEnabled != oldConfiguration.soundEnabled
+                || configuration.soundVolume != oldConfiguration.soundVolume
 
-            guard onlyAccessModeChanged else {
+            guard driveHardwareUnchanged else {
                 applyDriveConfigurations()
                 return
             }
 
-            accessModeUpdates.append(configuration)
+            if accessModeChanged {
+                accessModeUpdates.append(configuration)
+            }
+
+            if driveSoundChanged {
+                driveSoundSettingsChanged = true
+            }
+
+            guard accessModeChanged || driveSoundChanged else {
+                applyDriveConfigurations()
+                return
+            }
+        }
+
+        if driveSoundSettingsChanged {
+            applyDriveSoundSettings()
         }
 
         for configuration in accessModeUpdates {
             applyDriveAccessMode(configuration)
+        }
+    }
+
+    private func applyDriveSoundSettings() {
+        let driveSoundEnabled = driveConfigurations.contains { $0.isAttached && $0.soundEnabled }
+        setVICEIntResource("DriveSoundEmulation", value: driveSoundEnabled ? 1 : 0)
+        if driveSoundEnabled,
+           let volume = driveConfigurations
+               .filter({ $0.isAttached && $0.soundEnabled })
+               .map(\.viceSoundVolume)
+               .max() {
+            setVICEIntResource("DriveSoundEmulationVolume", value: volume)
         }
     }
 
@@ -2773,48 +1928,6 @@ final class EmulatorSession: ObservableObject {
     }
 }
 
-private struct PressedEmulatorKey {
-    let symbol: Int64
-    let modifiers: Int32
-}
-
-private struct EmulatorModifierKey {
-    let symbol: Int64
-    let modifiers: Int32
-    let isToggle: Bool
-}
-
-struct DriveStatusSnapshot {
-    let unit: Int
-    let enabled: Bool
-    let driveType: Int32
-    let activeDriveNumber: UInt32
-    let ledColor: UInt32
-    let ledIntensity: UInt32
-    let errorIntensity: UInt32
-    let drive0LEDIntensity: UInt32
-    let drive1LEDIntensity: UInt32
-    let track: UInt32?
-    let halfTrack: UInt32?
-    let diskSide: UInt32
-    let driveStatusCode: Int32
-    let driveStatusText: String?
-    let imagePath: String?
-    let drive0ImagePath: String?
-    let drive1ImagePath: String?
-}
-
-struct CartridgeStatusSnapshot {
-    let isAttached: Bool
-    let cartridgeID: Int32
-    let cartridgeFlags: UInt32
-    let romSize: UInt32
-    let chipCount: UInt32
-    let bankCount: UInt32
-    let cartridgeName: String?
-    let imagePath: String?
-}
-
 private enum ViceResource {
     static let speed = "Speed"
     static let sidModel = "SidModel"
@@ -2843,394 +1956,27 @@ private enum ViceResource {
     ]
 }
 
-private enum ViceJoyPortDevice {
-    static let none: Int32 = 0
-    static let joystick: Int32 = 1
-}
-
 private enum ViceDQBBMode {
     static let c64: Int32 = 1
-}
-
-private enum EmulatorDefaults {
-    private static let videoStandardKey = "vice.videoStandard"
-    private static let emulationSpeedKey = "vice.emulationSpeed"
-    private static let displayModeKey = "vice.displayMode"
-    private static let sidModelKey = "vice.sidModel"
-    private static let soundEnabledKey = "vice.soundEnabled"
-    private static let soundVolumeKey = "vice.soundVolume"
-    private static let romImagesKey = "vice.romImages"
-    private static let ramExpansionKey = "vice.ramExpansion"
-    private static let controlPortsKey = "vice.controlPorts"
-    private static let driveConfigurationsKey = "vice.driveConfigurations"
-
-    static func loadVideoStandard(for machine: EmulatedMachine) -> EmulatorSession.VideoStandard {
-        guard let rawValue = UserDefaults.standard.string(forKey: key(videoStandardKey, machine: machine))
-                ?? legacyString(forKey: videoStandardKey, machine: machine) else {
-            return .ntsc
-        }
-
-        return EmulatorSession.VideoStandard(rawValue: rawValue) ?? .ntsc
-    }
-
-    static func saveVideoStandard(_ standard: EmulatorSession.VideoStandard, for machine: EmulatedMachine) {
-        UserDefaults.standard.set(standard.rawValue, forKey: key(videoStandardKey, machine: machine))
-    }
-
-    static func loadEmulationSpeed(for machine: EmulatedMachine) -> EmulatorSession.EmulationSpeed {
-        guard let rawValue = UserDefaults.standard.string(forKey: key(emulationSpeedKey, machine: machine))
-                ?? legacyString(forKey: emulationSpeedKey, machine: machine) else {
-            return .normal
-        }
-
-        return EmulatorSession.EmulationSpeed(rawValue: rawValue) ?? .normal
-    }
-
-    static func saveEmulationSpeed(_ speed: EmulatorSession.EmulationSpeed, for machine: EmulatedMachine) {
-        UserDefaults.standard.set(speed.rawValue, forKey: key(emulationSpeedKey, machine: machine))
-    }
-
-    static func loadDisplayMode(for machine: EmulatedMachine) -> EmulatorSession.DisplayMode {
-        guard let rawValue = UserDefaults.standard.string(forKey: displayModeKey) else {
-            return .native
-        }
-
-        return EmulatorSession.DisplayMode(rawValue: rawValue) ?? .native
-    }
-
-    static func saveDisplayMode(_ mode: EmulatorSession.DisplayMode, for machine: EmulatedMachine) {
-        UserDefaults.standard.set(mode.rawValue, forKey: displayModeKey)
-    }
-
-    static func loadSIDModel(for machine: EmulatedMachine) -> EmulatorSession.SIDModel {
-        let defaultsKey = key(sidModelKey, machine: machine)
-        let legacyKey = machine.id == .x64sc ? sidModelKey : defaultsKey
-        let activeKey = UserDefaults.standard.object(forKey: defaultsKey) != nil ? defaultsKey : legacyKey
-
-        guard UserDefaults.standard.object(forKey: activeKey) != nil else {
-            return .mos8580
-        }
-
-        let rawValue = Int32(UserDefaults.standard.integer(forKey: activeKey))
-        return EmulatorSession.SIDModel(rawValue: rawValue) ?? .mos8580
-    }
-
-    static func saveSIDModel(_ model: EmulatorSession.SIDModel, for machine: EmulatedMachine) {
-        UserDefaults.standard.set(Int(model.rawValue), forKey: key(sidModelKey, machine: machine))
-    }
-
-    static func loadSoundEnabled(for machine: EmulatedMachine) -> Bool {
-        guard UserDefaults.standard.object(forKey: soundEnabledKey) != nil else {
-            return true
-        }
-
-        return UserDefaults.standard.bool(forKey: soundEnabledKey)
-    }
-
-    static func saveSoundEnabled(_ enabled: Bool, for machine: EmulatedMachine) {
-        UserDefaults.standard.set(enabled, forKey: soundEnabledKey)
-    }
-
-    static func loadSoundVolume(for machine: EmulatedMachine) -> Int {
-        guard UserDefaults.standard.object(forKey: soundVolumeKey) != nil else {
-            return 100
-        }
-
-        return min(max(UserDefaults.standard.integer(forKey: soundVolumeKey), 0), 100)
-    }
-
-    static func saveSoundVolume(_ volume: Int, for machine: EmulatedMachine) {
-        UserDefaults.standard.set(min(max(volume, 0), 100), forKey: soundVolumeKey)
-    }
-
-    static func loadROMImages(for machine: EmulatedMachine) -> ROMImageConfiguration {
-        guard let data = UserDefaults.standard.data(forKey: key(romImagesKey, machine: machine))
-                ?? legacyData(forKey: romImagesKey, machine: machine),
-              let images = try? JSONDecoder().decode(ROMImageConfiguration.self, from: data) else {
-            return .standard
-        }
-
-        return images
-    }
-
-    static func saveROMImages(_ images: ROMImageConfiguration, for machine: EmulatedMachine) {
-        guard let data = try? JSONEncoder().encode(images) else {
-            return
-        }
-
-        UserDefaults.standard.set(data, forKey: key(romImagesKey, machine: machine))
-    }
-
-    static func loadRAMExpansion(for machine: EmulatedMachine) -> RAMExpansion {
-        guard machine.capabilities.supportsRAMExpansion,
-              let rawValue = UserDefaults.standard.string(forKey: key(ramExpansionKey, machine: machine))
-                ?? legacyString(forKey: ramExpansionKey, machine: machine) else {
-            return .none
-        }
-
-        guard let expansion = RAMExpansion(rawValue: rawValue),
-              machine.ramExpansions.contains(expansion) else {
-            return .none
-        }
-
-        return expansion
-    }
-
-    static func saveRAMExpansion(_ expansion: RAMExpansion, for machine: EmulatedMachine) {
-        UserDefaults.standard.set(expansion.rawValue, forKey: key(ramExpansionKey, machine: machine))
-    }
-
-    static func loadControlPorts(for machine: EmulatedMachine) -> ControlPortConfiguration {
-        guard let data = UserDefaults.standard.data(forKey: key(controlPortsKey, machine: machine))
-                ?? legacyData(forKey: controlPortsKey, machine: machine),
-              let configuration = try? JSONDecoder().decode(ControlPortConfiguration.self, from: data) else {
-            return .standard
-        }
-
-        return configuration.sanitized()
-    }
-
-    static func saveControlPorts(_ configuration: ControlPortConfiguration, for machine: EmulatedMachine) {
-        guard let data = try? JSONEncoder().encode(configuration) else {
-            return
-        }
-
-        UserDefaults.standard.set(data, forKey: key(controlPortsKey, machine: machine))
-    }
-
-    static func loadDriveConfigurations(for machine: EmulatedMachine) -> [DriveConfiguration] {
-        guard let data = UserDefaults.standard.data(forKey: key(driveConfigurationsKey, machine: machine))
-                ?? legacyData(forKey: driveConfigurationsKey, machine: machine),
-              let configurations = try? JSONDecoder().decode([DriveConfiguration].self, from: data),
-              configurations.map(\.unit) == machine.capabilities.driveUnits else {
-            return machine.defaultDriveConfigurations()
-        }
-
-        return EmulatorSession.normalizedDriveConfigurations(configurations, for: machine)
-    }
-
-    static func saveDriveConfigurations(_ configurations: [DriveConfiguration], for machine: EmulatedMachine) {
-        guard let data = try? JSONEncoder().encode(configurations) else {
-            return
-        }
-
-        UserDefaults.standard.set(data, forKey: key(driveConfigurationsKey, machine: machine))
-    }
-
-    private static func key(_ baseKey: String, machine: EmulatedMachine) -> String {
-        "\(baseKey).\(machine.id.rawValue)"
-    }
-
-    private static func legacyData(forKey baseKey: String, machine: EmulatedMachine) -> Data? {
-        guard machine.id == .x64sc else {
-            return nil
-        }
-
-        return UserDefaults.standard.data(forKey: baseKey)
-    }
-
-    private static func legacyString(forKey baseKey: String, machine: EmulatedMachine) -> String? {
-        guard machine.id == .x64sc else {
-            return nil
-        }
-
-        return UserDefaults.standard.string(forKey: baseKey)
-    }
-}
-
-private enum ViceMacKeyMapper {
-    private enum Modifier {
-        static let leftShift: Int32 = 1 << 0
-        static let rightShift: Int32 = 1 << 1
-        static let leftControl: Int32 = 1 << 2
-        static let leftOption: Int32 = 1 << 4
-        static let rightOption: Int32 = 1 << 5
-    }
-
-    private enum Key {
-        static let backspace: Int64 = 0xff08
-        static let tab: Int64 = 0xff09
-        static let returnKey: Int64 = 0xff0d
-        static let escape: Int64 = 0xff1b
-        static let insert: Int64 = 0xff63
-        static let delete: Int64 = 0xffff
-        static let home: Int64 = 0xff50
-        static let left: Int64 = 0xff51
-        static let up: Int64 = 0xff52
-        static let right: Int64 = 0xff53
-        static let down: Int64 = 0xff54
-        static let pageUp: Int64 = 0xff55
-        static let pageDown: Int64 = 0xff56
-        static let end: Int64 = 0xff57
-        static let shiftLeft: Int64 = 0xffe1
-        static let shiftRight: Int64 = 0xffe2
-        static let controlLeft: Int64 = 0xffe3
-        static let capsLock: Int64 = 0xffe5
-        static let f1: Int64 = 0xffbe
-    }
-
-    private enum MacKeyCode {
-        static let tab: UInt16 = 48
-        static let returnKey: UInt16 = 36
-        static let keypadEnter: UInt16 = 76
-        static let escape: UInt16 = 53
-        static let delete: UInt16 = 51
-        static let forwardDelete: UInt16 = 117
-        static let home: UInt16 = 115
-        static let end: UInt16 = 119
-        static let pageUp: UInt16 = 116
-        static let pageDown: UInt16 = 121
-        static let leftArrow: UInt16 = 123
-        static let rightArrow: UInt16 = 124
-        static let downArrow: UInt16 = 125
-        static let upArrow: UInt16 = 126
-        static let leftShift: UInt16 = 56
-        static let rightShift: UInt16 = 60
-        static let capsLock: UInt16 = 57
-        static let leftControl: UInt16 = 59
-        static let f1: UInt16 = 122
-        static let f2: UInt16 = 120
-        static let f3: UInt16 = 99
-        static let f4: UInt16 = 118
-        static let f5: UInt16 = 96
-        static let f6: UInt16 = 97
-        static let f7: UInt16 = 98
-        static let f8: UInt16 = 100
-        static let f9: UInt16 = 101
-        static let f10: UInt16 = 109
-        static let f11: UInt16 = 103
-        static let f12: UInt16 = 111
-    }
-
-    static func symbol(for event: NSEvent) -> Int64? {
-        if let special = specialSymbol(for: event.keyCode) {
-            return special
-        }
-
-        guard let scalar = event.characters?.unicodeScalars.first,
-              scalar.value >= 0x20,
-              scalar.value <= 0x7e else {
-            return nil
-        }
-
-        return Int64(scalar.value)
-    }
-
-    static func modifiers(for event: NSEvent) -> Int32 {
-        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        var modifiers: Int32 = 0
-
-        if flags.contains(.shift) {
-            modifiers |= Modifier.leftShift
-        }
-        if flags.contains(.control) {
-            modifiers |= Modifier.leftControl
-        }
-        if flags.contains(.option) {
-            modifiers |= Modifier.leftOption
-        }
-
-        return modifiers
-    }
-
-    static func modifierKey(for event: NSEvent) -> EmulatorModifierKey? {
-        switch event.keyCode {
-        case MacKeyCode.leftShift:
-            return EmulatorModifierKey(symbol: Key.shiftLeft,
-                                       modifiers: Modifier.leftShift,
-                                       isToggle: false)
-        case MacKeyCode.rightShift:
-            return EmulatorModifierKey(symbol: Key.shiftRight,
-                                       modifiers: Modifier.rightShift,
-                                       isToggle: false)
-        case MacKeyCode.leftControl:
-            return EmulatorModifierKey(symbol: Key.controlLeft,
-                                       modifiers: Modifier.leftControl,
-                                       isToggle: false)
-        case MacKeyCode.capsLock:
-            return EmulatorModifierKey(symbol: Key.capsLock,
-                                       modifiers: 0,
-                                       isToggle: true)
-        default:
-            return nil
-        }
-    }
-
-    private static func specialSymbol(for keyCode: UInt16) -> Int64? {
-        switch keyCode {
-        case MacKeyCode.tab:
-            return Key.tab
-        case MacKeyCode.returnKey, MacKeyCode.keypadEnter:
-            return Key.returnKey
-        case MacKeyCode.escape:
-            return Key.escape
-        case MacKeyCode.delete:
-            return Key.backspace
-        case MacKeyCode.forwardDelete:
-            return Key.delete
-        case MacKeyCode.home:
-            return Key.home
-        case MacKeyCode.end:
-            return Key.end
-        case MacKeyCode.pageUp:
-            return Key.pageUp
-        case MacKeyCode.pageDown:
-            return Key.pageDown
-        case MacKeyCode.leftArrow:
-            return Key.left
-        case MacKeyCode.rightArrow:
-            return Key.right
-        case MacKeyCode.downArrow:
-            return Key.down
-        case MacKeyCode.upArrow:
-            return Key.up
-        default:
-            return functionSymbol(for: keyCode)
-        }
-    }
-
-    private static func functionSymbol(for keyCode: UInt16) -> Int64? {
-        switch keyCode {
-        case MacKeyCode.f1:
-            return Key.f1
-        case MacKeyCode.f2:
-            return Key.f1 + 1
-        case MacKeyCode.f3:
-            return Key.f1 + 2
-        case MacKeyCode.f4:
-            return Key.f1 + 3
-        case MacKeyCode.f5:
-            return Key.f1 + 4
-        case MacKeyCode.f6:
-            return Key.f1 + 5
-        case MacKeyCode.f7:
-            return Key.f1 + 6
-        case MacKeyCode.f8:
-            return Key.f1 + 7
-        case MacKeyCode.f9:
-            return Key.f1 + 8
-        case MacKeyCode.f10:
-            return Key.f1 + 9
-        case MacKeyCode.f11:
-            return Key.f1 + 10
-        case MacKeyCode.f12:
-            return Key.f1 + 11
-        default:
-            return nil
-        }
-    }
 }
 
 private extension Array where Element == String {
     func withCStringArray<Result>(
         _ body: (Int32, UnsafePointer<UnsafePointer<CChar>?>?) -> Result
-    ) -> Result {
+    ) -> Result? {
+        guard count <= Int(Int32.max) else {
+            return nil
+        }
+
         var cStrings: [UnsafeMutablePointer<CChar>] = []
         cStrings.reserveCapacity(count)
 
         for string in self {
             guard let cString = strdup(string) else {
-                fatalError("Unable to allocate C string")
+                for cString in cStrings {
+                    free(cString)
+                }
+                return nil
             }
             cStrings.append(cString)
         }
@@ -3246,134 +1992,5 @@ private extension Array where Element == String {
         return pointers.withUnsafeBufferPointer { buffer in
             body(Int32(count), buffer.baseAddress)
         }
-    }
-}
-
-private let viceFrameCallback: @convention(c) (
-    UnsafePointer<ViceEngineVideoFrame>?,
-    UnsafeMutableRawPointer?
-) -> Void = { framePointer, context in
-    guard let framePointer,
-          let context,
-          framePointer.pointee.pixelFormat == 1,
-          framePointer.pointee.width > 0,
-          framePointer.pointee.height > 0,
-          framePointer.pointee.stride >= framePointer.pointee.width * 4,
-          let pixels = framePointer.pointee.pixels else {
-        return
-    }
-
-    let frame = framePointer.pointee
-    let byteCount = Int(frame.stride * frame.height)
-    let source = Unmanaged<EmulatorFrameSource>.fromOpaque(context).takeUnretainedValue()
-    let pixelData = Data(bytes: pixels, count: byteCount)
-
-    source.publish(EmulatorVideoFrame(width: Int(frame.width),
-                                      height: Int(frame.height),
-                                      bytesPerRow: Int(frame.stride),
-                                      sequence: frame.sequence,
-                                      pixels: pixelData))
-}
-
-private let viceDriveStatusCallback: @convention(c) (
-    UnsafePointer<ViceEngineDriveStatus>?,
-    UnsafeMutableRawPointer?
-) -> Void = { statusPointer, context in
-    guard let statusPointer,
-          let context else {
-        return
-    }
-
-    let status = statusPointer.pointee
-    let session = Unmanaged<EmulatorSession>.fromOpaque(context).takeUnretainedValue()
-    let imagePath: String?
-    let drive0ImagePath: String?
-    let drive1ImagePath: String?
-    let driveStatusText: String?
-
-    if let imagePathPointer = status.imagePath, imagePathPointer.pointee != 0 {
-        imagePath = String(cString: imagePathPointer)
-    } else {
-        imagePath = nil
-    }
-
-    if let drive0ImagePathPointer = status.drive0ImagePath, drive0ImagePathPointer.pointee != 0 {
-        drive0ImagePath = String(cString: drive0ImagePathPointer)
-    } else {
-        drive0ImagePath = nil
-    }
-
-    if let drive1ImagePathPointer = status.drive1ImagePath, drive1ImagePathPointer.pointee != 0 {
-        drive1ImagePath = String(cString: drive1ImagePathPointer)
-    } else {
-        drive1ImagePath = nil
-    }
-
-    if let driveStatusTextPointer = status.driveStatusText, driveStatusTextPointer.pointee != 0 {
-        driveStatusText = String(cString: driveStatusTextPointer)
-    } else {
-        driveStatusText = nil
-    }
-
-    let snapshot = DriveStatusSnapshot(unit: Int(status.unit),
-                                       enabled: status.enabled,
-                                       driveType: status.driveType,
-                                       activeDriveNumber: status.activeDriveNumber,
-                                       ledColor: status.ledColor,
-                                       ledIntensity: status.ledIntensity,
-                                       errorIntensity: status.errorIntensity,
-                                       drive0LEDIntensity: status.drive0LEDIntensity,
-                                       drive1LEDIntensity: status.drive1LEDIntensity,
-                                       track: status.trackValid ? status.track : nil,
-                                       halfTrack: status.trackValid ? status.halfTrack : nil,
-                                       diskSide: status.diskSide,
-                                       driveStatusCode: status.driveStatusCode,
-                                       driveStatusText: driveStatusText,
-                                       imagePath: imagePath,
-                                       drive0ImagePath: drive0ImagePath,
-                                       drive1ImagePath: drive1ImagePath)
-
-    Task { @MainActor in
-        session.handleDriveStatus(snapshot)
-    }
-}
-
-private let viceCartridgeStatusCallback: @convention(c) (
-    UnsafePointer<ViceEngineCartridgeStatus>?,
-    UnsafeMutableRawPointer?
-) -> Void = { statusPointer, context in
-    guard let statusPointer,
-          let context else {
-        return
-    }
-
-    let status = statusPointer.pointee
-    let session = Unmanaged<EmulatorSession>.fromOpaque(context).takeUnretainedValue()
-    let cartridgeName: String?
-    let imagePath: String?
-
-    if let cartridgeNamePointer = status.cartridgeName, cartridgeNamePointer.pointee != 0 {
-        cartridgeName = String(cString: cartridgeNamePointer)
-    } else {
-        cartridgeName = nil
-    }
-
-    if let imagePathPointer = status.imagePath, imagePathPointer.pointee != 0 {
-        imagePath = String(cString: imagePathPointer)
-    } else {
-        imagePath = nil
-    }
-
-    let snapshot = CartridgeStatusSnapshot(isAttached: status.attached,
-                                           cartridgeID: status.cartridgeID,
-                                           cartridgeFlags: status.cartridgeFlags,
-                                           romSize: status.romSize,
-                                           chipCount: status.chipCount,
-                                           bankCount: status.bankCount,
-                                           cartridgeName: cartridgeName,
-                                           imagePath: imagePath)
-
-    Task { @MainActor in
-        session.handleCartridgeStatus(snapshot)
     }
 }

@@ -23,6 +23,8 @@
 static uint8_t *frame_buffer = NULL;
 static size_t frame_buffer_size = 0;
 static video_canvas_t *active_canvas = NULL;
+static video_canvas_t *vicii_canvas = NULL;
+static video_canvas_t *vdc_canvas = NULL;
 static uint64_t published_frame_count = 0;
 static uint64_t last_vsync_frame_count = 0;
 
@@ -67,6 +69,54 @@ static int ensure_frame_buffer(size_t size)
     frame_buffer = new_buffer;
     frame_buffer_size = size;
     return 0;
+}
+
+static int is_c128_machine(void)
+{
+    return machine_class == VICE_MACHINE_C128;
+}
+
+static int canvas_chip(video_canvas_t *canvas)
+{
+    if (canvas != NULL &&
+        canvas->videoconfig != NULL &&
+        canvas->videoconfig->chip_name != NULL &&
+        strcmp(canvas->videoconfig->chip_name, "VDC") == 0) {
+        return VIDEO_CHIP_VDC;
+    }
+
+    return VIDEO_CHIP_VICII;
+}
+
+static int c128_column_key(void)
+{
+    int column_key = 1;
+
+    if (is_c128_machine() &&
+        resources_get_int("C128ColumnKey", &column_key) == 0) {
+        return column_key ? 1 : 0;
+    }
+
+    return 1;
+}
+
+static void update_active_canvas(void)
+{
+    if (is_c128_machine()) {
+        if (c128_column_key() == 0 && vdc_canvas != NULL) {
+            active_canvas = vdc_canvas;
+            return;
+        }
+
+        if (vicii_canvas != NULL) {
+            active_canvas = vicii_canvas;
+            return;
+        }
+    }
+
+    if (active_canvas == NULL) {
+        active_canvas = vicii_canvas != NULL ? vicii_canvas : vdc_canvas;
+    }
 }
 
 static unsigned int render_scale_for_axis(unsigned int scale,
@@ -231,6 +281,10 @@ static void extend_last_rendered_line(uint8_t *buffer,
 
 int video_arch_get_active_chip(void)
 {
+    if (is_c128_machine() && c128_column_key() == 0) {
+        return VIDEO_CHIP_VDC;
+    }
+
     return VIDEO_CHIP_VICII;
 }
 
@@ -289,15 +343,28 @@ video_canvas_t *video_canvas_create(video_canvas_t *canvas,
     }
 
     canvas->created = 1;
+    if (canvas_chip(canvas) == VIDEO_CHIP_VDC) {
+        vdc_canvas = canvas;
+    } else {
+        vicii_canvas = canvas;
+    }
     active_canvas = canvas;
+    update_active_canvas();
     return canvas;
 }
 
 void video_canvas_destroy(struct video_canvas_s *canvas)
 {
+    if (vicii_canvas == canvas) {
+        vicii_canvas = NULL;
+    }
+    if (vdc_canvas == canvas) {
+        vdc_canvas = NULL;
+    }
     if (active_canvas == canvas) {
         active_canvas = NULL;
     }
+    update_active_canvas();
 }
 
 void video_canvas_refresh(struct video_canvas_s *canvas,
@@ -335,6 +402,11 @@ void video_canvas_refresh(struct video_canvas_s *canvas,
         canvas->videoconfig == NULL ||
         canvas->viewport == NULL ||
         canvas->geometry == NULL) {
+        return;
+    }
+
+    update_active_canvas();
+    if (canvas != active_canvas) {
         return;
     }
 
@@ -401,8 +473,16 @@ void video_canvas_refresh(struct video_canvas_s *canvas,
     published_frame_count++;
 }
 
+video_canvas_t *vicemac_video_active_canvas(void)
+{
+    update_active_canvas();
+    return active_canvas;
+}
+
 void vicemac_video_refresh_if_idle(void)
 {
+    update_active_canvas();
+
     if (active_canvas == NULL || !vicemac_has_video_frame_callback()) {
         return;
     }

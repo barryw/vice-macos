@@ -1,0 +1,198 @@
+import Foundation
+
+enum EmulatorDefaults {
+    private static let videoStandardKey = "vice.videoStandard"
+    private static let emulationSpeedKey = "vice.emulationSpeed"
+    private static let displayModeKey = "vice.displayMode"
+    private static let sidModelKey = "vice.sidModel"
+    private static let soundEnabledKey = "vice.soundEnabled"
+    private static let soundVolumeKey = "vice.soundVolume"
+    private static let displayOutputKey = "vice.displayOutput"
+    private static let romImagesKey = "vice.romImages"
+    private static let ramExpansionKey = "vice.ramExpansion"
+    private static let controlPortsKey = "vice.controlPorts"
+    private static let driveConfigurationsKey = "vice.driveConfigurations"
+
+    static func loadVideoStandard(for machine: EmulatedMachine) -> EmulatorSession.VideoStandard {
+        guard let rawValue = UserDefaults.standard.string(forKey: key(videoStandardKey, machine: machine))
+                ?? legacyString(forKey: videoStandardKey, machine: machine) else {
+            return .ntsc
+        }
+
+        return EmulatorSession.VideoStandard(rawValue: rawValue) ?? .ntsc
+    }
+
+    static func saveVideoStandard(_ standard: EmulatorSession.VideoStandard, for machine: EmulatedMachine) {
+        UserDefaults.standard.set(standard.rawValue, forKey: key(videoStandardKey, machine: machine))
+    }
+
+    static func loadEmulationSpeed(for machine: EmulatedMachine) -> EmulatorSession.EmulationSpeed {
+        guard let rawValue = UserDefaults.standard.string(forKey: key(emulationSpeedKey, machine: machine))
+                ?? legacyString(forKey: emulationSpeedKey, machine: machine) else {
+            return .normal
+        }
+
+        return EmulatorSession.EmulationSpeed(rawValue: rawValue) ?? .normal
+    }
+
+    static func saveEmulationSpeed(_ speed: EmulatorSession.EmulationSpeed, for machine: EmulatedMachine) {
+        UserDefaults.standard.set(speed.rawValue, forKey: key(emulationSpeedKey, machine: machine))
+    }
+
+    static func loadDisplayMode(for machine: EmulatedMachine) -> EmulatorSession.DisplayMode {
+        guard let rawValue = UserDefaults.standard.string(forKey: key(displayModeKey, machine: machine))
+                ?? legacyString(forKey: displayModeKey, machine: machine) else {
+            return .native
+        }
+
+        return EmulatorSession.DisplayMode(rawValue: rawValue) ?? .native
+    }
+
+    static func saveDisplayMode(_ mode: EmulatorSession.DisplayMode, for machine: EmulatedMachine) {
+        UserDefaults.standard.set(mode.rawValue, forKey: key(displayModeKey, machine: machine))
+    }
+
+    static func loadDisplayOutput(for machine: EmulatedMachine) -> MachineDisplayOutput {
+        let rawValue = UserDefaults.standard.string(forKey: key(displayOutputKey, machine: machine))
+        return machine.displayOutput(id: rawValue)
+    }
+
+    static func saveDisplayOutput(_ output: MachineDisplayOutput, for machine: EmulatedMachine) {
+        UserDefaults.standard.set(output.id, forKey: key(displayOutputKey, machine: machine))
+    }
+
+    static func loadSIDModel(for machine: EmulatedMachine) -> EmulatorSession.SIDModel {
+        let defaultsKey = key(sidModelKey, machine: machine)
+        let legacyKey = machine.id == .x64sc ? sidModelKey : defaultsKey
+        let activeKey = UserDefaults.standard.object(forKey: defaultsKey) != nil ? defaultsKey : legacyKey
+
+        guard UserDefaults.standard.object(forKey: activeKey) != nil else {
+            return .mos8580
+        }
+
+        let rawValue = Int32(UserDefaults.standard.integer(forKey: activeKey))
+        return EmulatorSession.SIDModel(rawValue: rawValue) ?? .mos8580
+    }
+
+    static func saveSIDModel(_ model: EmulatorSession.SIDModel, for machine: EmulatedMachine) {
+        UserDefaults.standard.set(Int(model.rawValue), forKey: key(sidModelKey, machine: machine))
+    }
+
+    static func loadSoundEnabled() -> Bool {
+        guard UserDefaults.standard.object(forKey: soundEnabledKey) != nil else {
+            return true
+        }
+
+        return UserDefaults.standard.bool(forKey: soundEnabledKey)
+    }
+
+    static func saveSoundEnabled(_ enabled: Bool) {
+        UserDefaults.standard.set(enabled, forKey: soundEnabledKey)
+    }
+
+    static func loadSoundVolume() -> Int {
+        guard UserDefaults.standard.object(forKey: soundVolumeKey) != nil else {
+            return 100
+        }
+
+        return min(max(UserDefaults.standard.integer(forKey: soundVolumeKey), 0), 100)
+    }
+
+    static func saveSoundVolume(_ volume: Int) {
+        UserDefaults.standard.set(min(max(volume, 0), 100), forKey: soundVolumeKey)
+    }
+
+    static func loadROMImages(for machine: EmulatedMachine) -> ROMImageConfiguration {
+        guard let data = UserDefaults.standard.data(forKey: key(romImagesKey, machine: machine))
+                ?? legacyData(forKey: romImagesKey, machine: machine),
+              let images = try? JSONDecoder().decode(ROMImageConfiguration.self, from: data) else {
+            return .standard
+        }
+
+        return images
+    }
+
+    static func saveROMImages(_ images: ROMImageConfiguration, for machine: EmulatedMachine) {
+        guard let data = try? JSONEncoder().encode(images) else {
+            return
+        }
+
+        UserDefaults.standard.set(data, forKey: key(romImagesKey, machine: machine))
+    }
+
+    static func loadRAMExpansion(for machine: EmulatedMachine) -> RAMExpansion {
+        guard machine.capabilities.supportsRAMExpansion,
+              let rawValue = UserDefaults.standard.string(forKey: key(ramExpansionKey, machine: machine))
+                ?? legacyString(forKey: ramExpansionKey, machine: machine) else {
+            return .none
+        }
+
+        guard let expansion = RAMExpansion(rawValue: rawValue),
+              machine.ramExpansions.contains(expansion) else {
+            return .none
+        }
+
+        return expansion
+    }
+
+    static func saveRAMExpansion(_ expansion: RAMExpansion, for machine: EmulatedMachine) {
+        UserDefaults.standard.set(expansion.rawValue, forKey: key(ramExpansionKey, machine: machine))
+    }
+
+    static func loadControlPorts(for machine: EmulatedMachine) -> ControlPortConfiguration {
+        guard let data = UserDefaults.standard.data(forKey: key(controlPortsKey, machine: machine))
+                ?? legacyData(forKey: controlPortsKey, machine: machine),
+              let configuration = try? JSONDecoder().decode(ControlPortConfiguration.self, from: data) else {
+            return .standard
+        }
+
+        return configuration.sanitized()
+    }
+
+    static func saveControlPorts(_ configuration: ControlPortConfiguration, for machine: EmulatedMachine) {
+        guard let data = try? JSONEncoder().encode(configuration) else {
+            return
+        }
+
+        UserDefaults.standard.set(data, forKey: key(controlPortsKey, machine: machine))
+    }
+
+    static func loadDriveConfigurations(for machine: EmulatedMachine) -> [DriveConfiguration] {
+        guard let data = UserDefaults.standard.data(forKey: key(driveConfigurationsKey, machine: machine))
+                ?? legacyData(forKey: driveConfigurationsKey, machine: machine),
+              let configurations = try? JSONDecoder().decode([DriveConfiguration].self, from: data),
+              configurations.map(\.unit) == machine.capabilities.driveUnits else {
+            return machine.defaultDriveConfigurations()
+        }
+
+        return EmulatorSession.normalizedDriveConfigurations(configurations, for: machine)
+    }
+
+    static func saveDriveConfigurations(_ configurations: [DriveConfiguration], for machine: EmulatedMachine) {
+        guard let data = try? JSONEncoder().encode(configurations) else {
+            return
+        }
+
+        UserDefaults.standard.set(data, forKey: key(driveConfigurationsKey, machine: machine))
+    }
+
+    private static func key(_ baseKey: String, machine: EmulatedMachine) -> String {
+        "\(baseKey).\(machine.id.rawValue)"
+    }
+
+    private static func legacyData(forKey baseKey: String, machine: EmulatedMachine) -> Data? {
+        guard machine.id == .x64sc else {
+            return nil
+        }
+
+        return UserDefaults.standard.data(forKey: baseKey)
+    }
+
+    private static func legacyString(forKey baseKey: String, machine: EmulatedMachine) -> String? {
+        guard machine.id == .x64sc else {
+            return nil
+        }
+
+        return UserDefaults.standard.string(forKey: baseKey)
+    }
+}

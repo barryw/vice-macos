@@ -8,6 +8,7 @@
 #include "vice.h"
 
 #include <pthread.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -16,6 +17,7 @@
 #include "cartridge.h"
 #include "crt.h"
 #include "drive.h"
+#include "drive-sound.h"
 #include "joystick.h"
 #include "keyboard.h"
 #include "machine.h"
@@ -41,7 +43,8 @@ typedef enum vicemac_machine_command_type_e {
 
 typedef enum vicemac_drive_command_type_e {
     VICEMAC_DRIVE_COMMAND_RESET,
-    VICEMAC_DRIVE_COMMAND_ATTACH_DISK
+    VICEMAC_DRIVE_COMMAND_ATTACH_DISK,
+    VICEMAC_DRIVE_COMMAND_PREVIEW_SOUND
 } vicemac_drive_command_type_t;
 
 typedef enum vicemac_cartridge_command_type_e {
@@ -125,39 +128,73 @@ static vicemac_cartridge_command_t cartridge_command_queue[VICEMAC_CARTRIDGE_COM
 static unsigned int cartridge_command_queue_read = 0;
 static unsigned int cartridge_command_queue_write = 0;
 
-static unsigned int input_queue_next(unsigned int index)
+static unsigned int vicemac_queue_next(unsigned int index, unsigned int capacity)
 {
-    return (index + 1) % VICEMAC_INPUT_QUEUE_CAPACITY;
+    return (index + 1) % capacity;
 }
 
-static unsigned int resource_queue_next(unsigned int index)
+static void vicemac_copy_cstring(char *destination, size_t destination_size, const char *source)
 {
-    return (index + 1) % VICEMAC_RESOURCE_QUEUE_CAPACITY;
+    if (destination_size == 0) {
+        return;
+    }
+
+    if (source == 0) {
+        destination[0] = '\0';
+        return;
+    }
+
+    strncpy(destination, source, destination_size - 1);
+    destination[destination_size - 1] = '\0';
 }
 
-static unsigned int resource_string_queue_next(unsigned int index)
+static int vicemac_queue_push(pthread_mutex_t *mutex,
+                              void *queue,
+                              size_t element_size,
+                              unsigned int capacity,
+                              unsigned int *read_index,
+                              unsigned int *write_index,
+                              const void *event)
 {
-    return (index + 1) % VICEMAC_RESOURCE_QUEUE_CAPACITY;
+    unsigned int next_write;
+    char *slot;
+
+    pthread_mutex_lock(mutex);
+
+    next_write = vicemac_queue_next(*write_index, capacity);
+    if (next_write == *read_index) {
+        *read_index = vicemac_queue_next(*read_index, capacity);
+    }
+
+    slot = ((char *)queue) + ((size_t)*write_index * element_size);
+    memcpy(slot, event, element_size);
+    *write_index = next_write;
+
+    pthread_mutex_unlock(mutex);
+    return 1;
 }
 
-static unsigned int joystick_queue_next(unsigned int index)
+static int vicemac_queue_pop(pthread_mutex_t *mutex,
+                             void *queue,
+                             size_t element_size,
+                             unsigned int capacity,
+                             unsigned int *read_index,
+                             unsigned int *write_index,
+                             void *event)
 {
-    return (index + 1) % VICEMAC_JOYSTICK_QUEUE_CAPACITY;
-}
+    int has_event = 0;
 
-static unsigned int machine_command_queue_next(unsigned int index)
-{
-    return (index + 1) % VICEMAC_MACHINE_COMMAND_QUEUE_CAPACITY;
-}
+    pthread_mutex_lock(mutex);
 
-static unsigned int drive_command_queue_next(unsigned int index)
-{
-    return (index + 1) % VICEMAC_DRIVE_COMMAND_QUEUE_CAPACITY;
-}
+    if (*read_index != *write_index) {
+        char *slot = ((char *)queue) + ((size_t)*read_index * element_size);
+        memcpy(event, slot, element_size);
+        *read_index = vicemac_queue_next(*read_index, capacity);
+        has_event = 1;
+    }
 
-static unsigned int cartridge_command_queue_next(unsigned int index)
-{
-    return (index + 1) % VICEMAC_CARTRIDGE_COMMAND_QUEUE_CAPACITY;
+    pthread_mutex_unlock(mutex);
+    return has_event;
 }
 
 void vicemac_set_video_frame_callback(vicemac_video_frame_callback_t callback,
@@ -293,7 +330,12 @@ static int vicemac_read_crt_rom_metadata(const char *path,
                                          uint32_t *chip_count,
                                          uint32_t *bank_count)
 {
-    uint32_t seen_banks[2048];
+    enum {
+        VICEMAC_CRT_BANK_WORDS = 2048,
+        VICEMAC_CRT_MAX_BANK = VICEMAC_CRT_BANK_WORDS * 32U
+    };
+
+    uint32_t seen_banks[VICEMAC_CRT_BANK_WORDS];
     crt_chip_header_t chip;
     crt_header_t header;
     FILE *fd;
@@ -315,6 +357,12 @@ static int vicemac_read_crt_rom_metadata(const char *path,
     while (crt_read_chip_header(&chip, fd) == 0) {
         uint32_t bank_word = chip.bank / 32U;
         uint32_t bank_mask = 1U << (chip.bank % 32U);
+
+        if (chip.bank >= VICEMAC_CRT_MAX_BANK ||
+            chip.size > UINT32_MAX - *rom_size ||
+            *chip_count == UINT32_MAX) {
+            break;
+        }
 
         *rom_size += chip.size;
         *chip_count += 1U;
@@ -366,145 +414,118 @@ static void vicemac_publish_current_cartridge_status(void)
 
 int vicemac_queue_key_event(signed long key, int mod, int pressed)
 {
-    unsigned int next_write;
+    vicemac_input_event_t event;
 
     if (key == 0) {
         return 0;
     }
 
-    pthread_mutex_lock(&input_queue_mutex);
+    event.clear = 0;
+    event.key = key;
+    event.mod = mod;
+    event.pressed = pressed ? 1 : 0;
 
-    next_write = input_queue_next(input_queue_write);
-    if (next_write == input_queue_read) {
-        input_queue_read = input_queue_next(input_queue_read);
-    }
-
-    input_queue[input_queue_write].clear = 0;
-    input_queue[input_queue_write].key = key;
-    input_queue[input_queue_write].mod = mod;
-    input_queue[input_queue_write].pressed = pressed ? 1 : 0;
-    input_queue_write = next_write;
-
-    pthread_mutex_unlock(&input_queue_mutex);
-    return 1;
+    return vicemac_queue_push(&input_queue_mutex,
+                              input_queue,
+                              sizeof(input_queue[0]),
+                              VICEMAC_INPUT_QUEUE_CAPACITY,
+                              &input_queue_read,
+                              &input_queue_write,
+                              &event);
 }
 
 int vicemac_queue_keyboard_clear(void)
 {
-    unsigned int next_write;
+    vicemac_input_event_t event;
 
-    pthread_mutex_lock(&input_queue_mutex);
+    memset(&event, 0, sizeof(event));
+    event.clear = 1;
 
-    next_write = input_queue_next(input_queue_write);
-    if (next_write == input_queue_read) {
-        input_queue_read = input_queue_next(input_queue_read);
-    }
-
-    input_queue[input_queue_write].clear = 1;
-    input_queue[input_queue_write].key = 0;
-    input_queue[input_queue_write].mod = 0;
-    input_queue[input_queue_write].pressed = 0;
-    input_queue_write = next_write;
-
-    pthread_mutex_unlock(&input_queue_mutex);
-    return 1;
+    return vicemac_queue_push(&input_queue_mutex,
+                              input_queue,
+                              sizeof(input_queue[0]),
+                              VICEMAC_INPUT_QUEUE_CAPACITY,
+                              &input_queue_read,
+                              &input_queue_write,
+                              &event);
 }
 
 int vicemac_queue_resource_int(const char *name, int value)
 {
-    unsigned int next_write;
+    vicemac_resource_int_event_t event;
 
     if (name == 0 || name[0] == '\0') {
         return 0;
     }
 
-    pthread_mutex_lock(&resource_queue_mutex);
+    memset(&event, 0, sizeof(event));
+    vicemac_copy_cstring(event.name, sizeof(event.name), name);
+    event.value = value;
 
-    next_write = resource_queue_next(resource_queue_write);
-    if (next_write == resource_queue_read) {
-        resource_queue_read = resource_queue_next(resource_queue_read);
-    }
-
-    strncpy(resource_queue[resource_queue_write].name,
-            name,
-            sizeof(resource_queue[resource_queue_write].name) - 1);
-    resource_queue[resource_queue_write].name[sizeof(resource_queue[resource_queue_write].name) - 1] = '\0';
-    resource_queue[resource_queue_write].value = value;
-    resource_queue_write = next_write;
-
-    pthread_mutex_unlock(&resource_queue_mutex);
-    return 1;
+    return vicemac_queue_push(&resource_queue_mutex,
+                              resource_queue,
+                              sizeof(resource_queue[0]),
+                              VICEMAC_RESOURCE_QUEUE_CAPACITY,
+                              &resource_queue_read,
+                              &resource_queue_write,
+                              &event);
 }
 
 int vicemac_queue_resource_string(const char *name, const char *value)
 {
-    unsigned int next_write;
+    vicemac_resource_string_event_t event;
 
     if (name == 0 || name[0] == '\0' || value == 0) {
         return 0;
     }
 
-    pthread_mutex_lock(&resource_string_queue_mutex);
+    memset(&event, 0, sizeof(event));
+    vicemac_copy_cstring(event.name, sizeof(event.name), name);
+    vicemac_copy_cstring(event.value, sizeof(event.value), value);
 
-    next_write = resource_string_queue_next(resource_string_queue_write);
-    if (next_write == resource_string_queue_read) {
-        resource_string_queue_read = resource_string_queue_next(resource_string_queue_read);
-    }
-
-    strncpy(resource_string_queue[resource_string_queue_write].name,
-            name,
-            sizeof(resource_string_queue[resource_string_queue_write].name) - 1);
-    resource_string_queue[resource_string_queue_write].name[sizeof(resource_string_queue[resource_string_queue_write].name) - 1] = '\0';
-    strncpy(resource_string_queue[resource_string_queue_write].value,
-            value,
-            sizeof(resource_string_queue[resource_string_queue_write].value) - 1);
-    resource_string_queue[resource_string_queue_write].value[sizeof(resource_string_queue[resource_string_queue_write].value) - 1] = '\0';
-    resource_string_queue_write = next_write;
-
-    pthread_mutex_unlock(&resource_string_queue_mutex);
-    return 1;
+    return vicemac_queue_push(&resource_string_queue_mutex,
+                              resource_string_queue,
+                              sizeof(resource_string_queue[0]),
+                              VICEMAC_RESOURCE_QUEUE_CAPACITY,
+                              &resource_string_queue_read,
+                              &resource_string_queue_write,
+                              &event);
 }
 
 int vicemac_queue_joystick_value(uint32_t port, uint32_t value)
 {
-    unsigned int next_write;
+    vicemac_joystick_event_t event;
 
     if (port >= JOYPORT_MAX_PORTS) {
         return 0;
     }
 
-    pthread_mutex_lock(&joystick_queue_mutex);
+    event.port = port;
+    event.value = value;
 
-    next_write = joystick_queue_next(joystick_queue_write);
-    if (next_write == joystick_queue_read) {
-        joystick_queue_read = joystick_queue_next(joystick_queue_read);
-    }
-
-    joystick_queue[joystick_queue_write].port = port;
-    joystick_queue[joystick_queue_write].value = value;
-    joystick_queue_write = next_write;
-
-    pthread_mutex_unlock(&joystick_queue_mutex);
-    return 1;
+    return vicemac_queue_push(&joystick_queue_mutex,
+                              joystick_queue,
+                              sizeof(joystick_queue[0]),
+                              VICEMAC_JOYSTICK_QUEUE_CAPACITY,
+                              &joystick_queue_read,
+                              &joystick_queue_write,
+                              &event);
 }
 
 static int vicemac_queue_machine_command(vicemac_machine_command_type_t type, int value)
 {
-    unsigned int next_write;
+    vicemac_machine_command_t command;
 
-    pthread_mutex_lock(&machine_command_queue_mutex);
+    command.type = type;
+    command.value = value;
 
-    next_write = machine_command_queue_next(machine_command_queue_write);
-    if (next_write == machine_command_queue_read) {
-        machine_command_queue_read = machine_command_queue_next(machine_command_queue_read);
-    }
-
-    machine_command_queue[machine_command_queue_write].type = type;
-    machine_command_queue[machine_command_queue_write].value = value;
-    machine_command_queue_write = next_write;
-
-    pthread_mutex_unlock(&machine_command_queue_mutex);
-    return 1;
+    return vicemac_queue_push(&machine_command_queue_mutex,
+                              machine_command_queue,
+                              sizeof(machine_command_queue[0]),
+                              VICEMAC_MACHINE_COMMAND_QUEUE_CAPACITY,
+                              &machine_command_queue_read,
+                              &machine_command_queue_write,
+                              &command);
 }
 
 int vicemac_queue_pause(int paused)
@@ -532,24 +553,19 @@ int vicemac_queue_warp_mode(int enabled)
 
 int vicemac_queue_drive_reset(uint32_t unit)
 {
-    unsigned int next_write;
+    vicemac_drive_command_t command;
 
-    pthread_mutex_lock(&drive_command_queue_mutex);
+    memset(&command, 0, sizeof(command));
+    command.type = VICEMAC_DRIVE_COMMAND_RESET;
+    command.unit = unit;
 
-    next_write = drive_command_queue_next(drive_command_queue_write);
-    if (next_write == drive_command_queue_read) {
-        drive_command_queue_read = drive_command_queue_next(drive_command_queue_read);
-    }
-
-    drive_command_queue[drive_command_queue_write].type = VICEMAC_DRIVE_COMMAND_RESET;
-    drive_command_queue[drive_command_queue_write].unit = unit;
-    drive_command_queue[drive_command_queue_write].drive = 0;
-    drive_command_queue[drive_command_queue_write].autorun = 0;
-    drive_command_queue[drive_command_queue_write].path[0] = '\0';
-    drive_command_queue_write = next_write;
-
-    pthread_mutex_unlock(&drive_command_queue_mutex);
-    return 1;
+    return vicemac_queue_push(&drive_command_queue_mutex,
+                              drive_command_queue,
+                              sizeof(drive_command_queue[0]),
+                              VICEMAC_DRIVE_COMMAND_QUEUE_CAPACITY,
+                              &drive_command_queue_read,
+                              &drive_command_queue_write,
+                              &command);
 }
 
 int vicemac_queue_drive_attach_disk(uint32_t unit,
@@ -557,188 +573,157 @@ int vicemac_queue_drive_attach_disk(uint32_t unit,
                                     const char *path,
                                     int autorun)
 {
-    unsigned int next_write;
+    vicemac_drive_command_t command;
 
     if (path == 0 || path[0] == '\0') {
         return 0;
     }
 
-    pthread_mutex_lock(&drive_command_queue_mutex);
+    memset(&command, 0, sizeof(command));
+    command.type = VICEMAC_DRIVE_COMMAND_ATTACH_DISK;
+    command.unit = unit;
+    command.drive = drive;
+    command.autorun = autorun ? 1 : 0;
+    vicemac_copy_cstring(command.path, sizeof(command.path), path);
 
-    next_write = drive_command_queue_next(drive_command_queue_write);
-    if (next_write == drive_command_queue_read) {
-        drive_command_queue_read = drive_command_queue_next(drive_command_queue_read);
-    }
+    return vicemac_queue_push(&drive_command_queue_mutex,
+                              drive_command_queue,
+                              sizeof(drive_command_queue[0]),
+                              VICEMAC_DRIVE_COMMAND_QUEUE_CAPACITY,
+                              &drive_command_queue_read,
+                              &drive_command_queue_write,
+                              &command);
+}
 
-    drive_command_queue[drive_command_queue_write].type = VICEMAC_DRIVE_COMMAND_ATTACH_DISK;
-    drive_command_queue[drive_command_queue_write].unit = unit;
-    drive_command_queue[drive_command_queue_write].drive = drive;
-    drive_command_queue[drive_command_queue_write].autorun = autorun ? 1 : 0;
-    strncpy(drive_command_queue[drive_command_queue_write].path,
-            path,
-            sizeof(drive_command_queue[drive_command_queue_write].path) - 1);
-    drive_command_queue[drive_command_queue_write].path[sizeof(drive_command_queue[drive_command_queue_write].path) - 1] = '\0';
-    drive_command_queue_write = next_write;
+int vicemac_queue_drive_sound_preview(uint32_t unit)
+{
+    vicemac_drive_command_t command;
 
-    pthread_mutex_unlock(&drive_command_queue_mutex);
-    return 1;
+    memset(&command, 0, sizeof(command));
+    command.type = VICEMAC_DRIVE_COMMAND_PREVIEW_SOUND;
+    command.unit = unit;
+
+    return vicemac_queue_push(&drive_command_queue_mutex,
+                              drive_command_queue,
+                              sizeof(drive_command_queue[0]),
+                              VICEMAC_DRIVE_COMMAND_QUEUE_CAPACITY,
+                              &drive_command_queue_read,
+                              &drive_command_queue_write,
+                              &command);
 }
 
 int vicemac_queue_cartridge_attach(const char *path)
 {
-    unsigned int next_write;
+    vicemac_cartridge_command_t command;
 
     if (path == 0 || path[0] == '\0') {
         return 0;
     }
 
-    pthread_mutex_lock(&cartridge_command_queue_mutex);
+    memset(&command, 0, sizeof(command));
+    command.type = VICEMAC_CARTRIDGE_COMMAND_ATTACH;
+    vicemac_copy_cstring(command.path, sizeof(command.path), path);
 
-    next_write = cartridge_command_queue_next(cartridge_command_queue_write);
-    if (next_write == cartridge_command_queue_read) {
-        cartridge_command_queue_read = cartridge_command_queue_next(cartridge_command_queue_read);
-    }
-
-    cartridge_command_queue[cartridge_command_queue_write].type = VICEMAC_CARTRIDGE_COMMAND_ATTACH;
-    strncpy(cartridge_command_queue[cartridge_command_queue_write].path,
-            path,
-            sizeof(cartridge_command_queue[cartridge_command_queue_write].path) - 1);
-    cartridge_command_queue[cartridge_command_queue_write].path[sizeof(cartridge_command_queue[cartridge_command_queue_write].path) - 1] = '\0';
-    cartridge_command_queue_write = next_write;
-
-    pthread_mutex_unlock(&cartridge_command_queue_mutex);
-    return 1;
+    return vicemac_queue_push(&cartridge_command_queue_mutex,
+                              cartridge_command_queue,
+                              sizeof(cartridge_command_queue[0]),
+                              VICEMAC_CARTRIDGE_COMMAND_QUEUE_CAPACITY,
+                              &cartridge_command_queue_read,
+                              &cartridge_command_queue_write,
+                              &command);
 }
 
 int vicemac_queue_cartridge_detach(void)
 {
-    unsigned int next_write;
+    vicemac_cartridge_command_t command;
 
-    pthread_mutex_lock(&cartridge_command_queue_mutex);
+    memset(&command, 0, sizeof(command));
+    command.type = VICEMAC_CARTRIDGE_COMMAND_DETACH;
 
-    next_write = cartridge_command_queue_next(cartridge_command_queue_write);
-    if (next_write == cartridge_command_queue_read) {
-        cartridge_command_queue_read = cartridge_command_queue_next(cartridge_command_queue_read);
-    }
-
-    cartridge_command_queue[cartridge_command_queue_write].type = VICEMAC_CARTRIDGE_COMMAND_DETACH;
-    cartridge_command_queue[cartridge_command_queue_write].path[0] = '\0';
-    cartridge_command_queue_write = next_write;
-
-    pthread_mutex_unlock(&cartridge_command_queue_mutex);
-    return 1;
+    return vicemac_queue_push(&cartridge_command_queue_mutex,
+                              cartridge_command_queue,
+                              sizeof(cartridge_command_queue[0]),
+                              VICEMAC_CARTRIDGE_COMMAND_QUEUE_CAPACITY,
+                              &cartridge_command_queue_read,
+                              &cartridge_command_queue_write,
+                              &command);
 }
 
 static int vicemac_pop_key_event(vicemac_input_event_t *event)
 {
-    int has_event = 0;
-
-    pthread_mutex_lock(&input_queue_mutex);
-
-    if (input_queue_read != input_queue_write) {
-        *event = input_queue[input_queue_read];
-        input_queue_read = input_queue_next(input_queue_read);
-        has_event = 1;
-    }
-
-    pthread_mutex_unlock(&input_queue_mutex);
-    return has_event;
+    return vicemac_queue_pop(&input_queue_mutex,
+                             input_queue,
+                             sizeof(input_queue[0]),
+                             VICEMAC_INPUT_QUEUE_CAPACITY,
+                             &input_queue_read,
+                             &input_queue_write,
+                             event);
 }
 
 static int vicemac_pop_resource_int_event(vicemac_resource_int_event_t *event)
 {
-    int has_event = 0;
-
-    pthread_mutex_lock(&resource_queue_mutex);
-
-    if (resource_queue_read != resource_queue_write) {
-        *event = resource_queue[resource_queue_read];
-        resource_queue_read = resource_queue_next(resource_queue_read);
-        has_event = 1;
-    }
-
-    pthread_mutex_unlock(&resource_queue_mutex);
-    return has_event;
+    return vicemac_queue_pop(&resource_queue_mutex,
+                             resource_queue,
+                             sizeof(resource_queue[0]),
+                             VICEMAC_RESOURCE_QUEUE_CAPACITY,
+                             &resource_queue_read,
+                             &resource_queue_write,
+                             event);
 }
 
 static int vicemac_pop_resource_string_event(vicemac_resource_string_event_t *event)
 {
-    int has_event = 0;
-
-    pthread_mutex_lock(&resource_string_queue_mutex);
-
-    if (resource_string_queue_read != resource_string_queue_write) {
-        *event = resource_string_queue[resource_string_queue_read];
-        resource_string_queue_read = resource_string_queue_next(resource_string_queue_read);
-        has_event = 1;
-    }
-
-    pthread_mutex_unlock(&resource_string_queue_mutex);
-    return has_event;
+    return vicemac_queue_pop(&resource_string_queue_mutex,
+                             resource_string_queue,
+                             sizeof(resource_string_queue[0]),
+                             VICEMAC_RESOURCE_QUEUE_CAPACITY,
+                             &resource_string_queue_read,
+                             &resource_string_queue_write,
+                             event);
 }
 
 static int vicemac_pop_joystick_event(vicemac_joystick_event_t *event)
 {
-    int has_event = 0;
-
-    pthread_mutex_lock(&joystick_queue_mutex);
-
-    if (joystick_queue_read != joystick_queue_write) {
-        *event = joystick_queue[joystick_queue_read];
-        joystick_queue_read = joystick_queue_next(joystick_queue_read);
-        has_event = 1;
-    }
-
-    pthread_mutex_unlock(&joystick_queue_mutex);
-    return has_event;
+    return vicemac_queue_pop(&joystick_queue_mutex,
+                             joystick_queue,
+                             sizeof(joystick_queue[0]),
+                             VICEMAC_JOYSTICK_QUEUE_CAPACITY,
+                             &joystick_queue_read,
+                             &joystick_queue_write,
+                             event);
 }
 
 static int vicemac_pop_machine_command(vicemac_machine_command_t *command)
 {
-    int has_command = 0;
-
-    pthread_mutex_lock(&machine_command_queue_mutex);
-
-    if (machine_command_queue_read != machine_command_queue_write) {
-        *command = machine_command_queue[machine_command_queue_read];
-        machine_command_queue_read = machine_command_queue_next(machine_command_queue_read);
-        has_command = 1;
-    }
-
-    pthread_mutex_unlock(&machine_command_queue_mutex);
-    return has_command;
+    return vicemac_queue_pop(&machine_command_queue_mutex,
+                             machine_command_queue,
+                             sizeof(machine_command_queue[0]),
+                             VICEMAC_MACHINE_COMMAND_QUEUE_CAPACITY,
+                             &machine_command_queue_read,
+                             &machine_command_queue_write,
+                             command);
 }
 
 static int vicemac_pop_drive_command(vicemac_drive_command_t *command)
 {
-    int has_command = 0;
-
-    pthread_mutex_lock(&drive_command_queue_mutex);
-
-    if (drive_command_queue_read != drive_command_queue_write) {
-        *command = drive_command_queue[drive_command_queue_read];
-        drive_command_queue_read = drive_command_queue_next(drive_command_queue_read);
-        has_command = 1;
-    }
-
-    pthread_mutex_unlock(&drive_command_queue_mutex);
-    return has_command;
+    return vicemac_queue_pop(&drive_command_queue_mutex,
+                             drive_command_queue,
+                             sizeof(drive_command_queue[0]),
+                             VICEMAC_DRIVE_COMMAND_QUEUE_CAPACITY,
+                             &drive_command_queue_read,
+                             &drive_command_queue_write,
+                             command);
 }
 
 static int vicemac_pop_cartridge_command(vicemac_cartridge_command_t *command)
 {
-    int has_command = 0;
-
-    pthread_mutex_lock(&cartridge_command_queue_mutex);
-
-    if (cartridge_command_queue_read != cartridge_command_queue_write) {
-        *command = cartridge_command_queue[cartridge_command_queue_read];
-        cartridge_command_queue_read = cartridge_command_queue_next(cartridge_command_queue_read);
-        has_command = 1;
-    }
-
-    pthread_mutex_unlock(&cartridge_command_queue_mutex);
-    return has_command;
+    return vicemac_queue_pop(&cartridge_command_queue_mutex,
+                             cartridge_command_queue,
+                             sizeof(cartridge_command_queue[0]),
+                             VICEMAC_CARTRIDGE_COMMAND_QUEUE_CAPACITY,
+                             &cartridge_command_queue_read,
+                             &cartridge_command_queue_write,
+                             command);
 }
 
 static void vicemac_dispatch_queued_resources(void)
@@ -842,6 +827,9 @@ static void vicemac_dispatch_drive_command(vicemac_drive_command_t *command)
                                               command->drive,
                                               command->path);
             }
+            break;
+        case VICEMAC_DRIVE_COMMAND_PREVIEW_SOUND:
+            drive_sound_head(18, 1, (int)(command->unit - DRIVE_UNIT_MIN));
             break;
     }
 }

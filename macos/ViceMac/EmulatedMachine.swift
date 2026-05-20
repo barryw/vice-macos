@@ -3,6 +3,7 @@ import Foundation
 
 enum MachineID: String, CaseIterable, Codable, Identifiable {
     case x64sc
+    case x128
     case xvic
     case xpet
     case xplus4
@@ -42,10 +43,6 @@ struct MachineDisplayProfile: Equatable {
     }
 }
 
-protocol MachineDisplayContract {
-    var displayProfile: MachineDisplayProfile { get }
-}
-
 struct MachineROMSlot: Identifiable, Codable, Equatable, Hashable {
     let id: String
     let title: String
@@ -53,6 +50,16 @@ struct MachineROMSlot: Identifiable, Codable, Equatable, Hashable {
     let defaultFileName: String
     let startupOption: String
     let systemImage: String
+}
+
+struct MachineDisplayOutput: Identifiable, Codable, Equatable, Hashable {
+    let id: String
+    let toolbarTitle: String
+    let statusTitle: String
+    let systemImage: String
+    let startupOption: String?
+    let resourceName: String?
+    let resourceValue: Int32
 }
 
 struct MachineCapabilities: Equatable {
@@ -74,6 +81,7 @@ struct MachineStartupConfiguration {
     let soundEnabled: Bool
     let soundVolume: Int
     let emulationSpeed: EmulatorSession.EmulationSpeed
+    let displayOutput: MachineDisplayOutput
     let romImages: ROMImageConfiguration
     let ramExpansion: RAMExpansion
     let driveConfigurations: [DriveConfiguration]
@@ -92,6 +100,7 @@ struct EmulatedMachine: Identifiable, Equatable {
     let dynamicLibraryName: String
     let displayProfile: MachineDisplayProfile
     let startupOptions: [String]
+    let displayOutputs: [MachineDisplayOutput]
     let romSlots: [MachineROMSlot]
     let ramExpansions: [RAMExpansion]
     let capabilities: MachineCapabilities
@@ -129,6 +138,10 @@ struct EmulatedMachine: Identifiable, Equatable {
 
         arguments += startupOptions(for: configuration)
 
+        if let startupOption = configuration.displayOutput.startupOption {
+            arguments.append(startupOption)
+        }
+
         if capabilities.supportsSIDModelSelection {
             arguments += [
                 "-sidmodel",
@@ -163,13 +176,13 @@ struct EmulatedMachine: Identifiable, Equatable {
         let activeConfigurations = configurations.filter { configuration in
             capabilities.driveUnits.contains(configuration.unit)
         }
-        let driveSoundEnabled = activeConfigurations.contains { $0.soundEnabled }
+        let driveSoundEnabled = activeConfigurations.contains { $0.isAttached && $0.soundEnabled }
 
         options.append(driveSoundEnabled ? "-drivesound" : "+drivesound")
         if driveSoundEnabled,
            let volume = activeConfigurations
-            .filter(\.soundEnabled)
-            .map(\.soundVolume)
+            .filter({ $0.isAttached && $0.soundEnabled })
+            .map(\.viceSoundVolume)
             .max() {
             options += ["-drivesoundvolume", "\(volume)"]
         }
@@ -200,27 +213,50 @@ struct EmulatedMachine: Identifiable, Equatable {
         videoStandardResources[standard] ?? []
     }
 
+    var defaultDisplayOutput: MachineDisplayOutput {
+        displayOutputs.first ?? .standard
+    }
+
+    var supportsDisplayOutputSelection: Bool {
+        displayOutputs.count > 1
+    }
+
+    func displayOutput(id: String?) -> MachineDisplayOutput {
+        guard let id,
+              let output = displayOutputs.first(where: { $0.id == id }) else {
+            return defaultDisplayOutput
+        }
+
+        return output
+    }
+
     func defaultDriveConfigurations() -> [DriveConfiguration] {
         capabilities.driveUnits.enumerated().map { index, unit in
             DriveConfiguration(unit: unit,
                                isAttached: index == 0,
                                driveType: capabilities.defaultDriveType,
                                soundEnabled: false,
-                               soundVolume: 1000)
+                               soundVolume: 25)
         }
     }
 
     private func startupOptions(for configuration: MachineStartupConfiguration) -> [String] {
-        guard id == .xplus4 else {
+        switch id {
+        case .xplus4:
+            return [
+                "-model",
+                configuration.videoStandard == .ntsc ? "plus4ntsc" : "plus4pal",
+                "-TEDborders",
+                "normal"
+            ]
+        case .x128:
+            return [
+                "-model",
+                configuration.videoStandard == .ntsc ? "ntsc" : "pal"
+            ]
+        default:
             return startupOptions
         }
-
-        return [
-            "-model",
-            configuration.videoStandard == .ntsc ? "plus4ntsc" : "plus4pal",
-            "-TEDborders",
-            "normal"
-        ]
     }
 
     private func defaultROMFileName(for slot: MachineROMSlot,
@@ -232,8 +268,6 @@ struct EmulatedMachine: Identifiable, Equatable {
         return slot.defaultFileName
     }
 }
-
-extension EmulatedMachine: MachineDisplayContract {}
 
 extension MachineROMSlot {
     static let c64Basic = MachineROMSlot(id: "c64.basic",
@@ -323,6 +357,67 @@ extension MachineROMSlot {
                                                   defaultFileName: "3plus1-317054-01.bin",
                                                   startupOption: "-functionhi",
                                                   systemImage: "rectangle.stack")
+
+    static let c128BasicLow = MachineROMSlot(id: "c128.basicLow",
+                                             title: "BASIC Low",
+                                             resourceName: "BasicLoName",
+                                             defaultFileName: "basiclo-318018-04.bin",
+                                             startupOption: "-basiclo",
+                                             systemImage: "terminal")
+    static let c128BasicHigh = MachineROMSlot(id: "c128.basicHigh",
+                                              title: "BASIC High",
+                                              resourceName: "BasicHiName",
+                                              defaultFileName: "basichi-318019-04.bin",
+                                              startupOption: "-basichi",
+                                              systemImage: "terminal")
+    static let c128Kernal = MachineROMSlot(id: "c128.kernal",
+                                           title: "KERNAL",
+                                           resourceName: "KernalIntName",
+                                           defaultFileName: "kernal-318020-05.bin",
+                                           startupOption: "-kernal",
+                                           systemImage: "cpu")
+    static let c128Character = MachineROMSlot(id: "c128.character",
+                                              title: "Character",
+                                              resourceName: "ChargenIntName",
+                                              defaultFileName: "chargen-390059-01.bin",
+                                              startupOption: "-chargen",
+                                              systemImage: "textformat")
+    static let c128C64Basic = MachineROMSlot(id: "c128.c64Basic",
+                                             title: "C64 BASIC",
+                                             resourceName: "Basic64Name",
+                                             defaultFileName: "basic64-901226-01.bin",
+                                             startupOption: "-basic64",
+                                             systemImage: "terminal")
+    static let c128C64Kernal = MachineROMSlot(id: "c128.c64Kernal",
+                                              title: "C64 KERNAL",
+                                              resourceName: "Kernal64Name",
+                                              defaultFileName: "kernal64-901227-03.bin",
+                                              startupOption: "-kernal64",
+                                              systemImage: "cpu")
+}
+
+extension MachineDisplayOutput {
+    static let standard = MachineDisplayOutput(id: "standard",
+                                               toolbarTitle: "Display",
+                                               statusTitle: "Display",
+                                               systemImage: "display",
+                                               startupOption: nil,
+                                               resourceName: nil,
+                                               resourceValue: 0)
+    static let c12840Column = MachineDisplayOutput(id: "c128.40Column",
+                                                   toolbarTitle: "40",
+                                                   statusTitle: "40 VIC-II",
+                                                   systemImage: "display",
+                                                   startupOption: "-40col",
+                                                   resourceName: "C128ColumnKey",
+                                                   resourceValue: 1)
+    static let c12880Column = MachineDisplayOutput(id: "c128.80Column",
+                                                   toolbarTitle: "80",
+                                                   statusTitle: "80 VDC",
+                                                   systemImage: "display.2",
+                                                   startupOption: "-80col",
+                                                   resourceName: "C128ColumnKey",
+                                                   resourceValue: 0)
 }
 
 extension EmulatedMachine {
@@ -339,6 +434,7 @@ extension EmulatedMachine {
                                             pixelSize: CGSize(width: 384, height: 272))
             ),
             startupOptions: [],
+            displayOutputs: [.standard],
             romSlots: [.c64Basic, .c64Kernal, .c64Character],
             ramExpansions: RAMExpansion.c64Options,
             capabilities: MachineCapabilities(supportsVideoStandardSelection: true,
@@ -362,6 +458,47 @@ extension EmulatedMachine {
         )
     }
 
+    static var x128: EmulatedMachine {
+        EmulatedMachine(
+            id: .x128,
+            displayName: "Commodore 128",
+            shortName: "x128",
+            viceTarget: "x128",
+            dynamicLibraryName: "libvicemacx128.dylib",
+            displayProfile: MachineDisplayProfile(
+                bootFrame: MachineBootFrame(resourceName: "x64sc-ready",
+                                            fileExtension: "png",
+                                            pixelSize: CGSize(width: 384, height: 272))
+            ),
+            startupOptions: [],
+            displayOutputs: [.c12840Column, .c12880Column],
+            romSlots: [.c128BasicLow, .c128BasicHigh, .c128Kernal, .c128Character, .c128C64Basic, .c128C64Kernal],
+            ramExpansions: RAMExpansion.c128Options,
+            capabilities: MachineCapabilities(supportsVideoStandardSelection: true,
+                                              supportsSIDModelSelection: true,
+                                              supportsCartridges: true,
+                                              supportsRAMExpansion: true,
+                                              controlPorts: [.one, .two],
+                                              driveUnits: [8, 9, 10, 11],
+                                              driveTypes: DriveType.c128Options,
+                                              defaultDriveType: .c1571),
+            videoStandardResources: [
+                .ntsc: [
+                    ViceIntResourceAssignment(name: "MachineVideoStandard",
+                                              value: ViceMachineVideoStandard.ntsc),
+                    ViceIntResourceAssignment(name: "MachinePowerFrequency",
+                                              value: 60)
+                ],
+                .pal: [
+                    ViceIntResourceAssignment(name: "MachineVideoStandard",
+                                              value: ViceMachineVideoStandard.pal),
+                    ViceIntResourceAssignment(name: "MachinePowerFrequency",
+                                              value: 50)
+                ]
+            ]
+        )
+    }
+
     static var xvic: EmulatedMachine {
         EmulatedMachine(
             id: .xvic,
@@ -375,6 +512,7 @@ extension EmulatedMachine {
                                             pixelSize: CGSize(width: 400, height: 234))
             ),
             startupOptions: ["-VICborders", "normal"],
+            displayOutputs: [.standard],
             romSlots: [.vic20Basic, .vic20Kernal, .vic20Character],
             ramExpansions: RAMExpansion.vic20Options,
             capabilities: MachineCapabilities(supportsVideoStandardSelection: true,
@@ -411,6 +549,7 @@ extension EmulatedMachine {
                                             pixelSize: CGSize(width: 384, height: 272))
             ),
             startupOptions: ["-model", "4032"],
+            displayOutputs: [.standard],
             romSlots: [.petBasic, .petKernal, .petEditor, .petCharacter],
             ramExpansions: [.none],
             capabilities: MachineCapabilities(supportsVideoStandardSelection: true,
@@ -447,6 +586,7 @@ extension EmulatedMachine {
                                             pixelSize: CGSize(width: 384, height: 288))
             ),
             startupOptions: [],
+            displayOutputs: [.standard],
             romSlots: [.plus4Basic, .plus4Kernal, .plus4FunctionLow, .plus4FunctionHigh],
             ramExpansions: [.none],
             capabilities: MachineCapabilities(supportsVideoStandardSelection: true,
@@ -471,7 +611,9 @@ extension EmulatedMachine {
     }
 
     static var current: EmulatedMachine {
-        #if VICE_MAC_MACHINE_XPLUS4
+        #if VICE_MAC_MACHINE_X128
+        return .x128
+        #elseif VICE_MAC_MACHINE_XPLUS4
         return .xplus4
         #elseif VICE_MAC_MACHINE_XPET
         return .xpet
@@ -483,7 +625,9 @@ extension EmulatedMachine {
     }
 
     static var planned: [EmulatedMachine] {
-        #if VICE_MAC_MACHINE_XPLUS4
+        #if VICE_MAC_MACHINE_X128
+        return [.x64sc, .xvic, .xpet, .xplus4, .x128]
+        #elseif VICE_MAC_MACHINE_XPLUS4
         return [.x64sc, .xvic, .xpet, .xplus4]
         #elseif VICE_MAC_MACHINE_XPET
         return [.x64sc, .xvic, .xpet]
