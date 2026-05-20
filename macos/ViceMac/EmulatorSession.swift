@@ -711,6 +711,7 @@ enum DriveType: Int32, CaseIterable, Codable, Identifiable {
     case c1540 = 1540
     case c1541 = 1541
     case c1541II = 1542
+    case c1551 = 1551
     case c1570 = 1570
     case c1571 = 1571
     case c1581 = 1581
@@ -740,6 +741,10 @@ enum DriveType: Int32, CaseIterable, Codable, Identifiable {
         .cmdHD
     ]
 
+    static let plus4Options: [DriveType] = [
+        .c1551
+    ] + iecOptions
+
     static let petOptions: [DriveType] = [
         .c2031,
         .c2040,
@@ -759,6 +764,8 @@ enum DriveType: Int32, CaseIterable, Codable, Identifiable {
             return "1541"
         case .c1541II:
             return "1541-II"
+        case .c1551:
+            return "1551"
         case .c1570:
             return "1570"
         case .c1571:
@@ -792,6 +799,8 @@ enum DriveType: Int32, CaseIterable, Codable, Identifiable {
 
     var busTitle: String {
         switch self {
+        case .c1551:
+            return "TCBM"
         case .c2031, .c2040, .c3040, .c4040, .sfd1001, .c8050, .c8250, .d9090d9060:
             return "IEEE-488"
         default:
@@ -818,7 +827,7 @@ enum DriveType: Int32, CaseIterable, Codable, Identifiable {
 
     func ledColor(forDriveNumber driveNumber: Int) -> DriveLEDColor {
         switch self {
-        case .c1540, .c1541, .c1570, .c2031, .c2040, .c3040, .c4040, .sfd1001, .d9090d9060:
+        case .c1540, .c1541, .c1551, .c1570, .c2031, .c2040, .c3040, .c4040, .sfd1001, .d9090d9060:
             return .red
         case .c8050:
             return .green
@@ -831,7 +840,7 @@ enum DriveType: Int32, CaseIterable, Codable, Identifiable {
 
     var supportedDiskImageTypes: [DiskImageFileType] {
         switch self {
-        case .c1540, .c1541, .c1541II, .c1570:
+        case .c1540, .c1541, .c1541II, .c1551, .c1570:
             return [.d64, .d67, .g64, .p64, .x64]
         case .c1571:
             return [.d64, .d67, .d71, .g64, .g71, .p64, .x64]
@@ -1984,7 +1993,8 @@ final class EmulatorSession: ObservableObject {
                                                                soundVolume: soundVolume,
                                                                emulationSpeed: emulationSpeed,
                                                                romImages: romImages,
-                                                               ramExpansion: ramExpansion)
+                                                               ramExpansion: ramExpansion,
+                                                               driveConfigurations: driveConfigurations)
         let startupArguments = machine.startupArguments(configuration: startupConfiguration)
         let started = machine.id.rawValue.withCString { machineIDPointer in
             dynamicLibraryPath.withCString { dynamicLibraryPathPointer in
@@ -2216,15 +2226,18 @@ final class EmulatorSession: ObservableObject {
     }
 
     private func applyRuntimeConfiguration() {
-        applyVideoStandard(updateStatus: false)
+        if machine.id != .xplus4 {
+            applyVideoStandard(updateStatus: false)
+        }
         applySIDModel(updateStatus: false)
         applySoundSettings(updateStatus: false)
         applyEmulationSpeed(updateStatus: false)
         applyPauseState(updateStatus: false)
-        applyROMImages()
+        if machine.id != .xplus4 {
+            applyROMImages()
+        }
         applyRAMExpansion(updateStatus: false)
         applyControlPorts()
-        applyDriveConfigurations(updateStatus: false)
     }
 
     private func applyPauseState(updateStatus: Bool = true) {
@@ -2302,7 +2315,9 @@ final class EmulatorSession: ObservableObject {
 
         for slot in machine.romSlots {
             setVICEStringResource(slot.resourceName,
-                                  value: romImages.resourceValue(for: slot))
+                                  value: machine.romResourceValue(for: slot,
+                                                                  romImages: romImages,
+                                                                  videoStandard: videoStandard))
         }
     }
 

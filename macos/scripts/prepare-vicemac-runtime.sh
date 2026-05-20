@@ -9,6 +9,8 @@ BUILD_DIR="${VICE_MACOS_ENGINE_BUILD_DIR:-/private/tmp/vice-macos-native-build}"
 PRODUCTS_DIR="$MACOS_DIR/BuildProducts"
 read -r -a MACHINE_TARGETS <<< "${VICE_MACOS_MACHINE_TARGETS:-x64sc}"
 
+export PATH="/opt/homebrew/bin:/usr/local/bin:/opt/local/bin:$PATH"
+
 mkdir -p "$BUILD_DIR" "$PRODUCTS_DIR"
 
 latest_macos_runtime_target() {
@@ -39,6 +41,18 @@ if [[ "$needs_autogen" == 1 ]]; then
     (cd "$VICE_SRC" && ./autogen.sh)
 fi
 
+require_build_tool() {
+    local tool="$1"
+    local install_hint="$2"
+
+    if ! command -v "$tool" >/dev/null 2>&1; then
+        echo "Required build tool '$tool' is missing." >&2
+        echo "$install_hint" >&2
+        echo "Current PATH: $PATH" >&2
+        exit 1
+    fi
+}
+
 if [[ -f "$BUILD_DIR/src/Makefile" ]]; then
     configured_target="$(grep -m 1 -Eo -- '-mmacosx-version-min=[0-9.]+' "$BUILD_DIR/src/Makefile" | sed 's/.*=//' || true)"
     if [[ "$configured_target" != "$ENGINE_DEPLOYMENT_TARGET" ||
@@ -52,6 +66,8 @@ if [[ -f "$BUILD_DIR/src/Makefile" ]]; then
 fi
 
 if [[ ! -f "$BUILD_DIR/Makefile" || ! -f "$BUILD_DIR/src/arch/macos/Makefile" ]]; then
+    require_build_tool "dos2unix" "Install it with: brew install dos2unix"
+
     (cd "$BUILD_DIR" && "$VICE_SRC/configure" \
         --enable-macosui \
         --enable-macos-minimum-version="$ENGINE_DEPLOYMENT_TARGET" \

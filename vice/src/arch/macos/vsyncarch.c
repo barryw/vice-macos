@@ -9,6 +9,7 @@
 
 #include "joystick.h"
 #include "ui.h"
+#include "videoarch.h"
 #include "vsyncapi.h"
 
 static int pause_pending = 0;
@@ -22,6 +23,8 @@ void vsyncarch_presync(void)
 
 void vsyncarch_postsync(void)
 {
+    vicemac_video_refresh_if_idle();
+
     if (pause_pending) {
         ui_pause_enable();
         pause_pending = 0;

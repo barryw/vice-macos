@@ -33,6 +33,10 @@ gtk3_keymaps = \
 	gtk3_c16_pos_it.vkm \
 	gtk3_c116_pos_it.vkm
 
+macos_keymaps = \
+	macos_sym.vkm \
+	macos_pos.vkm
+
 sdl_keymaps = \
 	sdl_sym_de.vkm \
 	sdl_sym.vkm \
@@ -56,5 +60,10 @@ endif
 
 if USE_HEADLESSUI
 plus4_DATA = $(roms) $(romsets) $(palettes)
+EXTRA_DIST = $(plus4_DATA) $(sdl_keymaps) $(gtk3_keymaps)
+endif
+
+if USE_MACOSUI
+plus4_DATA = $(roms) $(romsets) $(palettes) $(macos_keymaps)
 EXTRA_DIST = $(plus4_DATA) $(sdl_keymaps) $(gtk3_keymaps)
 endif

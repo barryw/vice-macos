@@ -22,6 +22,9 @@
 
 static uint8_t *frame_buffer = NULL;
 static size_t frame_buffer_size = 0;
+static video_canvas_t *active_canvas = NULL;
+static uint64_t published_frame_count = 0;
+static uint64_t last_vsync_frame_count = 0;
 
 static const cmdline_option_t cmdline_options[] =
 {
@@ -286,11 +289,15 @@ video_canvas_t *video_canvas_create(video_canvas_t *canvas,
     }
 
     canvas->created = 1;
+    active_canvas = canvas;
     return canvas;
 }
 
 void video_canvas_destroy(struct video_canvas_s *canvas)
 {
+    if (active_canvas == canvas) {
+        active_canvas = NULL;
+    }
 }
 
 void video_canvas_refresh(struct video_canvas_s *canvas,
@@ -391,6 +398,20 @@ void video_canvas_refresh(struct video_canvas_s *canvas,
     }
 
     vicemac_publish_video_frame(width, height, (uint32_t)stride, frame_buffer);
+    published_frame_count++;
+}
+
+void vicemac_video_refresh_if_idle(void)
+{
+    if (active_canvas == NULL || !vicemac_has_video_frame_callback()) {
+        return;
+    }
+
+    if (published_frame_count == last_vsync_frame_count) {
+        video_canvas_refresh_all(active_canvas);
+    }
+
+    last_vsync_frame_count = published_frame_count;
 }
 
 void video_canvas_resize(struct video_canvas_s *canvas, char resize_canvas)

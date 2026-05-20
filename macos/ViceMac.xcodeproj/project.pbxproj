@@ -44,6 +44,18 @@
 		C3000000000000000000001B /* VideoFilterControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002C /* VideoFilterControls.swift */; };
 		C3000000000000000000001C /* ViceEngineBridge.c in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002E /* ViceEngineBridge.c */; };
 		C3000000000000000000001D /* EmulatedMachine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000037 /* EmulatedMachine.swift */; };
+		D40000000000000000000010 /* ViceMacApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000020 /* ViceMacApp.swift */; };
+		D40000000000000000000011 /* EmulatorSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000021 /* EmulatorSession.swift */; };
+		D40000000000000000000012 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000022 /* ContentView.swift */; };
+		D40000000000000000000013 /* EmulatorMetalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000023 /* EmulatorMetalView.swift */; };
+		D40000000000000000000014 /* EmulatorRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000024 /* EmulatorRenderer.swift */; };
+		D40000000000000000000015 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000025 /* SettingsView.swift */; };
+		D40000000000000000000016 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000026 /* Assets.xcassets */; };
+		D40000000000000000000017 /* EmulatorFrameSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000028 /* EmulatorFrameSource.swift */; };
+		D4000000000000000000001A /* VideoFilterSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002B /* VideoFilterSettings.swift */; };
+		D4000000000000000000001B /* VideoFilterControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002C /* VideoFilterControls.swift */; };
+		D4000000000000000000001C /* ViceEngineBridge.c in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002E /* ViceEngineBridge.c */; };
+		D4000000000000000000001D /* EmulatedMachine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000037 /* EmulatedMachine.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -66,6 +78,7 @@
 		A10000000000000000000037 /* EmulatedMachine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmulatedMachine.swift; sourceTree = "<group>"; };
 		B20000000000000000000027 /* VICE Mac VIC-20.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "VICE Mac VIC-20.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		C30000000000000000000027 /* VICE Mac PET.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "VICE Mac PET.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		D40000000000000000000027 /* VICE Mac Plus-4.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "VICE Mac Plus-4.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -84,6 +97,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		C30000000000000000000040 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D40000000000000000000040 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -152,6 +172,7 @@
 				A10000000000000000000027 /* VICE Mac C64.app */,
 				B20000000000000000000027 /* VICE Mac VIC-20.app */,
 				C30000000000000000000027 /* VICE Mac PET.app */,
+				D40000000000000000000027 /* VICE Mac Plus-4.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -223,6 +244,24 @@
 			productReference = C30000000000000000000027 /* VICE Mac PET.app */;
 			productType = "com.apple.product-type.application";
 		};
+		D40000000000000000000001 /* ViceMacPlus4 */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D40000000000000000000080 /* Build configuration list for PBXNativeTarget "ViceMacPlus4" */;
+			buildPhases = (
+				D40000000000000000000043 /* Prepare VICE Runtime */,
+				D40000000000000000000041 /* Sources */,
+				D40000000000000000000040 /* Frameworks */,
+				D40000000000000000000042 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ViceMacPlus4;
+			productName = ViceMacPlus4;
+			productReference = D40000000000000000000027 /* VICE Mac Plus-4.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -240,6 +279,9 @@
 						CreatedOnToolsVersion = 26.5;
 					};
 					C30000000000000000000001 = {
+						CreatedOnToolsVersion = 26.5;
+					};
+					D40000000000000000000001 = {
 						CreatedOnToolsVersion = 26.5;
 					};
 				};
@@ -260,6 +302,7 @@
 				A10000000000000000000001 /* ViceMacC64 */,
 				B20000000000000000000001 /* ViceMacVIC20 */,
 				C30000000000000000000001 /* ViceMacPET */,
+				D40000000000000000000001 /* ViceMacPlus4 */,
 			);
 		};
 /* End PBXProject section */
@@ -287,6 +330,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				C30000000000000000000016 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D40000000000000000000042 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D40000000000000000000016 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -359,6 +410,28 @@
 			shellPath = /bin/bash;
 			shellScript = "/bin/bash \"$SRCROOT/scripts/prepare-vicemac-runtime.sh\"\n";
 		};
+		D40000000000000000000043 /* Prepare VICE Runtime */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Prepare VICE Runtime";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(SRCROOT)/BuildProducts/libvicemacxplus4.dylib",
+				"$(TARGET_BUILD_DIR)/$(FRAMEWORKS_FOLDER_PATH)/libvicemacxplus4.dylib",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/VICEData",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "/bin/bash \"$SRCROOT/scripts/prepare-vicemac-runtime.sh\"\n";
+		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -413,6 +486,24 @@
 				C3000000000000000000001D /* EmulatedMachine.swift in Sources */,
 				C3000000000000000000001C /* ViceEngineBridge.c in Sources */,
 				C30000000000000000000015 /* SettingsView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D40000000000000000000041 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D40000000000000000000010 /* ViceMacApp.swift in Sources */,
+				D40000000000000000000011 /* EmulatorSession.swift in Sources */,
+				D40000000000000000000012 /* ContentView.swift in Sources */,
+				D40000000000000000000013 /* EmulatorMetalView.swift in Sources */,
+				D40000000000000000000014 /* EmulatorRenderer.swift in Sources */,
+				D40000000000000000000017 /* EmulatorFrameSource.swift in Sources */,
+				D4000000000000000000001A /* VideoFilterSettings.swift in Sources */,
+				D4000000000000000000001B /* VideoFilterControls.swift in Sources */,
+				D4000000000000000000001D /* EmulatedMachine.swift in Sources */,
+				D4000000000000000000001C /* ViceEngineBridge.c in Sources */,
+				D40000000000000000000015 /* SettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -763,6 +854,83 @@
 			};
 			name = Release;
 		};
+		D40000000000000000000062 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_DEBUG_DYLIB = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/ViceMac/Engine",
+					"$(SRCROOT)/../vice/src/arch/macos",
+				);
+				INFOPLIST_KEY_CFBundleDisplayName = "VICE Mac Plus-4";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.barrywalker.vicemac.plus4;
+				PRODUCT_NAME = "VICE Mac Plus-4";
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) VICE_MAC_MACHINE_XPLUS4";
+				SWIFT_OBJC_BRIDGING_HEADER = "ViceMac/Engine/ViceMac-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
+				VICE_MACOS_MACHINE_TARGETS = xplus4;
+			};
+			name = Debug;
+		};
+		D40000000000000000000063 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/ViceMac/Engine",
+					"$(SRCROOT)/../vice/src/arch/macos",
+				);
+				INFOPLIST_KEY_CFBundleDisplayName = "VICE Mac Plus-4";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.barrywalker.vicemac.plus4;
+				PRODUCT_NAME = "VICE Mac Plus-4";
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) VICE_MAC_MACHINE_XPLUS4";
+				SWIFT_OBJC_BRIDGING_HEADER = "ViceMac/Engine/ViceMac-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
+				VALIDATE_PRODUCT = YES;
+				VICE_MACOS_MACHINE_TARGETS = xplus4;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -798,6 +966,15 @@
 			buildConfigurations = (
 				C30000000000000000000062 /* Debug */,
 				C30000000000000000000063 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D40000000000000000000080 /* Build configuration list for PBXNativeTarget "ViceMacPlus4" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D40000000000000000000062 /* Debug */,
+				D40000000000000000000063 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
