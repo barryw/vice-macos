@@ -29,8 +29,170 @@ struct SettingsView: View {
                 .tabItem {
                     Label("Display", systemImage: "display")
                 }
+
+            AIAssistantSettingsPane()
+                .tabItem {
+                    Label("AI", systemImage: "sparkles")
+                }
         }
-        .frame(width: 580, height: 520)
+        .frame(width: 580, height: 540)
+    }
+}
+
+private struct AIAssistantSettingsPane: View {
+    @EnvironmentObject private var aiSettings: AIAssistantSettings
+
+    var body: some View {
+        SettingsPane {
+            Section("Provider") {
+                Picker("Provider", selection: $aiSettings.provider) {
+                    ForEach(AIAssistantProvider.allCases) { provider in
+                        Label(provider.title, systemImage: provider.systemImage)
+                            .tag(provider)
+                    }
+                }
+            }
+
+            if aiSettings.provider.isServiceProvider {
+                Section("Authentication") {
+                    LabeledContent("Method") {
+                        Label("Provider API key", systemImage: "key")
+                            .foregroundStyle(.secondary)
+                    }
+
+                    LabeledContent("Account") {
+                        Button {
+                            openAuthenticationPage()
+                        } label: {
+                            Label(aiSettings.provider.authenticationButtonTitle,
+                                  systemImage: "person.crop.circle.badge.checkmark")
+                        }
+                        .disabled(aiSettings.provider.authenticationURL == nil)
+                    }
+
+                    LabeledContent("API key") {
+                        HStack(spacing: 8) {
+                            SecureField("API key", text: $aiSettings.apiKey)
+                                .textFieldStyle(.roundedBorder)
+
+                            Button {
+                                aiSettings.apiKey = ""
+                            } label: {
+                                Label("Clear API Key", systemImage: "xmark.circle")
+                            }
+                            .labelStyle(.iconOnly)
+                            .disabled(aiSettings.apiKey.isEmpty)
+                            .help("Clear API key")
+                        }
+                    }
+                }
+
+                Section("Model") {
+                    LabeledContent("Model") {
+                        HStack(spacing: 8) {
+                            TextField("Model ID", text: $aiSettings.model)
+                                .textFieldStyle(.roundedBorder)
+
+                            Menu {
+                                ForEach(modelOptions) { model in
+                                    Button(model.menuTitle) {
+                                        aiSettings.model = model.id
+                                    }
+                                }
+                            } label: {
+                                Label("Choose Model", systemImage: "list.bullet")
+                            }
+                            .labelStyle(.iconOnly)
+                            .disabled(aiSettings.availableModels.isEmpty)
+                            .help("Choose fetched model")
+                        }
+                    }
+
+                    LabeledContent("Models") {
+                        HStack(spacing: 10) {
+                            Button {
+                                Task {
+                                    await aiSettings.fetchAvailableModels()
+                                }
+                            } label: {
+                                Label("Fetch Models", systemImage: "arrow.clockwise")
+                            }
+                            .disabled(!aiSettings.canFetchModels)
+
+                            if aiSettings.isFetchingModels {
+                                ProgressView()
+                                    .controlSize(.small)
+                            }
+
+                            if let message = aiSettings.modelFetchMessage {
+                                Text(message)
+                                    .font(.caption)
+                                    .foregroundStyle(modelStatusColor)
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
+                            }
+                        }
+                    }
+                }
+            } else {
+                Section("Assistant") {
+                    LabeledContent("Toolbar") {
+                        Label("Hidden", systemImage: "eye.slash")
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            Section("Availability") {
+                LabeledContent("Toolbar") {
+                    Label(toolbarStatusTitle, systemImage: toolbarStatusImage)
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(aiSettings.isConfigured ? .green : .secondary)
+                }
+
+                LabeledContent("VM tools") {
+                    Text("Input, no-side-effect memory reads, no-side-effect memory writes, and bulk memory reads.")
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+
+    private var modelOptions: [AIAssistantModel] {
+        let selectedModel = aiSettings.model.trimmingCharacters(in: .whitespacesAndNewlines)
+        var options = aiSettings.availableModels
+        if !selectedModel.isEmpty,
+           !options.contains(where: { $0.id == selectedModel }) {
+            options.insert(AIAssistantModel(id: selectedModel), at: 0)
+        }
+
+        return options
+    }
+
+    private var toolbarStatusTitle: String {
+        aiSettings.isConfigured ? "Assistant visible" : "Hidden until provider, API key, and model are set"
+    }
+
+    private var toolbarStatusImage: String {
+        aiSettings.isConfigured ? "checkmark.circle.fill" : "eye.slash"
+    }
+
+    private var modelStatusColor: Color {
+        guard let message = aiSettings.modelFetchMessage else {
+            return .secondary
+        }
+
+        return message.hasPrefix("Fetched") ? .green : .secondary
+    }
+
+    private func openAuthenticationPage() {
+        guard let url = aiSettings.provider.authenticationURL else {
+            return
+        }
+
+        NSWorkspace.shared.open(url)
     }
 }
 
@@ -67,13 +229,13 @@ private struct MachineSettingsPane: View {
                 Section("Memory") {
                     Picker("RAM expansion", selection: $emulator.ramExpansion) {
                         ForEach(emulator.machine.ramExpansions) { expansion in
-                            Text(expansion.displayTitle(for: emulator.machine.id)).tag(expansion)
+                            Text(expansion.displayTitle(for: emulator.machine)).tag(expansion)
                         }
                     }
 
-                    if emulator.machine.id == .xvic {
+                    if emulator.machine.usesVIC20MemoryExpansion {
                         LabeledContent("Blocks") {
-                            Text(emulator.ramExpansion.detailTitle(for: emulator.machine.id))
+                            Text(emulator.ramExpansion.detailTitle(for: emulator.machine))
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -885,4 +1047,5 @@ private struct SettingsPane<Content: View>: View {
 #Preview {
     SettingsView()
         .environmentObject(EmulatorSession())
+        .environmentObject(AIAssistantSettings())
 }

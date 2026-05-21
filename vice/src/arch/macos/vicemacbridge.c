@@ -19,21 +19,28 @@
 #include "drive.h"
 #include "drive-sound.h"
 #include "joystick.h"
+#include "kbdbuf.h"
 #include "keyboard.h"
 #include "machine.h"
+#include "monitor.h"
+#include "monitor/montypes.h"
 #include "resources.h"
 #include "ui.h"
 #include "vicemacbridge.h"
 #include "vsync.h"
 
 #define VICEMAC_INPUT_QUEUE_CAPACITY 1024
+#define VICEMAC_KEYBOARD_TEXT_QUEUE_CAPACITY 128
+#define VICEMAC_KEYBOARD_TEXT_CAPACITY 4096
 #define VICEMAC_RESOURCE_QUEUE_CAPACITY 256
 #define VICEMAC_RESOURCE_NAME_CAPACITY 64
 #define VICEMAC_JOYSTICK_QUEUE_CAPACITY 256
 #define VICEMAC_MACHINE_COMMAND_QUEUE_CAPACITY 64
 #define VICEMAC_DRIVE_COMMAND_QUEUE_CAPACITY 64
 #define VICEMAC_CARTRIDGE_COMMAND_QUEUE_CAPACITY 16
+#define VICEMAC_MEMORY_REQUEST_QUEUE_CAPACITY 64
 #define VICEMAC_PATH_CAPACITY 4096
+#define VICEMAC_CURRENT_MEMORY_BANK -1
 
 typedef enum vicemac_machine_command_type_e {
     VICEMAC_MACHINE_COMMAND_PAUSE,
@@ -52,12 +59,21 @@ typedef enum vicemac_cartridge_command_type_e {
     VICEMAC_CARTRIDGE_COMMAND_DETACH
 } vicemac_cartridge_command_type_t;
 
+typedef enum vicemac_memory_request_type_e {
+    VICEMAC_MEMORY_REQUEST_PEEK,
+    VICEMAC_MEMORY_REQUEST_POKE
+} vicemac_memory_request_type_t;
+
 typedef struct vicemac_input_event_s {
     int clear;
     signed long key;
     int mod;
     int pressed;
 } vicemac_input_event_t;
+
+typedef struct vicemac_keyboard_text_event_s {
+    char text[VICEMAC_KEYBOARD_TEXT_CAPACITY];
+} vicemac_keyboard_text_event_t;
 
 typedef struct vicemac_resource_int_event_s {
     char name[VICEMAC_RESOURCE_NAME_CAPACITY];
@@ -92,6 +108,20 @@ typedef struct vicemac_cartridge_command_s {
     char path[VICEMAC_PATH_CAPACITY];
 } vicemac_cartridge_command_t;
 
+typedef struct vicemac_memory_request_s {
+    vicemac_memory_request_type_t type;
+    uint32_t memspace;
+    int32_t bank;
+    uint32_t address;
+    uint32_t length;
+    uint8_t *read_buffer;
+    const uint8_t *write_bytes;
+    int completed;
+    int success;
+    pthread_mutex_t mutex;
+    pthread_cond_t condition;
+} vicemac_memory_request_t;
+
 static vicemac_video_frame_callback_t video_frame_callback = 0;
 static void *video_frame_context = 0;
 static vicemac_drive_status_callback_t drive_status_callback = 0;
@@ -103,6 +133,10 @@ static pthread_mutex_t input_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 static vicemac_input_event_t input_queue[VICEMAC_INPUT_QUEUE_CAPACITY];
 static unsigned int input_queue_read = 0;
 static unsigned int input_queue_write = 0;
+static pthread_mutex_t keyboard_text_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
+static vicemac_keyboard_text_event_t keyboard_text_queue[VICEMAC_KEYBOARD_TEXT_QUEUE_CAPACITY];
+static unsigned int keyboard_text_queue_read = 0;
+static unsigned int keyboard_text_queue_write = 0;
 static pthread_mutex_t resource_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 static vicemac_resource_int_event_t resource_queue[VICEMAC_RESOURCE_QUEUE_CAPACITY];
 static unsigned int resource_queue_read = 0;
@@ -127,6 +161,10 @@ static pthread_mutex_t cartridge_command_queue_mutex = PTHREAD_MUTEX_INITIALIZER
 static vicemac_cartridge_command_t cartridge_command_queue[VICEMAC_CARTRIDGE_COMMAND_QUEUE_CAPACITY];
 static unsigned int cartridge_command_queue_read = 0;
 static unsigned int cartridge_command_queue_write = 0;
+static pthread_mutex_t memory_request_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
+static vicemac_memory_request_t *memory_request_queue[VICEMAC_MEMORY_REQUEST_QUEUE_CAPACITY];
+static unsigned int memory_request_queue_read = 0;
+static unsigned int memory_request_queue_write = 0;
 
 static unsigned int vicemac_queue_next(unsigned int index, unsigned int capacity)
 {
@@ -195,6 +233,53 @@ static int vicemac_queue_pop(pthread_mutex_t *mutex,
 
     pthread_mutex_unlock(mutex);
     return has_event;
+}
+
+static int vicemac_memory_queue_push(vicemac_memory_request_t *request)
+{
+    unsigned int next_write;
+
+    pthread_mutex_lock(&memory_request_queue_mutex);
+
+    next_write = vicemac_queue_next(memory_request_queue_write,
+                                    VICEMAC_MEMORY_REQUEST_QUEUE_CAPACITY);
+    if (next_write == memory_request_queue_read) {
+        pthread_mutex_unlock(&memory_request_queue_mutex);
+        return 0;
+    }
+
+    memory_request_queue[memory_request_queue_write] = request;
+    memory_request_queue_write = next_write;
+
+    pthread_mutex_unlock(&memory_request_queue_mutex);
+    return 1;
+}
+
+static int vicemac_memory_queue_pop(vicemac_memory_request_t **request)
+{
+    int has_request = 0;
+
+    pthread_mutex_lock(&memory_request_queue_mutex);
+
+    if (memory_request_queue_read != memory_request_queue_write) {
+        *request = memory_request_queue[memory_request_queue_read];
+        memory_request_queue[memory_request_queue_read] = 0;
+        memory_request_queue_read = vicemac_queue_next(memory_request_queue_read,
+                                                       VICEMAC_MEMORY_REQUEST_QUEUE_CAPACITY);
+        has_request = 1;
+    }
+
+    pthread_mutex_unlock(&memory_request_queue_mutex);
+    return has_request;
+}
+
+static void vicemac_complete_memory_request(vicemac_memory_request_t *request, int success)
+{
+    pthread_mutex_lock(&request->mutex);
+    request->success = success;
+    request->completed = 1;
+    pthread_cond_signal(&request->condition);
+    pthread_mutex_unlock(&request->mutex);
 }
 
 void vicemac_set_video_frame_callback(vicemac_video_frame_callback_t callback,
@@ -450,6 +535,27 @@ int vicemac_queue_keyboard_clear(void)
                               &event);
 }
 
+int vicemac_queue_keyboard_text(const char *text)
+{
+    vicemac_keyboard_text_event_t event;
+
+    if (text == 0 || text[0] == '\0'
+        || strlen(text) >= sizeof(event.text)) {
+        return 0;
+    }
+
+    memset(&event, 0, sizeof(event));
+    vicemac_copy_cstring(event.text, sizeof(event.text), text);
+
+    return vicemac_queue_push(&keyboard_text_queue_mutex,
+                              keyboard_text_queue,
+                              sizeof(keyboard_text_queue[0]),
+                              VICEMAC_KEYBOARD_TEXT_QUEUE_CAPACITY,
+                              &keyboard_text_queue_read,
+                              &keyboard_text_queue_write,
+                              &event);
+}
+
 int vicemac_queue_resource_int(const char *name, int value)
 {
     vicemac_resource_int_event_t event;
@@ -649,6 +755,92 @@ int vicemac_queue_cartridge_detach(void)
                               &command);
 }
 
+static int vicemac_perform_memory_request(vicemac_memory_request_type_t type,
+                                          uint32_t memspace,
+                                          int32_t bank,
+                                          uint32_t address,
+                                          uint8_t *read_buffer,
+                                          const uint8_t *write_bytes,
+                                          uint32_t length)
+{
+    vicemac_memory_request_t request;
+    int success;
+
+    if (length == 0 || address > UINT16_MAX || length > (UINT32_MAX - address)
+        || address + length > ((uint32_t)UINT16_MAX + 1U)) {
+        return 0;
+    }
+
+    if ((type == VICEMAC_MEMORY_REQUEST_PEEK && read_buffer == 0)
+        || (type == VICEMAC_MEMORY_REQUEST_POKE && write_bytes == 0)) {
+        return 0;
+    }
+
+    memset(&request, 0, sizeof(request));
+    request.type = type;
+    request.memspace = memspace;
+    request.bank = bank;
+    request.address = address;
+    request.length = length;
+    request.read_buffer = read_buffer;
+    request.write_bytes = write_bytes;
+
+    if (pthread_mutex_init(&request.mutex, 0) != 0) {
+        return 0;
+    }
+    if (pthread_cond_init(&request.condition, 0) != 0) {
+        pthread_mutex_destroy(&request.mutex);
+        return 0;
+    }
+
+    if (!vicemac_memory_queue_push(&request)) {
+        pthread_cond_destroy(&request.condition);
+        pthread_mutex_destroy(&request.mutex);
+        return 0;
+    }
+
+    pthread_mutex_lock(&request.mutex);
+    while (!request.completed) {
+        pthread_cond_wait(&request.condition, &request.mutex);
+    }
+    success = request.success;
+    pthread_mutex_unlock(&request.mutex);
+
+    pthread_cond_destroy(&request.condition);
+    pthread_mutex_destroy(&request.mutex);
+    return success;
+}
+
+int vicemac_peek_memory(uint32_t memspace,
+                        int32_t bank,
+                        uint32_t address,
+                        uint8_t *buffer,
+                        uint32_t length)
+{
+    return vicemac_perform_memory_request(VICEMAC_MEMORY_REQUEST_PEEK,
+                                          memspace,
+                                          bank,
+                                          address,
+                                          buffer,
+                                          0,
+                                          length);
+}
+
+int vicemac_poke_memory(uint32_t memspace,
+                        int32_t bank,
+                        uint32_t address,
+                        const uint8_t *bytes,
+                        uint32_t length)
+{
+    return vicemac_perform_memory_request(VICEMAC_MEMORY_REQUEST_POKE,
+                                          memspace,
+                                          bank,
+                                          address,
+                                          0,
+                                          bytes,
+                                          length);
+}
+
 static int vicemac_pop_key_event(vicemac_input_event_t *event)
 {
     return vicemac_queue_pop(&input_queue_mutex,
@@ -658,6 +850,55 @@ static int vicemac_pop_key_event(vicemac_input_event_t *event)
                              &input_queue_read,
                              &input_queue_write,
                              event);
+}
+
+static int vicemac_pop_keyboard_text_event(vicemac_keyboard_text_event_t *event)
+{
+    return vicemac_queue_pop(&keyboard_text_queue_mutex,
+                             keyboard_text_queue,
+                             sizeof(keyboard_text_queue[0]),
+                             VICEMAC_KEYBOARD_TEXT_QUEUE_CAPACITY,
+                             &keyboard_text_queue_read,
+                             &keyboard_text_queue_write,
+                             event);
+}
+
+static void vicemac_basic_text_to_petscii(char *text)
+{
+    char *read = text;
+    char *write = text;
+
+    while (*read != '\0') {
+        unsigned char c = (unsigned char)*read;
+
+        if (c == '\r') {
+            *write++ = 0x0d;
+            read++;
+            if (*read == '\n') {
+                read++;
+            }
+        } else if (c == '\n') {
+            *write++ = 0x0d;
+            read++;
+        } else if (c >= 'a' && c <= 'z') {
+            *write++ = (char)(c - ('a' - 'A'));
+            read++;
+        } else if (c >= 'A' && c <= 'Z') {
+            *write++ = (char)c;
+            read++;
+        } else if (c == '`') {
+            *write++ = '\'';
+            read++;
+        } else if (c >= 0x20 && c <= 0x5f) {
+            *write++ = (char)c;
+            read++;
+        } else {
+            *write++ = '?';
+            read++;
+        }
+    }
+
+    *write = '\0';
 }
 
 static int vicemac_pop_resource_int_event(vicemac_resource_int_event_t *event)
@@ -726,6 +967,97 @@ static int vicemac_pop_cartridge_command(vicemac_cartridge_command_t *command)
                              command);
 }
 
+static MEMSPACE vicemac_normalized_memspace(uint32_t memspace)
+{
+    if (memspace == e_default_space) {
+        return e_comp_space;
+    }
+
+    return (MEMSPACE)memspace;
+}
+
+static int vicemac_memory_request_bank(MEMSPACE memspace, int32_t requested_bank, int *bank)
+{
+    if (memspace <= e_default_space || memspace >= e_invalid_space
+        || mon_interfaces[memspace] == 0 || bank == 0) {
+        return 0;
+    }
+
+    if (requested_bank == VICEMAC_CURRENT_MEMORY_BANK) {
+        *bank = mon_interfaces[memspace]->current_bank;
+        return 1;
+    }
+
+    if (requested_bank < 0 || mon_banknum_validate(memspace, (int)requested_bank) == 0) {
+        return 0;
+    }
+
+    *bank = (int)requested_bank;
+    return 1;
+}
+
+static int vicemac_dispatch_memory_request(vicemac_memory_request_t *request)
+{
+    monitor_interface_t *interface;
+    MEMSPACE memspace;
+    uint32_t index;
+    int bank;
+    int drive_number;
+
+    if (request == 0 || request->length == 0 || request->address > UINT16_MAX
+        || request->address + request->length > ((uint32_t)UINT16_MAX + 1U)) {
+        return 0;
+    }
+
+    memspace = vicemac_normalized_memspace(request->memspace);
+    if (!vicemac_memory_request_bank(memspace, request->bank, &bank)) {
+        return 0;
+    }
+    interface = mon_interfaces[memspace];
+
+    drive_number = monitor_diskspace_dnr(memspace);
+    if (drive_number >= 0 && !check_drive_emu_level_ok(drive_number + 8)) {
+        return 0;
+    }
+
+    switch (request->type) {
+        case VICEMAC_MEMORY_REQUEST_PEEK:
+            if (request->read_buffer == 0 || interface->mem_bank_peek == 0) {
+                return 0;
+            }
+            for (index = 0; index < request->length; index++) {
+                request->read_buffer[index] = interface->mem_bank_peek(bank,
+                                                                       (uint16_t)(request->address + index),
+                                                                       interface->context);
+            }
+            return 1;
+        case VICEMAC_MEMORY_REQUEST_POKE:
+            if (request->write_bytes == 0 || interface->mem_bank_poke == 0) {
+                return 0;
+            } else {
+                for (index = 0; index < request->length; index++) {
+                    interface->mem_bank_poke(bank,
+                                             (uint16_t)(request->address + index),
+                                             request->write_bytes[index],
+                                             interface->context);
+                }
+            }
+            return 1;
+    }
+
+    return 0;
+}
+
+static void vicemac_dispatch_queued_memory_requests(void)
+{
+    vicemac_memory_request_t *request;
+
+    while (vicemac_memory_queue_pop(&request)) {
+        vicemac_complete_memory_request(request,
+                                        vicemac_dispatch_memory_request(request));
+    }
+}
+
 static void vicemac_dispatch_queued_resources(void)
 {
     vicemac_resource_int_event_t int_event;
@@ -743,6 +1075,7 @@ static void vicemac_dispatch_queued_resources(void)
 static void vicemac_dispatch_queued_input(void)
 {
     vicemac_input_event_t event;
+    vicemac_keyboard_text_event_t text_event;
 
     while (vicemac_pop_key_event(&event)) {
         if (event.clear) {
@@ -752,6 +1085,14 @@ static void vicemac_dispatch_queued_input(void)
         } else {
             keyboard_key_released(event.key, event.mod);
         }
+    }
+
+    while (vicemac_pop_keyboard_text_event(&text_event)) {
+        char text[VICEMAC_KEYBOARD_TEXT_CAPACITY];
+
+        vicemac_copy_cstring(text, sizeof(text), text_event.text);
+        vicemac_basic_text_to_petscii(text);
+        (void)kbdbuf_feed(text);
     }
 }
 
@@ -868,6 +1209,7 @@ static void vicemac_dispatch_queued_cartridge_commands(void)
 
 void vicemac_dispatch_queued_events(void)
 {
+    vicemac_dispatch_queued_memory_requests();
     vicemac_dispatch_queued_resources();
     vicemac_dispatch_queued_machine_commands();
     vicemac_dispatch_queued_cartridge_commands();

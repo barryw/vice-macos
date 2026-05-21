@@ -69,6 +69,7 @@ bool ViceEngineStartMachine(const char *machineID,
 bool ViceEngineIsRunning(void);
 void ViceEngineSendKeyEvent(int64_t key, int32_t modifiers, bool pressed);
 void ViceEngineReleaseAllKeys(void);
+bool ViceEngineFeedKeyboardText(const char *text);
 bool ViceEngineSetIntResource(const char *name, int32_t value);
 bool ViceEngineSetStringResource(const char *name, const char *value);
 bool ViceEngineSetJoystickValue(uint32_t port, uint32_t value);
@@ -80,6 +81,16 @@ bool ViceEngineAttachDisk(uint32_t unit, uint32_t drive, const char *path, bool 
 bool ViceEnginePreviewDriveSound(uint32_t unit);
 bool ViceEngineAttachCartridge(const char *path);
 bool ViceEngineDetachCartridge(void);
+bool ViceEnginePeekMemory(uint32_t memorySpace,
+                          int32_t bank,
+                          uint32_t address,
+                          uint8_t *buffer,
+                          uint32_t length);
+bool ViceEnginePokeMemory(uint32_t memorySpace,
+                          int32_t bank,
+                          uint32_t address,
+                          const uint8_t *bytes,
+                          uint32_t length);
 
 #ifdef __cplusplus
 }

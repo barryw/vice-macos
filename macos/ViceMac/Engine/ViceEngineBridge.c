@@ -19,6 +19,7 @@ typedef void (*ViceSetCartridgeStatusCallbackFunction)(vicemac_cartridge_status_
                                                        void *context);
 typedef int (*ViceQueueKeyEventFunction)(signed long key, int mod, int pressed);
 typedef int (*ViceQueueKeyboardClearFunction)(void);
+typedef int (*ViceQueueKeyboardTextFunction)(const char *text);
 typedef int (*ViceQueueResourceIntFunction)(const char *name, int value);
 typedef int (*ViceQueueResourceStringFunction)(const char *name, const char *value);
 typedef int (*ViceQueueJoystickValueFunction)(uint32_t port, uint32_t value);
@@ -33,6 +34,16 @@ typedef int (*ViceQueueDriveAttachDiskFunction)(uint32_t unit,
 typedef int (*ViceQueueDriveSoundPreviewFunction)(uint32_t unit);
 typedef int (*ViceQueueCartridgeAttachFunction)(const char *path);
 typedef int (*ViceQueueCartridgeDetachFunction)(void);
+typedef int (*VicePeekMemoryFunction)(uint32_t memspace,
+                                      int32_t bank,
+                                      uint32_t address,
+                                      uint8_t *buffer,
+                                      uint32_t length);
+typedef int (*VicePokeMemoryFunction)(uint32_t memspace,
+                                      int32_t bank,
+                                      uint32_t address,
+                                      const uint8_t *bytes,
+                                      uint32_t length);
 
 typedef struct ViceEngineSymbols {
     ViceMainProgramFunction mainProgram;
@@ -42,6 +53,7 @@ typedef struct ViceEngineSymbols {
     ViceSetCartridgeStatusCallbackFunction setCartridgeStatusCallback;
     ViceQueueKeyEventFunction queueKeyEvent;
     ViceQueueKeyboardClearFunction queueKeyboardClear;
+    ViceQueueKeyboardTextFunction queueKeyboardText;
     ViceQueueResourceIntFunction queueResourceInt;
     ViceQueueResourceStringFunction queueResourceString;
     ViceQueueJoystickValueFunction queueJoystickValue;
@@ -53,6 +65,8 @@ typedef struct ViceEngineSymbols {
     ViceQueueDriveSoundPreviewFunction queueDriveSoundPreview;
     ViceQueueCartridgeAttachFunction queueCartridgeAttach;
     ViceQueueCartridgeDetachFunction queueCartridgeDetach;
+    VicePeekMemoryFunction peekMemory;
+    VicePokeMemoryFunction pokeMemory;
 } ViceEngineSymbols;
 
 typedef struct ViceEngineStartArguments {
@@ -162,6 +176,7 @@ static int loadRuntimeSymbols(void *handle, ViceEngineSymbols *symbols)
     LOAD_RUNTIME_SYMBOL(setCartridgeStatusCallback, "vicemac_set_cartridge_status_callback");
     LOAD_RUNTIME_SYMBOL(queueKeyEvent, "vicemac_queue_key_event");
     LOAD_RUNTIME_SYMBOL(queueKeyboardClear, "vicemac_queue_keyboard_clear");
+    LOAD_RUNTIME_SYMBOL(queueKeyboardText, "vicemac_queue_keyboard_text");
     LOAD_RUNTIME_SYMBOL(queueResourceInt, "vicemac_queue_resource_int");
     LOAD_RUNTIME_SYMBOL(queueResourceString, "vicemac_queue_resource_string");
     LOAD_RUNTIME_SYMBOL(queueJoystickValue, "vicemac_queue_joystick_value");
@@ -173,6 +188,8 @@ static int loadRuntimeSymbols(void *handle, ViceEngineSymbols *symbols)
     LOAD_RUNTIME_SYMBOL(queueDriveSoundPreview, "vicemac_queue_drive_sound_preview");
     LOAD_RUNTIME_SYMBOL(queueCartridgeAttach, "vicemac_queue_cartridge_attach");
     LOAD_RUNTIME_SYMBOL(queueCartridgeDetach, "vicemac_queue_cartridge_detach");
+    LOAD_RUNTIME_SYMBOL(peekMemory, "vicemac_peek_memory");
+    LOAD_RUNTIME_SYMBOL(pokeMemory, "vicemac_poke_memory");
 
 #undef LOAD_RUNTIME_SYMBOL
     return 1;
@@ -298,6 +315,15 @@ void ViceEngineReleaseAllKeys(void)
     (void)runtimeSymbols.queueKeyboardClear();
 }
 
+bool ViceEngineFeedKeyboardText(const char *text)
+{
+    if (!atomic_load(&engineRunning) || runtimeSymbols.queueKeyboardText == NULL) {
+        return false;
+    }
+
+    return runtimeSymbols.queueKeyboardText(text) != 0;
+}
+
 bool ViceEngineSetIntResource(const char *name, int32_t value)
 {
     if (!atomic_load(&engineRunning) || runtimeSymbols.queueResourceInt == NULL) {
@@ -395,6 +421,32 @@ bool ViceEngineDetachCartridge(void)
     }
 
     return runtimeSymbols.queueCartridgeDetach() != 0;
+}
+
+bool ViceEnginePeekMemory(uint32_t memorySpace,
+                          int32_t bank,
+                          uint32_t address,
+                          uint8_t *buffer,
+                          uint32_t length)
+{
+    if (!atomic_load(&engineRunning) || runtimeSymbols.peekMemory == NULL) {
+        return false;
+    }
+
+    return runtimeSymbols.peekMemory(memorySpace, bank, address, buffer, length) != 0;
+}
+
+bool ViceEnginePokeMemory(uint32_t memorySpace,
+                          int32_t bank,
+                          uint32_t address,
+                          const uint8_t *bytes,
+                          uint32_t length)
+{
+    if (!atomic_load(&engineRunning) || runtimeSymbols.pokeMemory == NULL) {
+        return false;
+    }
+
+    return runtimeSymbols.pokeMemory(memorySpace, bank, address, bytes, length) != 0;
 }
 
 static void freeStartArguments(ViceEngineStartArguments *arguments)

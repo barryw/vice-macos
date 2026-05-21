@@ -81,6 +81,69 @@ final class ModelConfigurationTests: XCTestCase {
         XCTAssertEqual(arguments.value(after: "-memory"), "24k")
     }
 
+    func testPETStartupArgumentsUseSelectedModelVariant() {
+        let machine = EmulatedMachine.xpet
+        let arguments = machine.startupArguments(configuration: startupConfiguration(for: machine))
+
+        XCTAssertEqual(machine.family, .pet)
+        XCTAssertEqual(machine.viceTarget, "xpet")
+        XCTAssertEqual(arguments.value(after: "-model"), "4032")
+    }
+
+    func testTEDStartupArgumentsUseSelectedModelVariant() {
+        let plus4 = EmulatedMachine.xplus4
+        let c16 = EmulatedMachine.xc16
+        let c232 = EmulatedMachine.xc232
+        let v364 = EmulatedMachine.xv364
+        let plus4Arguments = plus4.startupArguments(configuration: startupConfiguration(for: plus4))
+        let c16Arguments = c16.startupArguments(configuration: startupConfiguration(for: c16))
+        let c232Arguments = c232.startupArguments(configuration: startupConfiguration(for: c232,
+                                                                                      videoStandard: .pal))
+        let v364Arguments = v364.startupArguments(configuration: startupConfiguration(for: v364,
+                                                                                      videoStandard: .pal))
+
+        XCTAssertEqual(plus4.family, .ted)
+        XCTAssertEqual(c16.family, .ted)
+        XCTAssertEqual(c16.viceTarget, plus4.viceTarget)
+        XCTAssertEqual(c232.viceTarget, plus4.viceTarget)
+        XCTAssertEqual(v364.viceTarget, plus4.viceTarget)
+        XCTAssertEqual(c16.dynamicLibraryName, plus4.dynamicLibraryName)
+        XCTAssertEqual(c232.dynamicLibraryName, plus4.dynamicLibraryName)
+        XCTAssertEqual(v364.dynamicLibraryName, plus4.dynamicLibraryName)
+        XCTAssertEqual(plus4Arguments.value(after: "-model"), "plus4ntsc")
+        XCTAssertEqual(c16Arguments.value(after: "-model"), "c16ntsc")
+        XCTAssertEqual(c232Arguments.value(after: "-model"), "c232")
+        XCTAssertEqual(v364Arguments.value(after: "-model"), "v364")
+        XCTAssertTrue(c16Arguments.contains("-TEDborders"))
+        XCTAssertTrue(c232Arguments.contains("-TEDborders"))
+        XCTAssertTrue(v364Arguments.contains("-TEDborders"))
+    }
+
+    func testTEDMachinesKeepVideoAndROMChangesInStartupArguments() {
+        let machine = EmulatedMachine.xplus4
+
+        XCTAssertFalse(machine.supportsRuntimeVideoStandardUpdates)
+        XCTAssertFalse(machine.supportsRuntimeROMImageUpdates)
+    }
+
+    func testTEDPrototypeModelsAreNTSConly() {
+        XCTAssertTrue(EmulatedMachine.xplus4.capabilities.supportsVideoStandardSelection)
+        XCTAssertTrue(EmulatedMachine.xc16.capabilities.supportsVideoStandardSelection)
+        XCTAssertFalse(EmulatedMachine.xc232.capabilities.supportsVideoStandardSelection)
+        XCTAssertFalse(EmulatedMachine.xv364.capabilities.supportsVideoStandardSelection)
+    }
+
+    func testTEDPrototypeModelsUseMatchingDefaultROMs() {
+        let c232 = EmulatedMachine.xc232
+        let v364 = EmulatedMachine.xv364
+        let c232Arguments = c232.startupArguments(configuration: startupConfiguration(for: c232))
+        let v364Arguments = v364.startupArguments(configuration: startupConfiguration(for: v364))
+
+        XCTAssertEqual(c232Arguments.value(after: "-kernal"), "kernal-318004-01.bin")
+        XCTAssertEqual(v364Arguments.value(after: "-kernal"), "kernal-364.bin")
+        XCTAssertEqual(v364Arguments.value(after: "-c2lo"), "c2lo-364.bin")
+    }
+
     func testDriveSoundStartupVolumeUsesVICEScale() {
         let machine = EmulatedMachine.x64sc
         let driveConfigurations = [
@@ -169,7 +232,7 @@ final class ModelConfigurationTests: XCTestCase {
     }
 
     func testVIC20RAMExpansionPlanUsesBlockResources() {
-        let plan = RAMExpansion.vic20_24k.resourcePlan(for: .xvic)
+        let plan = RAMExpansion.vic20_24k.resourcePlan(for: EmulatedMachine.xvic)
 
         XCTAssertTrue(plan.requiresHardReset)
         XCTAssertEqual(plan.value(for: "RAMBlock0"), 0)
@@ -180,7 +243,7 @@ final class ModelConfigurationTests: XCTestCase {
     }
 
     func testVIC20RAMExpansionDisableStillRequiresHardReset() {
-        let plan = RAMExpansion.none.resourcePlan(for: .xvic)
+        let plan = RAMExpansion.none.resourcePlan(for: EmulatedMachine.xvic)
 
         XCTAssertTrue(plan.requiresHardReset)
         XCTAssertEqual(plan.value(for: "RAMBlock0"), 0)
@@ -191,7 +254,7 @@ final class ModelConfigurationTests: XCTestCase {
     }
 
     func testREUResourcePlanSetsSizeBeforeEnable() {
-        let plan = RAMExpansion.reu512.resourcePlan(for: .x64sc)
+        let plan = RAMExpansion.reu512.resourcePlan(for: EmulatedMachine.x64sc)
 
         XCTAssertFalse(plan.requiresHardReset)
         XCTAssertEqual(plan.enableAssignments.map(\.name), ["REUsize", "REU"])
@@ -199,13 +262,123 @@ final class ModelConfigurationTests: XCTestCase {
         XCTAssertEqual(plan.value(for: "REU"), 1)
     }
 
+    func testMemorySpaceRawValuesMatchVICEMonitorMemspaces() {
+        XCTAssertEqual(EmulatorSession.MemorySpace.computer.rawValue, 1)
+        XCTAssertEqual(EmulatorSession.MemorySpace.drive8.rawValue, 2)
+        XCTAssertEqual(EmulatorSession.MemorySpace.drive9.rawValue, 3)
+        XCTAssertEqual(EmulatorSession.MemorySpace.drive10.rawValue, 4)
+        XCTAssertEqual(EmulatorSession.MemorySpace.drive11.rawValue, 5)
+    }
+
+    func testOpenAIModelListDecodesModelIDs() throws {
+        let json = """
+        {
+          "object": "list",
+          "data": [
+            { "id": "gpt-5.5", "object": "model" },
+            { "id": "gpt-5.4", "object": "model" }
+          ]
+        }
+        """.data(using: .utf8)!
+
+        let models = try AIAssistantModelService.decodeOpenAIModels(from: json)
+
+        XCTAssertEqual(models.map(\.id), ["gpt-5.5", "gpt-5.4"])
+        XCTAssertEqual(models.first?.menuTitle, "gpt-5.5")
+    }
+
+    func testAnthropicModelListDecodesDisplayNames() throws {
+        let json = """
+        {
+          "data": [
+            {
+              "type": "model",
+              "id": "claude-sonnet-4-5-20250929",
+              "display_name": "Claude Sonnet 4.5",
+              "created_at": "2025-09-29T00:00:00Z"
+            }
+          ],
+          "has_more": false
+        }
+        """.data(using: .utf8)!
+
+        let models = try AIAssistantModelService.decodeAnthropicModels(from: json)
+
+        XCTAssertEqual(models.first?.id, "claude-sonnet-4-5-20250929")
+        XCTAssertEqual(models.first?.menuTitle, "Claude Sonnet 4.5 (claude-sonnet-4-5-20250929)")
+    }
+
+    func testOpenAIResponseDecodesTextAndFunctionCalls() throws {
+        let json = """
+        {
+          "id": "resp_123",
+          "output": [
+            {
+              "type": "message",
+              "content": [
+                {
+                  "type": "output_text",
+                  "text": "I can do that."
+                }
+              ]
+            },
+            {
+              "type": "function_call",
+              "call_id": "call_123",
+              "name": "submit_line",
+              "arguments": "{\\"line\\":\\"10 PRINT \\\\\\"HI\\\\\\"\\"}"
+            }
+          ]
+        }
+        """.data(using: .utf8)!
+
+        let response = try AIAssistantConversationService.decodeOpenAIResponse(from: json)
+
+        XCTAssertEqual(response.id, "resp_123")
+        XCTAssertEqual(response.text, "I can do that.")
+        XCTAssertEqual(response.toolCalls.first?.id, "call_123")
+        XCTAssertEqual(response.toolCalls.first?.name, "submit_line")
+    }
+
+    func testAnthropicResponseDecodesTextAndToolUse() throws {
+        let json = """
+        {
+          "id": "msg_123",
+          "type": "message",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "Writing the line now."
+            },
+            {
+              "type": "tool_use",
+              "id": "toolu_123",
+              "name": "submit_line",
+              "input": {
+                "line": "10 PRINT \\"HI\\""
+              }
+            }
+          ]
+        }
+        """.data(using: .utf8)!
+
+        let response = try AIAssistantConversationService.decodeAnthropicResponse(from: json)
+
+        XCTAssertEqual(response.text, "Writing the line now.")
+        XCTAssertEqual(response.toolCalls.first?.id, "toolu_123")
+        XCTAssertEqual(response.toolCalls.first?.name, "submit_line")
+        XCTAssertEqual(response.rawContent.count, 2)
+    }
+
     private func startupConfiguration(for machine: EmulatedMachine,
                                       displayOutput: MachineDisplayOutput? = nil,
+                                      videoStandard: EmulatorSession.VideoStandard = .ntsc,
                                       ramExpansion: RAMExpansion = .none,
                                       driveConfigurations: [DriveConfiguration]? = nil) -> MachineStartupConfiguration {
         MachineStartupConfiguration(executablePath: "/tmp/vice",
                                     dataDirectory: "/tmp/data",
-                                    videoStandard: .ntsc,
+                                    videoStandard: videoStandard,
                                     sidModel: .mos8580,
                                     soundEnabled: true,
                                     soundVolume: 100,
@@ -221,7 +394,10 @@ final class ModelConfigurationTests: XCTestCase {
         .x128,
         .xvic,
         .xpet,
-        .xplus4
+        .xplus4,
+        .xc16,
+        .xc232,
+        .xv364
     ]
 }
 

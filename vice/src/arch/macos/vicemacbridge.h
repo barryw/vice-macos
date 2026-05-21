@@ -95,6 +95,7 @@ void vicemac_publish_drive_status(uint32_t unit,
                                   const char *drive1_image_path);
 int vicemac_queue_key_event(signed long key, int mod, int pressed);
 int vicemac_queue_keyboard_clear(void);
+int vicemac_queue_keyboard_text(const char *text);
 int vicemac_queue_resource_int(const char *name, int value);
 int vicemac_queue_resource_string(const char *name, const char *value);
 int vicemac_queue_joystick_value(uint32_t port, uint32_t value);
@@ -109,6 +110,16 @@ int vicemac_queue_drive_attach_disk(uint32_t unit,
 int vicemac_queue_drive_sound_preview(uint32_t unit);
 int vicemac_queue_cartridge_attach(const char *path);
 int vicemac_queue_cartridge_detach(void);
+int vicemac_peek_memory(uint32_t memspace,
+                        int32_t bank,
+                        uint32_t address,
+                        uint8_t *buffer,
+                        uint32_t length);
+int vicemac_poke_memory(uint32_t memspace,
+                        int32_t bank,
+                        uint32_t address,
+                        const uint8_t *bytes,
+                        uint32_t length);
 void vicemac_dispatch_queued_events(void);
 
 #ifdef __cplusplus

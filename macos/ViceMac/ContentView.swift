@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 
 struct ContentView: View {
     @EnvironmentObject private var emulator: EmulatorSession
+    @EnvironmentObject private var aiSettings: AIAssistantSettings
     @State private var showingFilterPanel = false
     @State private var isFullScreen = false
     @State private var topChromeActive = false
@@ -58,7 +59,7 @@ struct ContentView: View {
                     DisplayOutputToolbarPicker()
                 }
 
-                if emulator.machine.id == .xvic {
+                if emulator.machine.usesVIC20MemoryExpansion {
                     VIC20MemoryToolbarMenu()
                 }
 
@@ -70,6 +71,10 @@ struct ContentView: View {
                     .help("Display filter preset")
 
                 DisplayToolbarControls()
+
+                if aiSettings.isConfigured {
+                    AIAssistantToolbarButton()
+                }
 
                 Button {
                     showingFilterPanel.toggle()
@@ -85,6 +90,206 @@ struct ContentView: View {
         }
         .onAppear {
             emulator.start()
+        }
+    }
+}
+
+private struct AIAssistantToolbarButton: View {
+    @EnvironmentObject private var emulator: EmulatorSession
+    @EnvironmentObject private var aiSettings: AIAssistantSettings
+    @State private var isPresented = false
+
+    var body: some View {
+        Button {
+            isPresented.toggle()
+        } label: {
+            Label("Assistant", systemImage: "sparkles")
+        }
+        .help("Ask or control \(emulator.machine.shortName)")
+        .popover(isPresented: $isPresented, arrowEdge: .bottom) {
+            AIAssistantPanel()
+                .environmentObject(emulator)
+                .environmentObject(aiSettings)
+        }
+    }
+}
+
+private struct AIAssistantPanel: View {
+    @EnvironmentObject private var emulator: EmulatorSession
+    @EnvironmentObject private var aiSettings: AIAssistantSettings
+    @State private var mode = AIAssistantPanelMode.ask
+    @State private var prompt = ""
+    @State private var responseText = ""
+    @State private var statusText = "Ready."
+    @State private var isRunning = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                Image(systemName: "sparkles")
+                    .font(.title3.weight(.semibold))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(.tint)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Assistant")
+                        .font(.headline)
+
+                    Text("\(aiSettings.providerSummary) - \(emulator.machine.displayName)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+            }
+
+            Picker("Mode", selection: $mode) {
+                ForEach(AIAssistantPanelMode.allCases) { mode in
+                    Text(mode.title).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            TextEditor(text: $prompt)
+                .font(.body)
+                .scrollContentBackground(.hidden)
+                .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .frame(height: 104)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(.separator.opacity(0.45))
+                }
+
+            if isRunning {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+
+                    Text("Working...")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } else if !responseText.isEmpty {
+                ScrollView {
+                    Text(responseText)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(10)
+                }
+                .frame(height: 132)
+                .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(.separator.opacity(0.35))
+                }
+            }
+
+            Text(statusText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            HStack {
+                Button {
+                    prompt = ""
+                    responseText = ""
+                    statusText = "Ready."
+                } label: {
+                    Label("Clear", systemImage: "xmark")
+                }
+                .disabled(prompt.isEmpty && responseText.isEmpty)
+
+                Spacer()
+
+                Button {
+                    Task {
+                        await submitAssistantPrompt()
+                    }
+                } label: {
+                    Label(mode.primaryActionTitle, systemImage: mode.primaryActionImage)
+                }
+                .disabled(!canActOnPrompt || isRunning)
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(18)
+        .frame(width: 420)
+    }
+
+    private var canActOnPrompt: Bool {
+        !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func submitAssistantPrompt() async {
+        let submittedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !submittedPrompt.isEmpty else {
+            return
+        }
+
+        isRunning = true
+        responseText = ""
+        statusText = mode == .ask ? "Asking \(aiSettings.provider.title)..." : "Operating \(emulator.machine.shortName)..."
+
+        do {
+            let result = try await AIAssistantConversationService.run(prompt: submittedPrompt,
+                                                                      mode: mode.interactionMode,
+                                                                      settings: aiSettings,
+                                                                      emulator: emulator)
+            responseText = result.text
+            if result.toolUseCount == 0 {
+                statusText = "Done."
+            } else {
+                let noun = result.toolUseCount == 1 ? "tool" : "tools"
+                statusText = "Done. Used \(result.toolUseCount) VM \(noun)."
+            }
+        } catch {
+            statusText = error.localizedDescription
+        }
+
+        isRunning = false
+    }
+}
+
+private enum AIAssistantPanelMode: String, CaseIterable, Identifiable {
+    case ask
+    case operate
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .ask:
+            return "Ask"
+        case .operate:
+            return "Do"
+        }
+    }
+
+    var interactionMode: AIAssistantInteractionMode {
+        switch self {
+        case .ask:
+            return .ask
+        case .operate:
+            return .operate
+        }
+    }
+
+    var primaryActionTitle: String {
+        switch self {
+        case .ask:
+            return "Ask"
+        case .operate:
+            return "Run"
+        }
+    }
+
+    var primaryActionImage: String {
+        switch self {
+        case .ask:
+            return "paperplane"
+        case .operate:
+            return "sparkles"
         }
     }
 }
@@ -531,9 +736,9 @@ private struct VIC20MemoryToolbarMenu: View {
                     emulator.ramExpansion = expansion
                 } label: {
                     if emulator.ramExpansion == expansion {
-                        Label(expansion.displayTitle(for: emulator.machine.id), systemImage: "checkmark")
+                        Label(expansion.displayTitle(for: emulator.machine), systemImage: "checkmark")
                     } else {
-                        Text(expansion.displayTitle(for: emulator.machine.id))
+                        Text(expansion.displayTitle(for: emulator.machine))
                     }
                 }
             }
@@ -944,7 +1149,7 @@ private struct RAMExpansionStatusChip: View {
     }
 
     private var helpText: String {
-        "\(emulator.ramExpansion.displayTitle(for: emulator.machine.id)) configured"
+        "\(emulator.ramExpansion.displayTitle(for: emulator.machine)) configured"
     }
 }
 

@@ -7,8 +7,200 @@ enum MachineID: String, CaseIterable, Codable, Identifiable {
     case xvic
     case xpet
     case xplus4
+    case xc16
+    case xc232
+    case xv364
 
     var id: String { rawValue }
+}
+
+enum MachineFamily: String, Codable, Equatable {
+    case c64
+    case c128
+    case vic20
+    case pet
+    case ted
+}
+
+enum MachineModel: Equatable {
+    case x64sc
+    case x128
+    case xvic
+    case xpet(PETMachineModel)
+    case ted(TEDMachineModel)
+
+    var family: MachineFamily {
+        switch self {
+        case .x64sc:
+            return .c64
+        case .x128:
+            return .c128
+        case .xvic:
+            return .vic20
+        case .xpet:
+            return .pet
+        case .ted:
+            return .ted
+        }
+    }
+
+    var usesVIC20MemoryStartupOption: Bool {
+        self == .xvic
+    }
+
+    var supportsRuntimeVideoStandardUpdates: Bool {
+        family != .ted
+    }
+
+    var supportsRuntimeROMImageUpdates: Bool {
+        family != .ted
+    }
+
+    func startupOptions(for configuration: MachineStartupConfiguration,
+                        baseOptions: [String]) -> [String] {
+        switch self {
+        case .x128:
+            return [
+                "-model",
+                configuration.videoStandard == .ntsc ? "ntsc" : "pal"
+            ]
+        case let .xpet(model):
+            return [
+                "-model",
+                model.viceModelName
+            ]
+        case let .ted(model):
+            return [
+                "-model",
+                model.viceModelName(for: configuration.videoStandard),
+                "-TEDborders",
+                "normal"
+            ]
+        default:
+            return baseOptions
+        }
+    }
+
+    func defaultROMFileName(for slot: MachineROMSlot,
+                            videoStandard: EmulatorSession.VideoStandard) -> String {
+        switch self {
+        case let .ted(model):
+            return model.defaultROMFileName(for: slot,
+                                            videoStandard: videoStandard)
+        default:
+            return slot.defaultFileName
+        }
+    }
+}
+
+enum PETMachineModel: String, Codable, Equatable, CaseIterable {
+    case model4032 = "4032"
+
+    var displayName: String {
+        switch self {
+        case .model4032:
+            return "PET 4032"
+        }
+    }
+
+    var viceModelName: String {
+        rawValue
+    }
+}
+
+enum TEDMachineModel: String, Codable, Equatable, CaseIterable {
+    case plus4
+    case c16
+    case c232
+    case v364
+
+    var displayName: String {
+        switch self {
+        case .plus4:
+            return "Plus/4"
+        case .c16:
+            return "C16"
+        case .c232:
+            return "C232"
+        case .v364:
+            return "V364"
+        }
+    }
+
+    var shortName: String {
+        switch self {
+        case .plus4:
+            return "xplus4"
+        case .c16:
+            return "xc16"
+        case .c232:
+            return "xc232"
+        case .v364:
+            return "xv364"
+        }
+    }
+
+    var bootFrameResourceName: String {
+        switch self {
+        case .plus4:
+            return "xplus4-ready"
+        case .c16, .c232, .v364:
+            return "xplus4-ready"
+        }
+    }
+
+    var supportsVideoStandardSelection: Bool {
+        switch self {
+        case .plus4, .c16:
+            return true
+        case .c232, .v364:
+            return false
+        }
+    }
+
+    var romSlots: [MachineROMSlot] {
+        switch self {
+        case .plus4:
+            return [.plus4Basic, .plus4Kernal, .plus4FunctionLow, .plus4FunctionHigh]
+        case .c16, .c232:
+            return [.plus4Basic, .plus4Kernal]
+        case .v364:
+            return [.plus4Basic, .plus4Kernal, .plus4FunctionLow, .plus4FunctionHigh, .plus4C2Low]
+        }
+    }
+
+    func viceModelName(for videoStandard: EmulatorSession.VideoStandard) -> String {
+        switch (self, videoStandard) {
+        case (.plus4, .ntsc):
+            return "plus4ntsc"
+        case (.plus4, .pal):
+            return "plus4pal"
+        case (.c16, .ntsc):
+            return "c16ntsc"
+        case (.c16, .pal):
+            return "c16pal"
+        case (.c232, _):
+            return "c232"
+        case (.v364, _):
+            return "v364"
+        }
+    }
+
+    func defaultROMFileName(for slot: MachineROMSlot,
+                            videoStandard: EmulatorSession.VideoStandard) -> String {
+        guard slot.id == MachineROMSlot.plus4Kernal.id else {
+            return slot.defaultFileName
+        }
+
+        switch self {
+        case .plus4, .c16:
+            return videoStandard == .ntsc ? "kernal-318005-05.bin" : slot.defaultFileName
+        case .c232:
+            return "kernal-318004-01.bin"
+        case .v364:
+            return "kernal-364.bin"
+        }
+    }
 }
 
 struct MachineBootFrame: Equatable {
@@ -94,6 +286,7 @@ struct ViceIntResourceAssignment: Equatable {
 
 struct EmulatedMachine: Identifiable, Equatable {
     let id: MachineID
+    let model: MachineModel
     let displayName: String
     let shortName: String
     let viceTarget: String
@@ -108,6 +301,22 @@ struct EmulatedMachine: Identifiable, Equatable {
 
     var bootFrame: MachineBootFrame {
         displayProfile.bootFrame
+    }
+
+    var family: MachineFamily {
+        model.family
+    }
+
+    var usesVIC20MemoryExpansion: Bool {
+        model.usesVIC20MemoryStartupOption
+    }
+
+    var supportsRuntimeVideoStandardUpdates: Bool {
+        model.supportsRuntimeVideoStandardUpdates
+    }
+
+    var supportsRuntimeROMImageUpdates: Bool {
+        model.supportsRuntimeROMImageUpdates
     }
 
     func startupArguments(configuration: MachineStartupConfiguration) -> [String] {
@@ -149,7 +358,7 @@ struct EmulatedMachine: Identifiable, Equatable {
             ]
         }
 
-        if id == .xvic,
+        if usesVIC20MemoryExpansion,
            let memorySpec = configuration.ramExpansion.vic20MemorySpec {
             arguments += [
                 "-memory",
@@ -241,31 +450,14 @@ struct EmulatedMachine: Identifiable, Equatable {
     }
 
     private func startupOptions(for configuration: MachineStartupConfiguration) -> [String] {
-        switch id {
-        case .xplus4:
-            return [
-                "-model",
-                configuration.videoStandard == .ntsc ? "plus4ntsc" : "plus4pal",
-                "-TEDborders",
-                "normal"
-            ]
-        case .x128:
-            return [
-                "-model",
-                configuration.videoStandard == .ntsc ? "ntsc" : "pal"
-            ]
-        default:
-            return startupOptions
-        }
+        model.startupOptions(for: configuration,
+                             baseOptions: startupOptions)
     }
 
     private func defaultROMFileName(for slot: MachineROMSlot,
                                     videoStandard: EmulatorSession.VideoStandard) -> String {
-        if id == .xplus4 && slot.id == MachineROMSlot.plus4Kernal.id {
-            return videoStandard == .ntsc ? "kernal-318005-05.bin" : slot.defaultFileName
-        }
-
-        return slot.defaultFileName
+        model.defaultROMFileName(for: slot,
+                                 videoStandard: videoStandard)
     }
 }
 
@@ -357,6 +549,12 @@ extension MachineROMSlot {
                                                   defaultFileName: "3plus1-317054-01.bin",
                                                   startupOption: "-functionhi",
                                                   systemImage: "rectangle.stack")
+    static let plus4C2Low = MachineROMSlot(id: "plus4.c2Low",
+                                           title: "C2 Low",
+                                           resourceName: "c2loName",
+                                           defaultFileName: "c2lo-364.bin",
+                                           startupOption: "-c2lo",
+                                           systemImage: "waveform")
 
     static let c128BasicLow = MachineROMSlot(id: "c128.basicLow",
                                              title: "BASIC Low",
@@ -424,6 +622,7 @@ extension EmulatedMachine {
     static var x64sc: EmulatedMachine {
         EmulatedMachine(
             id: .x64sc,
+            model: .x64sc,
             displayName: "Commodore 64",
             shortName: "x64sc",
             viceTarget: "x64sc",
@@ -461,6 +660,7 @@ extension EmulatedMachine {
     static var x128: EmulatedMachine {
         EmulatedMachine(
             id: .x128,
+            model: .x128,
             displayName: "Commodore 128",
             shortName: "x128",
             viceTarget: "x128",
@@ -502,6 +702,7 @@ extension EmulatedMachine {
     static var xvic: EmulatedMachine {
         EmulatedMachine(
             id: .xvic,
+            model: .xvic,
             displayName: "VIC-20",
             shortName: "xvic",
             viceTarget: "xvic",
@@ -537,9 +738,31 @@ extension EmulatedMachine {
     }
 
     static var xpet: EmulatedMachine {
+        pet(.model4032, id: .xpet)
+    }
+
+    static var xplus4: EmulatedMachine {
+        ted(.plus4, id: .xplus4)
+    }
+
+    static var xc16: EmulatedMachine {
+        ted(.c16, id: .xc16)
+    }
+
+    static var xc232: EmulatedMachine {
+        ted(.c232, id: .xc232)
+    }
+
+    static var xv364: EmulatedMachine {
+        ted(.v364, id: .xv364)
+    }
+
+    private static func pet(_ model: PETMachineModel,
+                            id: MachineID) -> EmulatedMachine {
         EmulatedMachine(
-            id: .xpet,
-            displayName: "PET 4032",
+            id: id,
+            model: .xpet(model),
+            displayName: model.displayName,
             shortName: "xpet",
             viceTarget: "xpet",
             dynamicLibraryName: "libvicemacxpet.dylib",
@@ -548,7 +771,7 @@ extension EmulatedMachine {
                                             fileExtension: "png",
                                             pixelSize: CGSize(width: 384, height: 272))
             ),
-            startupOptions: ["-model", "4032"],
+            startupOptions: [],
             displayOutputs: [.standard],
             romSlots: [.petBasic, .petKernal, .petEditor, .petCharacter],
             ramExpansions: [.none],
@@ -573,23 +796,25 @@ extension EmulatedMachine {
         )
     }
 
-    static var xplus4: EmulatedMachine {
+    private static func ted(_ model: TEDMachineModel,
+                            id: MachineID) -> EmulatedMachine {
         EmulatedMachine(
-            id: .xplus4,
-            displayName: "Plus/4",
-            shortName: "xplus4",
+            id: id,
+            model: .ted(model),
+            displayName: model.displayName,
+            shortName: model.shortName,
             viceTarget: "xplus4",
             dynamicLibraryName: "libvicemacxplus4.dylib",
             displayProfile: MachineDisplayProfile(
-                bootFrame: MachineBootFrame(resourceName: "xplus4-ready",
+                bootFrame: MachineBootFrame(resourceName: model.bootFrameResourceName,
                                             fileExtension: "png",
                                             pixelSize: CGSize(width: 384, height: 288))
             ),
             startupOptions: [],
             displayOutputs: [.standard],
-            romSlots: [.plus4Basic, .plus4Kernal, .plus4FunctionLow, .plus4FunctionHigh],
+            romSlots: model.romSlots,
             ramExpansions: [.none],
-            capabilities: MachineCapabilities(supportsVideoStandardSelection: true,
+            capabilities: MachineCapabilities(supportsVideoStandardSelection: model.supportsVideoStandardSelection,
                                               supportsSIDModelSelection: false,
                                               supportsCartridges: false,
                                               supportsRAMExpansion: false,
@@ -613,6 +838,12 @@ extension EmulatedMachine {
     static var current: EmulatedMachine {
         #if VICE_MAC_MACHINE_X128
         return .x128
+        #elseif VICE_MAC_MACHINE_XV364
+        return .xv364
+        #elseif VICE_MAC_MACHINE_XC232
+        return .xc232
+        #elseif VICE_MAC_MACHINE_XC16
+        return .xc16
         #elseif VICE_MAC_MACHINE_XPLUS4
         return .xplus4
         #elseif VICE_MAC_MACHINE_XPET
@@ -626,7 +857,13 @@ extension EmulatedMachine {
 
     static var planned: [EmulatedMachine] {
         #if VICE_MAC_MACHINE_X128
-        return [.x64sc, .xvic, .xpet, .xplus4, .x128]
+        return [.x64sc, .xvic, .xpet, .xplus4, .xc16, .xc232, .xv364, .x128]
+        #elseif VICE_MAC_MACHINE_XV364
+        return [.x64sc, .xvic, .xpet, .xplus4, .xc16, .xc232, .xv364]
+        #elseif VICE_MAC_MACHINE_XC232
+        return [.x64sc, .xvic, .xpet, .xplus4, .xc16, .xc232]
+        #elseif VICE_MAC_MACHINE_XC16
+        return [.x64sc, .xvic, .xpet, .xplus4, .xc16]
         #elseif VICE_MAC_MACHINE_XPLUS4
         return [.x64sc, .xvic, .xpet, .xplus4]
         #elseif VICE_MAC_MACHINE_XPET

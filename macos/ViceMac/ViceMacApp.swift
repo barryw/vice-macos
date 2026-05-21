@@ -4,11 +4,13 @@ import SwiftUI
 @main
 struct ViceMacApp: App {
     @StateObject private var emulator = EmulatorSession()
+    @StateObject private var aiSettings = AIAssistantSettings()
 
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environmentObject(emulator)
+                .environmentObject(aiSettings)
         }
         .commands {
             CommandGroup(after: .appInfo) {
@@ -37,6 +39,7 @@ struct ViceMacApp: App {
         Settings {
             SettingsView()
                 .environmentObject(emulator)
+                .environmentObject(aiSettings)
         }
     }
 }

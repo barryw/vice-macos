@@ -200,8 +200,8 @@ enum RAMExpansion: String, CaseIterable, Identifiable {
         self == .none ? "disabled" : title
     }
 
-    func displayTitle(for machineID: MachineID) -> String {
-        guard machineID == .xvic else {
+    func displayTitle(for machine: EmulatedMachine) -> String {
+        guard machine.usesVIC20MemoryExpansion else {
             return title
         }
 
@@ -385,8 +385,8 @@ enum RAMExpansion: String, CaseIterable, Identifiable {
         }
     }
 
-    func detailTitle(for machineID: MachineID) -> String {
-        guard machineID == .xvic else {
+    func detailTitle(for machine: EmulatedMachine) -> String {
+        guard machine.usesVIC20MemoryExpansion else {
             return detailTitle
         }
 
@@ -489,14 +489,14 @@ enum RAMExpansion: String, CaseIterable, Identifiable {
         return names.joined(separator: " + ")
     }
 
-    func resourcePlan(for machineID: MachineID) -> RAMExpansionResourcePlan {
-        RAMExpansionResourcePlan(disableAssignments: Self.disableAssignments(for: machineID),
+    func resourcePlan(for machine: EmulatedMachine) -> RAMExpansionResourcePlan {
+        RAMExpansionResourcePlan(disableAssignments: Self.disableAssignments(for: machine),
                                  enableAssignments: enableAssignments,
-                                 requiresHardReset: machineID == .xvic)
+                                 requiresHardReset: machine.usesVIC20MemoryExpansion)
     }
 
-    private static func disableAssignments(for machineID: MachineID) -> [ViceIntResourceAssignment] {
-        if machineID == .xvic {
+    private static func disableAssignments(for machine: EmulatedMachine) -> [ViceIntResourceAssignment] {
+        if machine.usesVIC20MemoryExpansion {
             return vic20BlockAssignments(for: [])
         }
 
@@ -889,6 +889,33 @@ final class EmulatorSession: ObservableObject {
             self == .uncapped
         }
     }
+
+    enum MemorySpace: UInt32, CaseIterable, Identifiable {
+        case computer = 1
+        case drive8 = 2
+        case drive9 = 3
+        case drive10 = 4
+        case drive11 = 5
+
+        var id: UInt32 { rawValue }
+
+        var title: String {
+            switch self {
+            case .computer:
+                return "Computer"
+            case .drive8:
+                return "Drive 8"
+            case .drive9:
+                return "Drive 9"
+            case .drive10:
+                return "Drive 10"
+            case .drive11:
+                return "Drive 11"
+            }
+        }
+    }
+
+    nonisolated static let currentMemoryBank: Int32 = -1
 
     init() {
         let machine = EmulatedMachine.current
@@ -1284,6 +1311,95 @@ final class EmulatorSession: ObservableObject {
         }
     }
 
+    func peekMemory(space: MemorySpace = .computer,
+                    bank: Int32 = EmulatorSession.currentMemoryBank,
+                    address: UInt16,
+                    length: Int = 1) -> Data? {
+        guard ViceEngineIsRunning(),
+              length > 0,
+              length <= Int(UInt16.max) + 1 - Int(address) else {
+            return nil
+        }
+
+        var bytes = [UInt8](repeating: 0, count: length)
+        let didPeek = bytes.withUnsafeMutableBufferPointer { buffer in
+            guard let baseAddress = buffer.baseAddress else {
+                return false
+            }
+
+            return ViceEnginePeekMemory(space.rawValue,
+                                        bank,
+                                        UInt32(address),
+                                        baseAddress,
+                                        UInt32(length))
+        }
+
+        return didPeek ? Data(bytes) : nil
+    }
+
+    func peekByte(space: MemorySpace = .computer,
+                  bank: Int32 = EmulatorSession.currentMemoryBank,
+                  address: UInt16) -> UInt8? {
+        peekMemory(space: space, bank: bank, address: address, length: 1)?.first
+    }
+
+    @discardableResult
+    func pokeMemory(space: MemorySpace = .computer,
+                    bank: Int32 = EmulatorSession.currentMemoryBank,
+                    address: UInt16,
+                    bytes: [UInt8]) -> Bool {
+        guard ViceEngineIsRunning(),
+              !bytes.isEmpty,
+              bytes.count <= Int(UInt16.max) + 1 - Int(address) else {
+            return false
+        }
+
+        return bytes.withUnsafeBufferPointer { buffer in
+            guard let baseAddress = buffer.baseAddress else {
+                return false
+            }
+
+            return ViceEnginePokeMemory(space.rawValue,
+                                        bank,
+                                        UInt32(address),
+                                        baseAddress,
+                                        UInt32(bytes.count))
+        }
+    }
+
+    @discardableResult
+    func pokeByte(space: MemorySpace = .computer,
+                  bank: Int32 = EmulatorSession.currentMemoryBank,
+                  address: UInt16,
+                  byte: UInt8) -> Bool {
+        pokeMemory(space: space, bank: bank, address: address, bytes: [byte])
+    }
+
+    @discardableResult
+    func typeText(_ text: String) -> Bool {
+        guard ViceEngineIsRunning(),
+              !isPaused,
+              !text.isEmpty else {
+            return false
+        }
+
+        return text.withCString { pointer in
+            ViceEngineFeedKeyboardText(pointer)
+        }
+    }
+
+    @discardableResult
+    func submitLine(_ line: String) -> Bool {
+        guard ViceEngineIsRunning(),
+              !isPaused else {
+            return false
+        }
+
+        return "\(line)\r".withCString { pointer in
+            ViceEngineFeedKeyboardText(pointer)
+        }
+    }
+
     func handleDriveStatus(_ status: DriveStatusSnapshot) {
         guard let driveType = DriveType(rawValue: status.driveType) else {
             driveActivities.removeValue(forKey: status.unit)
@@ -1412,7 +1528,7 @@ final class EmulatorSession: ObservableObject {
     }
 
     private func applyRuntimeConfiguration() {
-        if machine.id != .xplus4 {
+        if machine.supportsRuntimeVideoStandardUpdates {
             applyVideoStandard(updateStatus: false)
         }
         applySIDModel(updateStatus: false)
@@ -1420,7 +1536,7 @@ final class EmulatorSession: ObservableObject {
         applyEmulationSpeed(updateStatus: false)
         applyDisplayOutput(updateStatus: false)
         applyPauseState(updateStatus: false)
-        if machine.id != .xplus4 {
+        if machine.supportsRuntimeROMImageUpdates {
             applyROMImages()
         }
         applyRAMExpansion(updateStatus: false)
@@ -1529,7 +1645,7 @@ final class EmulatorSession: ObservableObject {
             return
         }
 
-        let plan = ramExpansion.resourcePlan(for: machine.id)
+        let plan = ramExpansion.resourcePlan(for: machine)
         for assignment in plan.disableAssignments + plan.enableAssignments {
             setVICEIntResource(assignment.name, value: assignment.value)
         }
@@ -1926,6 +2042,7 @@ final class EmulatorSession: ObservableObject {
     private static func displayName(for controller: GCController) -> String {
         controller.vendorName ?? "Game Controller"
     }
+
 }
 
 private enum ViceResource {
