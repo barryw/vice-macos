@@ -3,6 +3,8 @@ import GameController
 import SwiftUI
 
 struct SettingsView: View {
+    @EnvironmentObject private var emulator: EmulatorSession
+
     var body: some View {
         TabView {
             MachineSettingsPane()
@@ -15,10 +17,12 @@ struct SettingsView: View {
                     Label("Sound", systemImage: "speaker.wave.2")
                 }
 
-            ControlSettingsPane()
-                .tabItem {
-                    Label("Controls", systemImage: "gamecontroller")
-                }
+            if showsControlSettings {
+                ControlSettingsPane()
+                    .tabItem {
+                        Label("Controls", systemImage: "gamecontroller")
+                    }
+            }
 
             DriveSettingsPane()
                 .tabItem {
@@ -36,6 +40,10 @@ struct SettingsView: View {
                 }
         }
         .frame(width: 580, height: 540)
+    }
+
+    private var showsControlSettings: Bool {
+        !emulator.availableControlPorts.isEmpty
     }
 }
 
@@ -203,8 +211,17 @@ private struct MachineSettingsPane: View {
         SettingsPane {
             Section("Machine") {
                 LabeledContent("Model") {
-                    Label(emulator.machine.displayName, systemImage: "cpu")
-                        .foregroundStyle(.secondary)
+                    if emulator.machine.family == .pet {
+                        Picker("Model", selection: $emulator.petModel) {
+                            ForEach(PETMachineModel.allCases) { model in
+                                Text(model.displayName).tag(model)
+                            }
+                        }
+                        .labelsHidden()
+                    } else {
+                        Label(emulator.machineDisplayName, systemImage: "cpu")
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 if emulator.machine.capabilities.supportsVideoStandardSelection {
@@ -315,7 +332,7 @@ private struct ROMImageSettingsRow: View {
     }
 
     private var displayDetail: String {
-        path ?? image.defaultFileName
+        path ?? emulator.romResourceValue(for: image)
     }
 
     private func chooseROM() {
@@ -752,7 +769,7 @@ private struct JoystickControlCaptureButton: View {
     let deadZone: Double
 
     @State private var isCapturing = false
-    @State private var timer: Timer?
+    @State private var captureTask: Task<Void, Never>?
 
     var body: some View {
         Button {
@@ -772,20 +789,23 @@ private struct JoystickControlCaptureButton: View {
         }
 
         isCapturing = true
-        timer = Timer.scheduledTimer(withTimeInterval: 0.025, repeats: true) { _ in
-            guard let capturedControl = capturedControl() else {
-                return
-            }
+        captureTask = Task { @MainActor in
+            while !Task.isCancelled {
+                if let capturedControl = capturedControl() {
+                    control = capturedControl
+                    stopCapturing()
+                    return
+                }
 
-            control = capturedControl
-            stopCapturing()
+                try? await Task.sleep(for: .milliseconds(25))
+            }
         }
     }
 
     private func stopCapturing() {
         isCapturing = false
-        timer?.invalidate()
-        timer = nil
+        captureTask?.cancel()
+        captureTask = nil
     }
 
     private func capturedControl() -> GameControllerControl? {

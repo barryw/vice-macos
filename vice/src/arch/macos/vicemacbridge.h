@@ -100,6 +100,7 @@ int vicemac_queue_resource_int(const char *name, int value);
 int vicemac_queue_resource_string(const char *name, const char *value);
 int vicemac_queue_joystick_value(uint32_t port, uint32_t value);
 int vicemac_queue_pause(int paused);
+int vicemac_queue_machine_model(const char *model);
 int vicemac_queue_machine_reset(uint32_t reset_mode);
 int vicemac_queue_warp_mode(int enabled);
 int vicemac_queue_drive_reset(uint32_t unit);

@@ -835,7 +835,7 @@ private final class AIAssistantVMToolExecutor {
         [
             "machine": [
                 "id": emulator.machine.id.rawValue,
-                "name": emulator.machine.displayName,
+                "name": emulator.machineDisplayName,
                 "vice_target": emulator.machine.shortName,
                 "video_standard": emulator.videoStandard.rawValue,
                 "display_output": emulator.displayOutput.statusTitle,
@@ -1095,7 +1095,7 @@ private final class AIAssistantVMToolExecutor {
     }
 }
 
-private struct AIAssistantToolDefinition {
+private struct AIAssistantToolDefinition: @unchecked Sendable {
     let name: String
     let description: String
     let inputSchema: [String: Any]

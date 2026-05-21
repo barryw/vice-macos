@@ -7,6 +7,7 @@
 
 #include "vice.h"
 
+#include <dlfcn.h>
 #include <pthread.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -34,6 +35,7 @@
 #define VICEMAC_KEYBOARD_TEXT_CAPACITY 4096
 #define VICEMAC_RESOURCE_QUEUE_CAPACITY 256
 #define VICEMAC_RESOURCE_NAME_CAPACITY 64
+#define VICEMAC_MACHINE_MODEL_RESOURCE "__vicemacMachineModel"
 #define VICEMAC_JOYSTICK_QUEUE_CAPACITY 256
 #define VICEMAC_MACHINE_COMMAND_QUEUE_CAPACITY 64
 #define VICEMAC_DRIVE_COMMAND_QUEUE_CAPACITY 64
@@ -640,6 +642,11 @@ int vicemac_queue_pause(int paused)
                                          paused ? 1 : 0);
 }
 
+int vicemac_queue_machine_model(const char *model)
+{
+    return vicemac_queue_resource_string(VICEMAC_MACHINE_MODEL_RESOURCE, model);
+}
+
 int vicemac_queue_machine_reset(uint32_t reset_mode)
 {
     if (reset_mode != MACHINE_RESET_MODE_RESET_CPU
@@ -1058,6 +1065,20 @@ static void vicemac_dispatch_queued_memory_requests(void)
     }
 }
 
+static int vicemac_dispatch_machine_model(const char *model)
+{
+    typedef int (*pet_set_model_function_t)(const char *model_name, void *extra);
+    static pet_set_model_function_t pet_set_model_function = 0;
+    static int did_lookup_pet_set_model = 0;
+
+    if (!did_lookup_pet_set_model) {
+        pet_set_model_function = (pet_set_model_function_t)dlsym(RTLD_SELF, "pet_set_model");
+        did_lookup_pet_set_model = 1;
+    }
+
+    return pet_set_model_function != 0 && pet_set_model_function(model, 0) == 0;
+}
+
 static void vicemac_dispatch_queued_resources(void)
 {
     vicemac_resource_int_event_t int_event;
@@ -1068,7 +1089,11 @@ static void vicemac_dispatch_queued_resources(void)
     }
 
     while (vicemac_pop_resource_string_event(&string_event)) {
-        (void)resources_set_string(string_event.name, string_event.value);
+        if (strcmp(string_event.name, VICEMAC_MACHINE_MODEL_RESOURCE) == 0) {
+            (void)vicemac_dispatch_machine_model(string_event.value);
+        } else {
+            (void)resources_set_string(string_event.name, string_event.value);
+        }
     }
 }
 

@@ -8,6 +8,7 @@ enum EmulatorDefaults {
     private static let soundEnabledKey = "vice.soundEnabled"
     private static let soundVolumeKey = "vice.soundVolume"
     private static let displayOutputKey = "vice.displayOutput"
+    private static let petModelKey = "vice.petModel"
     private static let romImagesKey = "vice.romImages"
     private static let ramExpansionKey = "vice.ramExpansion"
     private static let controlPortsKey = "vice.controlPorts"
@@ -59,6 +60,23 @@ enum EmulatorDefaults {
 
     static func saveDisplayOutput(_ output: MachineDisplayOutput, for machine: EmulatedMachine) {
         UserDefaults.standard.set(output.id, forKey: key(displayOutputKey, machine: machine))
+    }
+
+    static func loadPETModel(for machine: EmulatedMachine) -> PETMachineModel {
+        guard machine.family == .pet,
+              let rawValue = UserDefaults.standard.string(forKey: key(petModelKey, machine: machine)) else {
+            return .model4032
+        }
+
+        return PETMachineModel(rawValue: rawValue) ?? .model4032
+    }
+
+    static func savePETModel(_ model: PETMachineModel, for machine: EmulatedMachine) {
+        guard machine.family == .pet else {
+            return
+        }
+
+        UserDefaults.standard.set(model.rawValue, forKey: key(petModelKey, machine: machine))
     }
 
     static func loadSIDModel(for machine: EmulatedMachine) -> EmulatorSession.SIDModel {

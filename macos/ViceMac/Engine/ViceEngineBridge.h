@@ -74,6 +74,7 @@ bool ViceEngineSetIntResource(const char *name, int32_t value);
 bool ViceEngineSetStringResource(const char *name, const char *value);
 bool ViceEngineSetJoystickValue(uint32_t port, uint32_t value);
 bool ViceEngineSetPauseEnabled(bool paused);
+bool ViceEngineSetMachineModel(const char *model);
 bool ViceEngineTriggerMachineReset(bool hardReset);
 bool ViceEngineSetWarpMode(bool enabled);
 bool ViceEngineResetDrive(uint32_t unit);

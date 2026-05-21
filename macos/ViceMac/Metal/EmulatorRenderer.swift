@@ -1,5 +1,6 @@
 import MetalKit
 
+@MainActor
 final class EmulatorRenderer: NSObject, MTKViewDelegate {
     private struct Vertex {
         let position: SIMD2<Float>

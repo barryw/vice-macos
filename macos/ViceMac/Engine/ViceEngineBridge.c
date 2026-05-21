@@ -24,6 +24,7 @@ typedef int (*ViceQueueResourceIntFunction)(const char *name, int value);
 typedef int (*ViceQueueResourceStringFunction)(const char *name, const char *value);
 typedef int (*ViceQueueJoystickValueFunction)(uint32_t port, uint32_t value);
 typedef int (*ViceQueuePauseFunction)(int paused);
+typedef int (*ViceQueueMachineModelFunction)(const char *model);
 typedef int (*ViceQueueMachineResetFunction)(uint32_t reset_mode);
 typedef int (*ViceQueueWarpModeFunction)(int enabled);
 typedef int (*ViceQueueDriveResetFunction)(uint32_t unit);
@@ -58,6 +59,7 @@ typedef struct ViceEngineSymbols {
     ViceQueueResourceStringFunction queueResourceString;
     ViceQueueJoystickValueFunction queueJoystickValue;
     ViceQueuePauseFunction queuePause;
+    ViceQueueMachineModelFunction queueMachineModel;
     ViceQueueMachineResetFunction queueMachineReset;
     ViceQueueWarpModeFunction queueWarpMode;
     ViceQueueDriveResetFunction queueDriveReset;
@@ -181,6 +183,7 @@ static int loadRuntimeSymbols(void *handle, ViceEngineSymbols *symbols)
     LOAD_RUNTIME_SYMBOL(queueResourceString, "vicemac_queue_resource_string");
     LOAD_RUNTIME_SYMBOL(queueJoystickValue, "vicemac_queue_joystick_value");
     LOAD_RUNTIME_SYMBOL(queuePause, "vicemac_queue_pause");
+    LOAD_RUNTIME_SYMBOL(queueMachineModel, "vicemac_queue_machine_model");
     LOAD_RUNTIME_SYMBOL(queueMachineReset, "vicemac_queue_machine_reset");
     LOAD_RUNTIME_SYMBOL(queueWarpMode, "vicemac_queue_warp_mode");
     LOAD_RUNTIME_SYMBOL(queueDriveReset, "vicemac_queue_drive_reset");
@@ -358,6 +361,15 @@ bool ViceEngineSetPauseEnabled(bool paused)
     }
 
     return runtimeSymbols.queuePause(paused ? 1 : 0) != 0;
+}
+
+bool ViceEngineSetMachineModel(const char *model)
+{
+    if (!atomic_load(&engineRunning) || runtimeSymbols.queueMachineModel == NULL) {
+        return false;
+    }
+
+    return runtimeSymbols.queueMachineModel(model) != 0;
 }
 
 bool ViceEngineTriggerMachineReset(bool hardReset)

@@ -269,12 +269,16 @@ enum DriveType: Int32, CaseIterable, Codable, Identifiable {
         supportedDiskImageTypes.map(\.title).joined(separator: ", ")
     }
 
+    func supportsDiskImage(_ type: DiskImageFileType) -> Bool {
+        supportedDiskImageTypes.contains(type)
+    }
+
     func supportsDiskImage(url: URL) -> Bool {
         guard let fileType = DiskImageFileType(url: url) else {
             return false
         }
 
-        return supportedDiskImageTypes.contains(fileType)
+        return supportsDiskImage(fileType)
     }
 }
 

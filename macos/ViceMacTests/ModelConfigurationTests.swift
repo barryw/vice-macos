@@ -83,11 +83,57 @@ final class ModelConfigurationTests: XCTestCase {
 
     func testPETStartupArgumentsUseSelectedModelVariant() {
         let machine = EmulatedMachine.xpet
-        let arguments = machine.startupArguments(configuration: startupConfiguration(for: machine))
 
         XCTAssertEqual(machine.family, .pet)
         XCTAssertEqual(machine.viceTarget, "xpet")
-        XCTAssertEqual(arguments.value(after: "-model"), "4032")
+
+        for model in PETMachineModel.allCases {
+            let arguments = machine.startupArguments(configuration: startupConfiguration(for: machine,
+                                                                                         machineModel: .xpet(model)))
+
+            XCTAssertEqual(arguments.value(after: "-model"), model.viceModelName)
+        }
+    }
+
+    func testPETModelVariantsUseMatchingDefaultROMs() {
+        let machine = EmulatedMachine.xpet
+        let cases: [(PETMachineModel, String, String, String, String)] = [
+            (.model2001,
+             "basic-1.901439-09-05-02-06.bin",
+             "kernal-1.901439-04-07.bin",
+             "edit-1-n.901439-03.bin",
+             "characters-1.901447-08.bin"),
+            (.model3032B,
+             "basic-2.901465-01-02.bin",
+             "kernal-2.901465-03.bin",
+             "edit-2-b.901474-01.bin",
+             "characters-2.901447-10.bin"),
+            (.model4032B,
+             "basic-4.901465-23-20-21.bin",
+             "kernal-4.901465-22.bin",
+             "edit-4-40-b-50Hz.ts.bin",
+             "characters-2.901447-10.bin"),
+            (.model8032,
+             "basic-4.901465-23-20-21.bin",
+             "kernal-4.901465-22.bin",
+             "edit-4-80-b-50Hz.901474-04_.bin",
+             "characters-2.901447-10.bin"),
+            (.superPET,
+             "basic-4.901465-23-20-21.bin",
+             "kernal-4.901465-22.bin",
+             "edit-4-80-b-50Hz.901474-04_.bin",
+             "characters.901640-01.bin")
+        ]
+
+        for (model, basic, kernal, editor, chargen) in cases {
+            let arguments = machine.startupArguments(configuration: startupConfiguration(for: machine,
+                                                                                         machineModel: .xpet(model)))
+
+            XCTAssertEqual(arguments.value(after: "-basic"), basic)
+            XCTAssertEqual(arguments.value(after: "-kernal"), kernal)
+            XCTAssertEqual(arguments.value(after: "-editor"), editor)
+            XCTAssertEqual(arguments.value(after: "-chargen"), chargen)
+        }
     }
 
     func testTEDStartupArgumentsUseSelectedModelVariant() {
@@ -182,6 +228,22 @@ final class ModelConfigurationTests: XCTestCase {
         XCTAssertTrue(DriveType.c1541.supportsDiskImage(url: URL(fileURLWithPath: "/tmp/demo.d64")))
         XCTAssertFalse(DriveType.c1541.supportsDiskImage(url: URL(fileURLWithPath: "/tmp/demo.d71")))
         XCTAssertTrue(DriveType.c1571.supportsDiskImage(url: URL(fileURLWithPath: "/tmp/demo.d71")))
+    }
+
+    func testMediaFileClassifiesDiskAndCartridgeImages() {
+        XCTAssertEqual(EmulatorMediaFile(url: URL(fileURLWithPath: "/tmp/demo.d64")), .disk(.d64))
+        XCTAssertEqual(EmulatorMediaFile(url: URL(fileURLWithPath: "/tmp/demo.crt")), .cartridge(.crt))
+        XCTAssertNil(EmulatorMediaFile(url: URL(fileURLWithPath: "/tmp/demo.txt")))
+    }
+
+    func testSupportedMediaExtensionsRespectMachineCapabilities() {
+        let c64Extensions = EmulatorMediaFile.supportedFilenameExtensions(for: .x64sc)
+        let petExtensions = EmulatorMediaFile.supportedFilenameExtensions(for: .xpet)
+
+        XCTAssertTrue(c64Extensions.contains("d64"))
+        XCTAssertTrue(c64Extensions.contains("crt"))
+        XCTAssertTrue(petExtensions.contains("d80"))
+        XCTAssertFalse(petExtensions.contains("crt"))
     }
 
     func testNormalizedDriveConfigurationsReplacesInvalidMachineDriveType() {
@@ -373,11 +435,13 @@ final class ModelConfigurationTests: XCTestCase {
 
     private func startupConfiguration(for machine: EmulatedMachine,
                                       displayOutput: MachineDisplayOutput? = nil,
+                                      machineModel: MachineModel? = nil,
                                       videoStandard: EmulatorSession.VideoStandard = .ntsc,
                                       ramExpansion: RAMExpansion = .none,
                                       driveConfigurations: [DriveConfiguration]? = nil) -> MachineStartupConfiguration {
         MachineStartupConfiguration(executablePath: "/tmp/vice",
                                     dataDirectory: "/tmp/data",
+                                    machineModel: machineModel,
                                     videoStandard: videoStandard,
                                     sidModel: .mos8580,
                                     soundEnabled: true,

@@ -91,6 +91,9 @@ struct ContentView: View {
         .onAppear {
             emulator.start()
         }
+        .onOpenURL { url in
+            emulator.openMedia(url: url)
+        }
     }
 }
 
@@ -105,7 +108,7 @@ private struct AIAssistantToolbarButton: View {
         } label: {
             Label("Assistant", systemImage: "sparkles")
         }
-        .help("Ask or control \(emulator.machine.shortName)")
+        .help("Ask or control \(emulator.machineDisplayName)")
         .popover(isPresented: $isPresented, arrowEdge: .bottom) {
             AIAssistantPanel()
                 .environmentObject(emulator)
@@ -135,7 +138,7 @@ private struct AIAssistantPanel: View {
                     Text("Assistant")
                         .font(.headline)
 
-                    Text("\(aiSettings.providerSummary) - \(emulator.machine.displayName)")
+                    Text("\(aiSettings.providerSummary) - \(emulator.machineDisplayName)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -300,6 +303,9 @@ private struct EmulatorStatusBar: View {
     var body: some View {
         HStack(spacing: 14) {
             Label(emulator.machine.shortName, systemImage: "cpu")
+            if emulator.machine.family == .pet {
+                StatusPill(text: emulator.machineDisplayName)
+            }
             if emulator.machine.capabilities.supportsVideoStandardSelection {
                 StatusPill(text: emulator.videoStandard.rawValue)
             }
@@ -336,6 +342,7 @@ private struct EmulatorStatusBar: View {
 
 private struct EmulatorDisplaySurface: View {
     @EnvironmentObject private var emulator: EmulatorSession
+    @State private var isDropTargeted = false
 
     var body: some View {
         GeometryReader { proxy in
@@ -359,6 +366,14 @@ private struct EmulatorDisplaySurface: View {
                         }
                     }
                     .animation(.easeOut(duration: 0.14), value: emulator.isPaused)
+
+                if isDropTargeted {
+                    MediaDropOverlay()
+                        .transition(.opacity)
+                }
+            }
+            .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
+                handleMediaDrop(providers)
             }
         }
         .frame(minWidth: nativeSize.width, minHeight: nativeSize.height)
@@ -380,6 +395,47 @@ private struct EmulatorDisplaySurface: View {
             return CGSize(width: max(containerSize.width, 1),
                           height: max(containerSize.height, 1))
         }
+    }
+
+    private func handleMediaDrop(_ providers: [NSItemProvider]) -> Bool {
+        let fileURLTypeIdentifier = UTType.fileURL.identifier
+        let fileProviders = providers.filter {
+            $0.hasItemConformingToTypeIdentifier(fileURLTypeIdentifier)
+        }
+
+        guard !fileProviders.isEmpty else {
+            return false
+        }
+
+        for provider in fileProviders {
+            provider.loadItem(forTypeIdentifier: fileURLTypeIdentifier, options: nil) { item, _ in
+                guard let url = Self.fileURL(from: item) else {
+                    return
+                }
+
+                DispatchQueue.main.async {
+                    emulator.openMedia(url: url)
+                }
+            }
+        }
+
+        return true
+    }
+
+    nonisolated private static func fileURL(from item: NSSecureCoding?) -> URL? {
+        if let url = item as? URL {
+            return url
+        }
+
+        if let data = item as? Data {
+            return URL(dataRepresentation: data, relativeTo: nil)
+        }
+
+        if let string = item as? String {
+            return URL(string: string)
+        }
+
+        return nil
     }
 }
 
@@ -403,6 +459,35 @@ private struct PausedDisplayOverlay: View {
         }
         .allowsHitTesting(false)
         .accessibilityLabel("Paused")
+    }
+}
+
+private struct MediaDropOverlay: View {
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(Color.black.opacity(0.32))
+
+            VStack(spacing: 10) {
+                Image(systemName: "tray.and.arrow.down")
+                    .font(.system(size: 34, weight: .semibold))
+                    .symbolRenderingMode(.hierarchical)
+
+                Text("Open Media")
+                    .font(.headline)
+            }
+            .foregroundStyle(.white.opacity(0.94))
+            .padding(.horizontal, 28)
+            .padding(.vertical, 20)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+            .overlay {
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(.white.opacity(0.18), lineWidth: 1)
+            }
+            .shadow(color: .black.opacity(0.34), radius: 22, y: 12)
+        }
+        .allowsHitTesting(false)
+        .accessibilityLabel("Drop media to open")
     }
 }
 
@@ -763,6 +848,7 @@ private struct VIC20MemoryToolbarMenu: View {
 }
 
 enum WindowActions {
+    @MainActor
     static func toggleFullScreen() {
         let window = NSApp.keyWindow ?? NSApp.mainWindow
         window?.toggleFullScreen(nil)
@@ -789,6 +875,7 @@ private struct WindowChromeObserver: NSViewRepresentable {
         context.coordinator.attach(to: view.window)
     }
 
+    @MainActor
     final class Coordinator {
         private var observer: WindowChromeObserver
         private weak var window: NSWindow?
@@ -803,7 +890,9 @@ private struct WindowChromeObserver: NSViewRepresentable {
         }
 
         deinit {
-            detach()
+            MainActor.assumeIsolated {
+                detach()
+            }
         }
 
         func update(observer: WindowChromeObserver) {
@@ -830,17 +919,23 @@ private struct WindowChromeObserver: NSViewRepresentable {
                 center.addObserver(forName: NSWindow.didEnterFullScreenNotification,
                                    object: window,
                                    queue: .main) { [weak self] _ in
-                    self?.setFullScreen(true)
+                    MainActor.assumeIsolated {
+                        self?.setFullScreen(true)
+                    }
                 },
                 center.addObserver(forName: NSWindow.didExitFullScreenNotification,
                                    object: window,
                                    queue: .main) { [weak self] _ in
-                    self?.setFullScreen(false)
+                    MainActor.assumeIsolated {
+                        self?.setFullScreen(false)
+                    }
                 }
             ]
 
             mouseMonitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved]) { [weak self] event in
-                self?.handleMouseMoved(event)
+                MainActor.assumeIsolated {
+                    self?.handleMouseMoved(event)
+                }
                 return event
             }
 
@@ -1096,6 +1191,7 @@ private struct VerticalVolumeSlider: NSViewRepresentable {
         Coordinator(value: $value)
     }
 
+    @MainActor
     final class Coordinator: NSObject {
         var value: Binding<Double>
 

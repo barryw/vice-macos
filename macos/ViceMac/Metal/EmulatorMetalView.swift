@@ -49,7 +49,9 @@ private final class EmulatorInputMetalView: MTKView {
     private var keyEventMonitor: Any?
 
     deinit {
-        removeKeyEventMonitor()
+        MainActor.assumeIsolated {
+            removeKeyEventMonitor()
+        }
     }
 
     override var acceptsFirstResponder: Bool {

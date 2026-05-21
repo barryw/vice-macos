@@ -1,5 +1,56 @@
 import Foundation
 
+enum EmulatorMediaFile: Equatable {
+    case disk(DiskImageFileType)
+    case cartridge(CartridgeImageFileType)
+
+    init?(url: URL) {
+        if let diskImageType = DiskImageFileType(url: url) {
+            self = .disk(diskImageType)
+            return
+        }
+
+        if let cartridgeImageType = CartridgeImageFileType(url: url) {
+            self = .cartridge(cartridgeImageType)
+            return
+        }
+
+        return nil
+    }
+
+    var title: String {
+        switch self {
+        case let .disk(type):
+            return "\(type.title) disk image"
+        case let .cartridge(type):
+            return "\(type.title) cartridge"
+        }
+    }
+
+    static func supportedFilenameExtensions(for machine: EmulatedMachine) -> [String] {
+        var extensions = Set(machine.capabilities.driveTypes
+            .flatMap(\.supportedDiskImageTypes)
+            .map(\.rawValue))
+
+        if machine.capabilities.supportsCartridges {
+            extensions.formUnion(CartridgeImageFileType.allCases.map(\.rawValue))
+        }
+
+        return extensions.sorted()
+    }
+}
+
+enum CartridgeImageFileType: String, CaseIterable, Identifiable {
+    case crt
+
+    var id: String { rawValue }
+    var title: String { rawValue.uppercased() }
+
+    init?(url: URL) {
+        self.init(rawValue: url.pathExtension.lowercased())
+    }
+}
+
 struct ROMImageConfiguration: Codable, Equatable {
     private var paths: [String: String]
 

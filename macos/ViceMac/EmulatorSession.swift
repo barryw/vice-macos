@@ -597,6 +597,17 @@ struct RAMExpansionResourcePlan: Equatable {
 final class EmulatorSession: ObservableObject {
     let machine = EmulatedMachine.current
 
+    @Published var petModel: PETMachineModel {
+        didSet {
+            guard petModel != oldValue,
+                  machine.family == .pet else {
+                return
+            }
+
+            EmulatorDefaults.savePETModel(petModel, for: machine)
+            applyPETModel()
+        }
+    }
     @Published var isPaused = false {
         didSet {
             guard isPaused != oldValue else {
@@ -920,6 +931,7 @@ final class EmulatorSession: ObservableObject {
     init() {
         let machine = EmulatedMachine.current
 
+        petModel = EmulatorDefaults.loadPETModel(for: machine)
         videoStandard = EmulatorDefaults.loadVideoStandard(for: machine)
         emulationSpeed = EmulatorDefaults.loadEmulationSpeed(for: machine)
         displayMode = EmulatorDefaults.loadDisplayMode(for: machine)
@@ -937,18 +949,46 @@ final class EmulatorSession: ObservableObject {
     }
 
     deinit {
-        for observer in gameControllerObservers {
-            NotificationCenter.default.removeObserver(observer)
+        MainActor.assumeIsolated {
+            for observer in gameControllerObservers {
+                NotificationCenter.default.removeObserver(observer)
+            }
+            GCController.stopWirelessControllerDiscovery()
         }
-        GCController.stopWirelessControllerDiscovery()
     }
 
     var isRAMExpansionConfigured: Bool {
         machine.capabilities.supportsRAMExpansion && ramExpansion != .none
     }
 
+    var activeMachineModel: MachineModel {
+        guard machine.family == .pet else {
+            return machine.model
+        }
+
+        return .xpet(petModel)
+    }
+
+    var machineDisplayName: String {
+        switch activeMachineModel {
+        case let .xpet(model):
+            return model.displayName
+        case let .ted(model):
+            return model.displayName
+        default:
+            return machine.displayName
+        }
+    }
+
     var availableControlPorts: [ControlPort] {
         machine.capabilities.controlPorts
+    }
+
+    func romResourceValue(for slot: MachineROMSlot) -> String {
+        machine.romResourceValue(for: slot,
+                                 romImages: romImages,
+                                 videoStandard: videoStandard,
+                                 machineModel: activeMachineModel)
     }
 
     var hasMultipleControlPorts: Bool {
@@ -1171,6 +1211,7 @@ final class EmulatorSession: ObservableObject {
 
         let startupConfiguration = MachineStartupConfiguration(executablePath: executablePath,
                                                                dataDirectory: dataDirectory,
+                                                               machineModel: activeMachineModel,
                                                                videoStandard: videoStandard,
                                                                sidModel: sidModel,
                                                                soundEnabled: soundEnabled,
@@ -1467,36 +1508,71 @@ final class EmulatorSession: ObservableObject {
         _ = ViceEnginePreviewDriveSound(UInt32(configuration.unit))
     }
 
-    func attachDisk(to unit: Int, url: URL, autorun: Bool) {
+    @discardableResult
+    func openMedia(url: URL, autorun: Bool = false) -> Bool {
+        guard let mediaFile = EmulatorMediaFile(url: url) else {
+            let title = url.lastPathComponent.isEmpty ? "Media" : url.lastPathComponent
+            statusText = "\(title) is not a supported media file"
+            return false
+        }
+
+        switch mediaFile {
+        case let .disk(diskImageType):
+            return attachDiskToFirstCompatibleDrive(url: url,
+                                                    diskImageType: diskImageType,
+                                                    autorun: autorun)
+        case .cartridge:
+            return attachCartridge(url: url)
+        }
+    }
+
+    func openMedia(urls: [URL], autorun: Bool = false) {
+        urls.forEach { url in
+            openMedia(url: url, autorun: autorun)
+        }
+    }
+
+    @discardableResult
+    func attachDisk(to unit: Int, url: URL, autorun: Bool) -> Bool {
         attachDisk(to: unit, driveNumber: 0, url: url, autorun: autorun)
     }
 
-    func attachDisk(to unit: Int, driveNumber: Int, url: URL, autorun: Bool) {
+    @discardableResult
+    func attachDisk(to unit: Int, driveNumber: Int, url: URL, autorun: Bool) -> Bool {
         guard unit >= 8 && unit <= 11 else {
-            return
+            return false
         }
 
         guard let configuration = driveConfigurations.first(where: { $0.unit == unit }),
               configuration.isAttached else {
             statusText = "Drive \(unit) is disabled"
-            return
+            return false
         }
 
         guard configuration.driveType.driveNumbers.contains(driveNumber) else {
             statusText = "Drive \(unit):\(driveNumber) is not available on \(configuration.driveType.title)"
-            return
+            return false
         }
 
         guard configuration.driveType.supportsDiskImage(url: url) else {
             let fileType = DiskImageFileType(url: url)?.title
                 ?? (url.pathExtension.isEmpty ? "File" : url.pathExtension.uppercased())
             statusText = "\(fileType) is not supported by drive \(unit) (\(configuration.driveType.title))"
-            return
+            return false
         }
 
-        url.path.withCString { path in
-            _ = ViceEngineAttachDisk(UInt32(unit), UInt32(driveNumber), path, autorun)
+        let didAttach = url.path.withCString { path in
+            ViceEngineAttachDisk(UInt32(unit), UInt32(driveNumber), path, autorun)
         }
+
+        if didAttach {
+            rememberMedia(url)
+            statusText = "\(url.lastPathComponent) attached to drive \(unit)"
+        } else {
+            statusText = "Unable to attach \(url.lastPathComponent)"
+        }
+
+        return didAttach
     }
 
     func setROMImage(_ image: MachineROMSlot, path: String?) {
@@ -1509,14 +1585,25 @@ final class EmulatorSession: ObservableObject {
         romImages = updatedImages
     }
 
-    func attachCartridge(url: URL) {
+    @discardableResult
+    func attachCartridge(url: URL) -> Bool {
         guard machine.capabilities.supportsCartridges else {
-            return
+            statusText = "\(machineDisplayName) does not support cartridges"
+            return false
         }
 
-        url.path.withCString { path in
-            _ = ViceEngineAttachCartridge(path)
+        let didAttach = url.path.withCString { path in
+            ViceEngineAttachCartridge(path)
         }
+
+        if didAttach {
+            rememberMedia(url)
+            statusText = "\(url.lastPathComponent) attached"
+        } else {
+            statusText = "Unable to attach \(url.lastPathComponent)"
+        }
+
+        return didAttach
     }
 
     func detachCartridge() {
@@ -1525,6 +1612,37 @@ final class EmulatorSession: ObservableObject {
         }
 
         _ = ViceEngineDetachCartridge()
+    }
+
+    private func attachDiskToFirstCompatibleDrive(url: URL,
+                                                  diskImageType: DiskImageFileType,
+                                                  autorun: Bool) -> Bool {
+        guard let target = firstCompatibleDriveTarget(for: diskImageType) else {
+            statusText = "No enabled drive supports \(diskImageType.title) images"
+            return false
+        }
+
+        return attachDisk(to: target.unit,
+                          driveNumber: target.driveNumber,
+                          url: url,
+                          autorun: autorun)
+    }
+
+    private func firstCompatibleDriveTarget(for diskImageType: DiskImageFileType) -> (unit: Int, driveNumber: Int)? {
+        for configuration in driveConfigurations where configuration.isAttached {
+            guard configuration.driveType.supportsDiskImage(diskImageType),
+                  let driveNumber = configuration.driveType.driveNumbers.first else {
+                continue
+            }
+
+            return (configuration.unit, driveNumber)
+        }
+
+        return nil
+    }
+
+    private func rememberMedia(_ url: URL) {
+        NSDocumentController.shared.noteNewRecentDocumentURL(url)
     }
 
     private func applyRuntimeConfiguration() {
@@ -1612,6 +1730,28 @@ final class EmulatorSession: ObservableObject {
         }
     }
 
+    private func applyPETModel(updateStatus: Bool = true) {
+        guard ViceEngineIsRunning(),
+              machine.family == .pet else {
+            return
+        }
+
+        let didQueueModel = petModel.viceModelName.withCString { modelName in
+            ViceEngineSetMachineModel(modelName)
+        }
+        guard didQueueModel else {
+            if updateStatus {
+                statusText = "PET model unavailable"
+            }
+            return
+        }
+        applyROMImages()
+
+        if updateStatus {
+            statusText = petModel.displayName
+        }
+    }
+
     private func applySoundSettings(updateStatus: Bool = true) {
         guard ViceEngineIsRunning() else {
             return
@@ -1632,9 +1772,7 @@ final class EmulatorSession: ObservableObject {
 
         for slot in machine.romSlots {
             setVICEStringResource(slot.resourceName,
-                                  value: machine.romResourceValue(for: slot,
-                                                                  romImages: romImages,
-                                                                  videoStandard: videoStandard))
+                                  value: romResourceValue(for: slot))
         }
     }
 

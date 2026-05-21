@@ -84,6 +84,8 @@ enum MachineModel: Equatable {
     func defaultROMFileName(for slot: MachineROMSlot,
                             videoStandard: EmulatorSession.VideoStandard) -> String {
         switch self {
+        case let .xpet(model):
+            return model.defaultROMFileName(for: slot)
         case let .ted(model):
             return model.defaultROMFileName(for: slot,
                                             videoStandard: videoStandard)
@@ -93,18 +95,119 @@ enum MachineModel: Equatable {
     }
 }
 
-enum PETMachineModel: String, Codable, Equatable, CaseIterable {
+enum PETMachineModel: String, Codable, Equatable, CaseIterable, Identifiable {
+    case model2001 = "2001"
+    case model3008 = "3008"
+    case model3016 = "3016"
+    case model3032 = "3032"
+    case model3032B = "3032B"
+    case model4016 = "4016"
     case model4032 = "4032"
+    case model4032B = "4032B"
+    case model8032 = "8032"
+    case model8096 = "8096"
+    case model8296 = "8296"
+    case superPET = "SuperPET"
+
+    var id: String { rawValue }
 
     var displayName: String {
         switch self {
+        case .model2001:
+            return "PET 2001"
+        case .model3008:
+            return "PET 3008"
+        case .model3016:
+            return "PET 3016"
+        case .model3032:
+            return "PET 3032"
+        case .model3032B:
+            return "PET 3032B"
+        case .model4016:
+            return "PET 4016"
         case .model4032:
             return "PET 4032"
+        case .model4032B:
+            return "PET 4032B"
+        case .model8032:
+            return "PET 8032"
+        case .model8096:
+            return "PET 8096"
+        case .model8296:
+            return "PET 8296"
+        case .superPET:
+            return "SuperPET"
         }
     }
 
     var viceModelName: String {
         rawValue
+    }
+
+    func defaultROMFileName(for slot: MachineROMSlot) -> String {
+        switch slot.id {
+        case MachineROMSlot.petBasic.id:
+            return basicROMName
+        case MachineROMSlot.petKernal.id:
+            return kernalROMName
+        case MachineROMSlot.petEditor.id:
+            return editorROMName
+        case MachineROMSlot.petCharacter.id:
+            return characterROMName
+        default:
+            return slot.defaultFileName
+        }
+    }
+
+    private var basicROMName: String {
+        switch self {
+        case .model2001:
+            return "basic-1.901439-09-05-02-06.bin"
+        case .model3008, .model3016, .model3032, .model3032B:
+            return "basic-2.901465-01-02.bin"
+        case .model4016, .model4032, .model4032B, .model8032, .model8096, .model8296, .superPET:
+            return "basic-4.901465-23-20-21.bin"
+        }
+    }
+
+    private var kernalROMName: String {
+        switch self {
+        case .model2001:
+            return "kernal-1.901439-04-07.bin"
+        case .model3008, .model3016, .model3032, .model3032B:
+            return "kernal-2.901465-03.bin"
+        case .model4016, .model4032, .model4032B, .model8032, .model8096, .model8296, .superPET:
+            return "kernal-4.901465-22.bin"
+        }
+    }
+
+    private var editorROMName: String {
+        switch self {
+        case .model2001:
+            return "edit-1-n.901439-03.bin"
+        case .model3008, .model3016, .model3032:
+            return "edit-2-n.901447-24.bin"
+        case .model3032B:
+            return "edit-2-b.901474-01.bin"
+        case .model4016, .model4032:
+            return "edit-4-40-n-50Hz.901498-01.bin"
+        case .model4032B:
+            return "edit-4-40-b-50Hz.ts.bin"
+        case .model8032, .model8096, .model8296, .superPET:
+            return "edit-4-80-b-50Hz.901474-04_.bin"
+        }
+    }
+
+    private var characterROMName: String {
+        switch self {
+        case .model2001:
+            return "characters-1.901447-08.bin"
+        case .superPET:
+            return "characters.901640-01.bin"
+        case .model3008, .model3016, .model3032, .model3032B, .model4016, .model4032,
+             .model4032B, .model8032, .model8096, .model8296:
+            return "characters-2.901447-10.bin"
+        }
     }
 }
 
@@ -268,6 +371,7 @@ struct MachineCapabilities: Equatable {
 struct MachineStartupConfiguration {
     let executablePath: String
     let dataDirectory: String
+    let machineModel: MachineModel?
     let videoStandard: EmulatorSession.VideoStandard
     let sidModel: EmulatorSession.SIDModel
     let soundEnabled: Bool
@@ -373,7 +477,8 @@ struct EmulatedMachine: Identifiable, Equatable {
                 slot.startupOption,
                 romResourceValue(for: slot,
                                  romImages: configuration.romImages,
-                                 videoStandard: configuration.videoStandard)
+                                 videoStandard: configuration.videoStandard,
+                                 machineModel: configuration.machineModel)
             ]
         }
 
@@ -413,9 +518,11 @@ struct EmulatedMachine: Identifiable, Equatable {
 
     func romResourceValue(for slot: MachineROMSlot,
                           romImages: ROMImageConfiguration,
-                          videoStandard: EmulatorSession.VideoStandard) -> String {
+                          videoStandard: EmulatorSession.VideoStandard,
+                          machineModel: MachineModel? = nil) -> String {
         romImages.path(for: slot) ?? defaultROMFileName(for: slot,
-                                                        videoStandard: videoStandard)
+                                                        videoStandard: videoStandard,
+                                                        machineModel: machineModel)
     }
 
     func videoStandardAssignments(for standard: EmulatorSession.VideoStandard) -> [ViceIntResourceAssignment] {
@@ -450,14 +557,28 @@ struct EmulatedMachine: Identifiable, Equatable {
     }
 
     private func startupOptions(for configuration: MachineStartupConfiguration) -> [String] {
-        model.startupOptions(for: configuration,
-                             baseOptions: startupOptions)
+        activeModel(for: configuration).startupOptions(for: configuration,
+                                                       baseOptions: startupOptions)
     }
 
     private func defaultROMFileName(for slot: MachineROMSlot,
-                                    videoStandard: EmulatorSession.VideoStandard) -> String {
-        model.defaultROMFileName(for: slot,
-                                 videoStandard: videoStandard)
+                                    videoStandard: EmulatorSession.VideoStandard,
+                                    machineModel: MachineModel? = nil) -> String {
+        (validMachineModel(machineModel) ?? model).defaultROMFileName(for: slot,
+                                                                      videoStandard: videoStandard)
+    }
+
+    private func activeModel(for configuration: MachineStartupConfiguration) -> MachineModel {
+        validMachineModel(configuration.machineModel) ?? model
+    }
+
+    private func validMachineModel(_ override: MachineModel?) -> MachineModel? {
+        guard let override,
+              override.family == family else {
+            return nil
+        }
+
+        return override
     }
 }
 
