@@ -67,5 +67,9 @@
 	<string>AccentColor</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>VICEMacGitSHA</key>
+	<string>unknown</string>
+	<key>VICEUpstreamGitSHA</key>
+	<string>unknown</string>
 </dict>
 </plist>

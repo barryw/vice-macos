@@ -1,0 +1,31 @@
+labels:
+  backend: local
+  platform: darwin/arm64
+
+steps:
+  - name: prepare
+    image: bash
+    commands:
+      - macos/scripts/ci-prepare.sh
+
+  - name: verify
+    image: bash
+    commands:
+      - macos/scripts/ci-test.sh
+
+  - name: package
+    image: bash
+    commands:
+      - macos/scripts/package-vicemac-release.sh
+    when:
+      - event: [tag, manual]
+
+  - name: github_release
+    image: bash
+    environment:
+      GH_TOKEN:
+        from_secret: github_token
+    commands:
+      - macos/scripts/publish-github-release.sh
+    when:
+      - event: tag

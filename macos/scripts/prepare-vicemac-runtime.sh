@@ -53,6 +53,80 @@ require_build_tool() {
     fi
 }
 
+short_git_sha() {
+    local repo="$1"
+    local ref="$2"
+
+    git -C "$repo" rev-parse --short=12 "$ref" 2>/dev/null || echo "unknown"
+}
+
+mac_git_sha() {
+    local sha
+
+    if [[ -n "${VICE_MAC_GIT_SHA:-}" ]]; then
+        echo "$VICE_MAC_GIT_SHA"
+        return
+    fi
+
+    sha="$(short_git_sha "$REPO_ROOT" HEAD)"
+    if [[ "$sha" != "unknown" && -n "$(git -C "$REPO_ROOT" status --porcelain 2>/dev/null)" ]]; then
+        sha="${sha}-dirty"
+    fi
+
+    echo "$sha"
+}
+
+upstream_git_sha() {
+    local merge_base
+    local parents
+
+    if [[ -n "${VICE_UPSTREAM_GIT_SHA:-}" ]]; then
+        echo "$VICE_UPSTREAM_GIT_SHA"
+        return
+    fi
+
+    merge_base="$(git -C "$REPO_ROOT" merge-base HEAD upstream/main 2>/dev/null || true)"
+    if [[ -n "$merge_base" ]]; then
+        short_git_sha "$REPO_ROOT" "$merge_base"
+        return
+    fi
+
+    parents="$(git -C "$REPO_ROOT" log --merges --first-parent --format=%P -n 1 HEAD 2>/dev/null || true)"
+    set -- $parents
+    if [[ $# -ge 2 ]]; then
+        short_git_sha "$REPO_ROOT" "$2"
+        return
+    fi
+
+    echo "unknown"
+}
+
+write_plist_string() {
+    local plist="$1"
+    local key="$2"
+    local value="$3"
+
+    /usr/libexec/PlistBuddy -c "Set :$key $value" "$plist" 2>/dev/null ||
+        /usr/libexec/PlistBuddy -c "Add :$key string $value" "$plist"
+}
+
+write_build_metadata() {
+    local info_plist
+
+    if [[ -z "${TARGET_BUILD_DIR:-}" || -z "${INFOPLIST_PATH:-}" ]]; then
+        return
+    fi
+
+    info_plist="$TARGET_BUILD_DIR/$INFOPLIST_PATH"
+    if [[ ! -f "$info_plist" ]]; then
+        echo "Built app Info.plist is missing at $info_plist" >&2
+        exit 1
+    fi
+
+    write_plist_string "$info_plist" "VICEMacGitSHA" "$(mac_git_sha)"
+    write_plist_string "$info_plist" "VICEUpstreamGitSHA" "$(upstream_git_sha)"
+}
+
 if [[ -f "$BUILD_DIR/src/Makefile" ]]; then
     configured_target="$(grep -m 1 -Eo -- '-mmacosx-version-min=[0-9.]+' "$BUILD_DIR/src/Makefile" | sed 's/.*=//' || true)"
     if [[ "$configured_target" != "$ENGINE_DEPLOYMENT_TARGET" ||
@@ -140,3 +214,5 @@ if [[ -n "${TARGET_BUILD_DIR:-}" && -n "${UNLOCALIZED_RESOURCES_FOLDER_PATH:-}" 
     mkdir -p "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/VICEData"
     rsync -a --delete "$VICE_SRC/data/" "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/VICEData/"
 fi
+
+write_build_metadata

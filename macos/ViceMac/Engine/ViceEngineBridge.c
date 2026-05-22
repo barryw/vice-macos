@@ -17,6 +17,7 @@ typedef void (*ViceSetDriveStatusCallbackFunction)(vicemac_drive_status_callback
                                                    void *context);
 typedef void (*ViceSetCartridgeStatusCallbackFunction)(vicemac_cartridge_status_callback_t callback,
                                                        void *context);
+typedef const char *(*ViceGetVersionFunction)(void);
 typedef int (*ViceQueueKeyEventFunction)(signed long key, int mod, int pressed);
 typedef int (*ViceQueueKeyboardClearFunction)(void);
 typedef int (*ViceQueueKeyboardTextFunction)(const char *text);
@@ -52,6 +53,7 @@ typedef struct ViceEngineSymbols {
     ViceSetVideoFrameCallbackFunction setVideoFrameCallback;
     ViceSetDriveStatusCallbackFunction setDriveStatusCallback;
     ViceSetCartridgeStatusCallbackFunction setCartridgeStatusCallback;
+    ViceGetVersionFunction getVersion;
     ViceQueueKeyEventFunction queueKeyEvent;
     ViceQueueKeyboardClearFunction queueKeyboardClear;
     ViceQueueKeyboardTextFunction queueKeyboardText;
@@ -176,6 +178,7 @@ static int loadRuntimeSymbols(void *handle, ViceEngineSymbols *symbols)
     LOAD_RUNTIME_SYMBOL(setVideoFrameCallback, "vicemac_set_video_frame_callback");
     LOAD_RUNTIME_SYMBOL(setDriveStatusCallback, "vicemac_set_drive_status_callback");
     LOAD_RUNTIME_SYMBOL(setCartridgeStatusCallback, "vicemac_set_cartridge_status_callback");
+    LOAD_RUNTIME_SYMBOL(getVersion, "vicemac_get_vice_version");
     LOAD_RUNTIME_SYMBOL(queueKeyEvent, "vicemac_queue_key_event");
     LOAD_RUNTIME_SYMBOL(queueKeyboardClear, "vicemac_queue_keyboard_clear");
     LOAD_RUNTIME_SYMBOL(queueKeyboardText, "vicemac_queue_keyboard_text");
@@ -293,6 +296,19 @@ void ViceEngineSetCartridgeStatusCallback(ViceEngineCartridgeStatusCallback call
         runtimeSymbols.setCartridgeStatusCallback(cartridgeStatusTrampoline, context);
     }
     pthread_mutex_unlock(&runtimeMutex);
+}
+
+const char *ViceEngineGetVersion(void)
+{
+    const char *version = NULL;
+
+    pthread_mutex_lock(&runtimeMutex);
+    if (runtimeHandle != NULL && runtimeSymbols.getVersion != NULL) {
+        version = runtimeSymbols.getVersion();
+    }
+    pthread_mutex_unlock(&runtimeMutex);
+
+    return version;
 }
 
 bool ViceEngineIsRunning(void)

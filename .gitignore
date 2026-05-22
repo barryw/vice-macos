@@ -3,6 +3,7 @@
 xcuserdata/
 DerivedData/
 macos/BuildProducts/
+macos/dist/
 
 # macOS metadata
 .DS_Store

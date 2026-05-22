@@ -27,8 +27,13 @@
 #include "monitor/montypes.h"
 #include "resources.h"
 #include "ui.h"
+#include "version.h"
 #include "vicemacbridge.h"
 #include "vsync.h"
+
+#ifdef USE_SVN_REVISION
+#include "svnversion.h"
+#endif
 
 #define VICEMAC_INPUT_QUEUE_CAPACITY 1024
 #define VICEMAC_KEYBOARD_TEXT_QUEUE_CAPACITY 128
@@ -171,6 +176,18 @@ static unsigned int memory_request_queue_write = 0;
 static unsigned int vicemac_queue_next(unsigned int index, unsigned int capacity)
 {
     return (index + 1) % capacity;
+}
+
+const char *vicemac_get_vice_version(void)
+{
+#ifdef USE_SVN_REVISION
+    static char version[128];
+
+    snprintf(version, sizeof(version), "%s r%s", VERSION, VICE_SVN_REV_STRING);
+    return version;
+#else
+    return VERSION;
+#endif
 }
 
 static void vicemac_copy_cstring(char *destination, size_t destination_size, const char *source)
@@ -418,8 +435,7 @@ static int vicemac_read_crt_rom_metadata(const char *path,
                                          uint32_t *bank_count)
 {
     enum {
-        VICEMAC_CRT_BANK_WORDS = 2048,
-        VICEMAC_CRT_MAX_BANK = VICEMAC_CRT_BANK_WORDS * 32U
+        VICEMAC_CRT_BANK_WORDS = 2048
     };
 
     uint32_t seen_banks[VICEMAC_CRT_BANK_WORDS];
@@ -445,8 +461,7 @@ static int vicemac_read_crt_rom_metadata(const char *path,
         uint32_t bank_word = chip.bank / 32U;
         uint32_t bank_mask = 1U << (chip.bank % 32U);
 
-        if (chip.bank >= VICEMAC_CRT_MAX_BANK ||
-            chip.size > UINT32_MAX - *rom_size ||
+        if (chip.size > UINT32_MAX - *rom_size ||
             *chip_count == UINT32_MAX) {
             break;
         }

@@ -400,10 +400,10 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = A10000000000000000000080 /* Build configuration list for PBXNativeTarget "ViceMacC64" */;
 			buildPhases = (
-				A10000000000000000000043 /* Prepare VICE Runtime */,
 				A10000000000000000000041 /* Sources */,
 				A10000000000000000000040 /* Frameworks */,
 				A10000000000000000000042 /* Resources */,
+				A10000000000000000000043 /* Prepare VICE Runtime */,
 			);
 			buildRules = (
 			);
@@ -418,10 +418,10 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = B20000000000000000000080 /* Build configuration list for PBXNativeTarget "ViceMacVIC20" */;
 			buildPhases = (
-				B20000000000000000000043 /* Prepare VICE Runtime */,
 				B20000000000000000000041 /* Sources */,
 				B20000000000000000000040 /* Frameworks */,
 				B20000000000000000000042 /* Resources */,
+				B20000000000000000000043 /* Prepare VICE Runtime */,
 			);
 			buildRules = (
 			);
@@ -436,10 +436,10 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = C30000000000000000000080 /* Build configuration list for PBXNativeTarget "ViceMacPET" */;
 			buildPhases = (
-				C30000000000000000000043 /* Prepare VICE Runtime */,
 				C30000000000000000000041 /* Sources */,
 				C30000000000000000000040 /* Frameworks */,
 				C30000000000000000000042 /* Resources */,
+				C30000000000000000000043 /* Prepare VICE Runtime */,
 			);
 			buildRules = (
 			);
@@ -454,10 +454,10 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = D40000000000000000000080 /* Build configuration list for PBXNativeTarget "ViceMacPlus4" */;
 			buildPhases = (
-				D40000000000000000000043 /* Prepare VICE Runtime */,
 				D40000000000000000000041 /* Sources */,
 				D40000000000000000000040 /* Frameworks */,
 				D40000000000000000000042 /* Resources */,
+				D40000000000000000000043 /* Prepare VICE Runtime */,
 			);
 			buildRules = (
 			);
@@ -472,10 +472,10 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 170000000000000000000080 /* Build configuration list for PBXNativeTarget "ViceMacC16" */;
 			buildPhases = (
-				170000000000000000000043 /* Prepare VICE Runtime */,
 				170000000000000000000041 /* Sources */,
 				170000000000000000000040 /* Frameworks */,
 				170000000000000000000042 /* Resources */,
+				170000000000000000000043 /* Prepare VICE Runtime */,
 			);
 			buildRules = (
 			);
@@ -490,10 +490,10 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 180000000000000000000080 /* Build configuration list for PBXNativeTarget "ViceMacC232" */;
 			buildPhases = (
-				180000000000000000000043 /* Prepare VICE Runtime */,
 				180000000000000000000041 /* Sources */,
 				180000000000000000000040 /* Frameworks */,
 				180000000000000000000042 /* Resources */,
+				180000000000000000000043 /* Prepare VICE Runtime */,
 			);
 			buildRules = (
 			);
@@ -508,10 +508,10 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 190000000000000000000080 /* Build configuration list for PBXNativeTarget "ViceMacV364" */;
 			buildPhases = (
-				190000000000000000000043 /* Prepare VICE Runtime */,
 				190000000000000000000041 /* Sources */,
 				190000000000000000000040 /* Frameworks */,
 				190000000000000000000042 /* Resources */,
+				190000000000000000000043 /* Prepare VICE Runtime */,
 			);
 			buildRules = (
 			);
@@ -526,10 +526,10 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = E50000000000000000000080 /* Build configuration list for PBXNativeTarget "ViceMacC128" */;
 			buildPhases = (
-				E50000000000000000000043 /* Prepare VICE Runtime */,
 				E50000000000000000000041 /* Sources */,
 				E50000000000000000000040 /* Frameworks */,
 				E50000000000000000000042 /* Resources */,
+				E50000000000000000000043 /* Prepare VICE Runtime */,
 			);
 			buildRules = (
 			);

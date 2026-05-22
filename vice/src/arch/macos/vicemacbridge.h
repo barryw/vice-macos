@@ -70,6 +70,7 @@ void vicemac_set_drive_status_callback(vicemac_drive_status_callback_t callback,
                                        void *context);
 void vicemac_set_cartridge_status_callback(vicemac_cartridge_status_callback_t callback,
                                            void *context);
+const char *vicemac_get_vice_version(void);
 int vicemac_has_video_frame_callback(void);
 void vicemac_publish_video_frame(uint32_t width,
                                  uint32_t height,
