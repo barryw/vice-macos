@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 @main
 struct ViceMacApp: App {
     @Environment(\.openWindow) private var openWindow
+    @FocusedValue(\.diskImageManagerActions) private var diskImageManagerActions
     @StateObject private var emulator = EmulatorSession()
     @StateObject private var aiSettings = AIAssistantSettings()
 
@@ -22,34 +23,51 @@ struct ViceMacApp: App {
             }
 
             CommandGroup(replacing: .newItem) {
-                Button("Open Media...") {
-                    MediaOpenPanel.openMedia(for: emulator, autorun: false)
-                }
-                .keyboardShortcut("o", modifiers: [.command])
+                if let diskImageManagerActions {
+                    Button("New Disk Image...") {
+                        diskImageManagerActions.createImage()
+                    }
+                    .keyboardShortcut("n", modifiers: [.command])
 
-                Button("Open and Run Media...") {
-                    MediaOpenPanel.openMedia(for: emulator, autorun: true)
-                }
-                .keyboardShortcut("o", modifiers: [.command, .option])
+                    Button("Open Disk Image...") {
+                        diskImageManagerActions.openImage()
+                    }
+                    .keyboardShortcut("o", modifiers: [.command])
+                } else {
+                    Button("Open Media...") {
+                        MediaOpenPanel.openMedia(for: emulator, autorun: false)
+                    }
+                    .keyboardShortcut("o", modifiers: [.command])
 
-                Button("Load Snapshot...") {
-                    MediaOpenPanel.loadSnapshot(for: emulator)
-                }
-                .keyboardShortcut("o", modifiers: [.command, .shift])
+                    Button("Open and Run Media...") {
+                        MediaOpenPanel.openMedia(for: emulator, autorun: true)
+                    }
+                    .keyboardShortcut("o", modifiers: [.command, .option])
 
-                Divider()
+                    Button("Load Snapshot...") {
+                        MediaOpenPanel.loadSnapshot(for: emulator)
+                    }
+                    .keyboardShortcut("o", modifiers: [.command, .shift])
+                }
+            }
+
+            CommandGroup(replacing: .saveItem) {
+                Button("Save") {
+                    diskImageManagerActions?.saveActiveImage()
+                }
+                .keyboardShortcut("s", modifiers: [.command])
+                .disabled(diskImageManagerActions?.canSaveActiveImage != true)
 
                 Button("Save Snapshot...") {
                     MediaOpenPanel.saveSnapshot(for: emulator)
                 }
-                .keyboardShortcut("s", modifiers: [.command])
+                .keyboardShortcut("s", modifiers: [.command, .option])
             }
 
             CommandMenu("Machine") {
                 Button(emulator.isPaused ? "Resume" : "Pause") {
                     emulator.togglePause()
                 }
-                .keyboardShortcut("p", modifiers: [.command])
 
                 Divider()
 
@@ -81,6 +99,42 @@ struct ViceMacApp: App {
             }
 
             CommandMenu("Media") {
+                Button("Disk Image Manager...") {
+                    openWindow(id: DiskImageManagerWindow.id)
+                }
+                .keyboardShortcut("d", modifiers: [.command, .shift])
+
+                if let diskImageManagerActions {
+                    Divider()
+
+                    Button("Import PRG...") {
+                        diskImageManagerActions.importProgram()
+                    }
+                    .disabled(!diskImageManagerActions.canImportProgram)
+
+                    Button("Export Selected File...") {
+                        diskImageManagerActions.exportSelectedFile()
+                    }
+                    .disabled(!diskImageManagerActions.canExportSelectedFile)
+
+                    Button("Clone Optimized Image...") {
+                        diskImageManagerActions.cloneOptimizedImage()
+                    }
+                    .disabled(!diskImageManagerActions.canCloneOptimizedImage)
+
+                    Button("Rename Selected File...") {
+                        diskImageManagerActions.renameSelectedFile()
+                    }
+                    .disabled(!diskImageManagerActions.canRenameSelectedFile)
+
+                    Button("Delete Selected File") {
+                        diskImageManagerActions.deleteSelectedFile()
+                    }
+                    .disabled(!diskImageManagerActions.canDeleteSelectedFile)
+                }
+
+                Divider()
+
                 ForEach(emulator.driveConfigurations) { configuration in
                     Menu("Drive \(configuration.unit)") {
                         Button("Attach Disk...") {
@@ -163,6 +217,12 @@ struct ViceMacApp: App {
         .defaultSize(width: AboutWindow.size.width, height: AboutWindow.size.height)
         .windowResizability(.contentSize)
 
+        Window("Disk Image Manager", id: DiskImageManagerWindow.id) {
+            DiskImageManagerView()
+        }
+        .defaultSize(width: DiskImageManagerWindow.size.width,
+                     height: DiskImageManagerWindow.size.height)
+
         Settings {
             SettingsView()
                 .environmentObject(emulator)
@@ -190,6 +250,11 @@ struct ViceMacApp: App {
 private enum AboutWindow {
     static let id = "about-vice-mac"
     static let size = CGSize(width: 680, height: 486)
+}
+
+private enum DiskImageManagerWindow {
+    static let id = "disk-image-manager"
+    static let size = CGSize(width: 1_180, height: 780)
 }
 
 @MainActor

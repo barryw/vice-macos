@@ -467,6 +467,216 @@ final class ModelConfigurationTests: XCTestCase {
         XCTAssertEqual(response.rawContent.count, 2)
     }
 
+    func testCommodoreDiskImageReadsD64DirectoryAndFileData() throws {
+        let payload = Data([0x01, 0x08, 0x0b, 0x08, 0x0a, 0x00, 0x99, 0x22, 0x48, 0x49, 0x22, 0x00])
+        let url = try makeD64Image(name: "HELLO", payload: payload)
+        let image = try CommodoreDiskImage(url: url)
+
+        let entries = try image.directoryEntries()
+
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertEqual(entries[0].name, "HELLO")
+        XCTAssertEqual(entries[0].type, .prg)
+        XCTAssertEqual(entries[0].blocks, 1)
+        XCTAssertEqual(try image.fileData(for: entries[0]), payload)
+        XCTAssertEqual(image.header.name, "VICE MAC")
+        XCTAssertEqual(image.header.blocksFree, 663)
+    }
+
+    func testCommodoreDiskImageCopiesFileBetweenD64Images() throws {
+        let sourceURL = try makeD64Image(name: "HELLO", payload: Data([0x01, 0x08, 0x00]))
+        let destinationURL = try makeD64Image()
+        let source = try CommodoreDiskImage(url: sourceURL)
+        var destination = try CommodoreDiskImage(url: destinationURL)
+        let entry = try XCTUnwrap(source.directoryEntries().first)
+
+        try destination.copyFile(entry, from: source)
+
+        let copied = try XCTUnwrap(destination.directoryEntries().first)
+        XCTAssertEqual(copied.name, "HELLO")
+        XCTAssertEqual(try destination.fileData(for: copied), try source.fileData(for: entry))
+        XCTAssertTrue(destination.isModified)
+    }
+
+    func testCommodoreDiskImageCreatesBlankD64Image() throws {
+        let url = temporaryURL(pathExtension: "d64")
+        let image = try CommodoreDiskImage(blankImageAt: url,
+                                           format: .d64,
+                                           diskName: "NEW DISK",
+                                           diskID: "ND")
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+        XCTAssertEqual(image.header.name, "NEW DISK")
+        XCTAssertEqual(image.header.id, "ND")
+        XCTAssertEqual(image.header.blocksFree, 664)
+        XCTAssertEqual(try image.directoryEntries(), [])
+
+        let directory = try image.readSector(CommodoreDiskAddress(track: 18, sector: 1))
+        XCTAssertEqual(directory[0], 0)
+        XCTAssertEqual(directory[1], 255)
+    }
+
+    func testCommodoreDiskImageImportsRenamesAndDeletesProgram() throws {
+        let url = temporaryURL(pathExtension: "d64")
+        var image = try CommodoreDiskImage(blankImageAt: url,
+                                           format: .d64,
+                                           diskName: "WORK",
+                                           diskID: "WK")
+        let payload = Data((0..<300).map { UInt8($0 & 0xff) })
+
+        try image.importFile(named: "demo", payload: payload)
+
+        var entry = try XCTUnwrap(image.directoryEntries().first)
+        XCTAssertEqual(entry.name, "DEMO")
+        XCTAssertEqual(entry.type, .prg)
+        XCTAssertEqual(entry.blocks, 2)
+        XCTAssertEqual(try image.fileData(for: entry), payload)
+        XCTAssertEqual(image.header.blocksFree, 662)
+
+        try image.renameFile(entry, to: "renamed")
+
+        entry = try XCTUnwrap(image.directoryEntries().first)
+        XCTAssertEqual(entry.name, "RENAMED")
+
+        try image.deleteFile(entry)
+
+        XCTAssertEqual(try image.directoryEntries(), [])
+        XCTAssertEqual(image.header.blocksFree, 664)
+        XCTAssertTrue(image.isModified)
+    }
+
+    func testCommodoreDiskImageRejectsDuplicateImportedNames() throws {
+        let url = temporaryURL(pathExtension: "d64")
+        var image = try CommodoreDiskImage(blankImageAt: url,
+                                           format: .d64,
+                                           diskName: "WORK",
+                                           diskID: "WK")
+
+        try image.importFile(named: "demo", payload: Data([0x01, 0x08]))
+
+        XCTAssertThrowsError(try image.importFile(named: "DEMO", payload: Data([0x01, 0x08]))) { error in
+            XCTAssertEqual(error as? CommodoreDiskImageError, .fileExists("DEMO"))
+        }
+    }
+
+    func testCommodoreDiskImageCreatesAndWritesAllManagedFormats() throws {
+        let cases: [(CommodoreDiskImageFormat, Int)] = [
+            (.d64, 664),
+            (.d67, 670),
+            (.d71, 1328),
+            (.d80, 2052),
+            (.d81, 3160),
+            (.d82, 4133)
+        ]
+
+        for (format, expectedFreeBlocks) in cases {
+            let url = temporaryURL(pathExtension: format.rawValue)
+            var image = try CommodoreDiskImage(blankImageAt: url,
+                                               format: format,
+                                               diskName: "\(format.title) WORK",
+                                               diskID: "VM")
+            let payload = Data((0..<600).map { UInt8($0 & 0xff) })
+
+            XCTAssertEqual(image.header.blocksFree, expectedFreeBlocks, format.title)
+
+            try image.importFile(named: "demo", payload: payload)
+
+            let entry = try XCTUnwrap(image.directoryEntries().first, format.title)
+            XCTAssertEqual(entry.name, "DEMO", format.title)
+            XCTAssertEqual(entry.blocks, 3, format.title)
+            XCTAssertEqual(try image.fileData(for: entry), payload, format.title)
+            XCTAssertEqual(image.header.blocksFree, expectedFreeBlocks - 3, format.title)
+        }
+    }
+
+    func testCommodoreDiskImageClonesWithDriveOptimizedInterleave() throws {
+        let sourceURL = temporaryURL(pathExtension: "d64")
+        var source = try CommodoreDiskImage(blankImageAt: sourceURL,
+                                            format: .d64,
+                                            diskName: "SOURCE",
+                                            diskID: "VM")
+        let payload = Data((0..<900).map { UInt8($0 & 0xff) })
+
+        try source.importFile(named: "demo", payload: payload)
+        try source.save()
+
+        let sourceEntry = try XCTUnwrap(source.directoryEntries().first)
+        XCTAssertEqual(sourceEntry.start, CommodoreDiskAddress(track: 1, sector: 0))
+        XCTAssertFalse(source.isModified)
+
+        let cloneURL = temporaryURL(pathExtension: "d64")
+        let clone = try source.cloneOptimized(to: cloneURL)
+        let cloneEntry = try XCTUnwrap(clone.directoryEntries().first)
+
+        XCTAssertEqual(try clone.fileData(for: cloneEntry), payload)
+        XCTAssertEqual(try source.fileData(for: sourceEntry), payload)
+        XCTAssertFalse(source.isModified)
+        XCTAssertEqual(Array(try fileChain(in: clone, for: cloneEntry).prefix(4)), [
+            CommodoreDiskAddress(track: 17, sector: 0),
+            CommodoreDiskAddress(track: 17, sector: 10),
+            CommodoreDiskAddress(track: 17, sector: 20),
+            CommodoreDiskAddress(track: 17, sector: 8)
+        ])
+    }
+
+    func testCommodoreDiskImageDirectoryExpansionUsesDirectoryInterleave() throws {
+        let url = temporaryURL(pathExtension: "d64")
+        var image = try CommodoreDiskImage(blankImageAt: url,
+                                           format: .d64,
+                                           diskName: "DIR TEST",
+                                           diskID: "VM")
+
+        for index in 1...9 {
+            try image.importFile(named: "file \(index)", payload: Data([UInt8(index)]))
+        }
+
+        let firstDirectory = try image.readSector(CommodoreDiskAddress(track: 18, sector: 1))
+        XCTAssertEqual(firstDirectory[0], 18)
+        XCTAssertEqual(firstDirectory[1], 4)
+    }
+
+    func testCommodoreDiskImageRebuildAnalysisBlocksRelativeFiles() throws {
+        let url = temporaryURL(pathExtension: "d64")
+        var image = try CommodoreDiskImage(blankImageAt: url,
+                                           format: .d64,
+                                           diskName: "REL TEST",
+                                           diskID: "VM")
+        var directory = try image.readSector(CommodoreDiskAddress(track: 18, sector: 1))
+        directory[2] = 0x84
+        directory[3] = 1
+        directory[4] = 0
+        let name = CommodorePETSCII.encodeFilename("RANDOM")
+        for index in 0..<16 {
+            directory[5 + index] = name[index]
+        }
+        directory[30] = 1
+        try image.writeSector(directory, at: CommodoreDiskAddress(track: 18, sector: 1))
+
+        let analysis = image.rebuildAnalysis()
+
+        XCTAssertFalse(analysis.canRebuild)
+        XCTAssertTrue(analysis.blockingIssues.contains { $0.title.contains("REL") })
+    }
+
+    func testCommodoreDiskImageWritesSectorData() throws {
+        let url = try makeD64Image()
+        var image = try CommodoreDiskImage(url: url)
+        let address = CommodoreDiskAddress(track: 1, sector: 1)
+        let bytes = Data((0..<256).map { UInt8($0 & 0xff) })
+
+        try image.writeSector(bytes, at: address)
+
+        XCTAssertEqual(try image.readSector(address), bytes)
+        XCTAssertTrue(image.isModified)
+    }
+
+    func testCommodoreHexDumpRoundTripsSectorText() throws {
+        let bytes = Data((0..<256).map { UInt8($0 & 0xff) })
+        let text = CommodoreHexDump.text(for: bytes)
+
+        XCTAssertEqual(try CommodoreHexDump.data(from: text), bytes)
+    }
+
     private func startupConfiguration(for machine: EmulatedMachine,
                                       displayOutput: MachineDisplayOutput? = nil,
                                       machineModel: MachineModel? = nil,
@@ -497,6 +707,106 @@ final class ModelConfigurationTests: XCTestCase {
         .xc232,
         .xv364
     ]
+
+    private func makeD64Image(name: String? = nil, payload: Data = Data()) throws -> URL {
+        let url = temporaryURL(pathExtension: "d64")
+        let geometry = try CommodoreDiskGeometry(format: .d64, fileSize: 174_848)
+        var data = Data(repeating: 0, count: geometry.dataByteCount)
+
+        var bam = Data(repeating: 0, count: CommodoreDiskImage.bytesPerSector)
+        bam[0] = 18
+        bam[1] = 1
+        bam[2] = 65
+
+        for track in 1...35 {
+            let entry = 4 + (track - 1) * 4
+            let sectorCount = geometry.sectorsPerTrack(track)
+            bam[entry] = UInt8(sectorCount)
+            for sector in 0..<sectorCount {
+                bam[entry + 1 + sector / 8] |= UInt8(1 << (sector % 8))
+            }
+        }
+
+        writePETSCII("VICE MAC", into: &bam, range: 144..<160)
+        writePETSCII("VM", into: &bam, range: 162..<167)
+        bam[165] = 50
+        bam[166] = 65
+
+        clearBAMBit(track: 18, sector: 0, in: &bam)
+        clearBAMBit(track: 18, sector: 1, in: &bam)
+
+        var directory = Data(repeating: 0, count: CommodoreDiskImage.bytesPerSector)
+        directory[0] = 0
+        directory[1] = 255
+
+        if let name {
+            let fileAddress = CommodoreDiskAddress(track: 1, sector: 0)
+            clearBAMBit(track: fileAddress.track, sector: fileAddress.sector, in: &bam)
+            directory[2] = 0x82
+            directory[3] = UInt8(fileAddress.track)
+            directory[4] = UInt8(fileAddress.sector)
+            let encodedName = CommodorePETSCII.encodeFilename(name)
+            for index in 0..<16 {
+                directory[5 + index] = encodedName[index]
+            }
+            directory[30] = 1
+
+            var fileSector = Data(repeating: 0, count: CommodoreDiskImage.bytesPerSector)
+            fileSector[0] = 0
+            fileSector[1] = UInt8(payload.count + 1)
+            fileSector.replaceSubrange(2..<(2 + payload.count), with: payload)
+            writeSector(fileSector, at: fileAddress, geometry: geometry, data: &data)
+        }
+
+        writeSector(bam, at: CommodoreDiskAddress(track: 18, sector: 0), geometry: geometry, data: &data)
+        writeSector(directory, at: CommodoreDiskAddress(track: 18, sector: 1), geometry: geometry, data: &data)
+        try data.write(to: url)
+        return url
+    }
+
+    private func temporaryURL(pathExtension: String) -> URL {
+        URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension(pathExtension)
+    }
+
+    private func writeSector(_ sector: Data,
+                             at address: CommodoreDiskAddress,
+                             geometry: CommodoreDiskGeometry,
+                             data: inout Data) {
+        let offset = try! geometry.offset(for: address)
+        data.replaceSubrange(offset..<(offset + CommodoreDiskImage.bytesPerSector), with: sector)
+    }
+
+    private func fileChain(in image: CommodoreDiskImage,
+                           for entry: CommodoreDiskDirectoryEntry) throws -> [CommodoreDiskAddress] {
+        var chain: [CommodoreDiskAddress] = []
+        var address = entry.start
+        var seen = Set<CommodoreDiskAddress>()
+
+        while address.track != 0 {
+            XCTAssertFalse(seen.contains(address))
+            seen.insert(address)
+            chain.append(address)
+            let sector = try image.readSector(address)
+            address = CommodoreDiskAddress(track: Int(sector[0]), sector: Int(sector[1]))
+        }
+
+        return chain
+    }
+
+    private func writePETSCII(_ string: String, into data: inout Data, range: Range<Int>) {
+        let bytes = CommodorePETSCII.encodeFilename(string)
+        for (index, dataIndex) in range.enumerated() {
+            data[dataIndex] = index < bytes.count ? bytes[index] : 0xa0
+        }
+    }
+
+    private func clearBAMBit(track: Int, sector: Int, in bam: inout Data) {
+        let entry = 4 + (track - 1) * 4
+        bam[entry + 1 + sector / 8] &= ~UInt8(1 << (sector % 8))
+        bam[entry] = bam[entry] &- 1
+    }
 }
 
 private extension Array where Element == String {
