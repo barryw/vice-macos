@@ -753,7 +753,15 @@ final class EmulatorSession: ObservableObject {
     @Published var cartridgeStatus = CartridgeStatus.detached
     @Published private(set) var gameControllerNames: [String] = []
     @Published private var controlPortValues: [ControlPort: UInt16] = [:]
-    @Published var filterSettings = VideoFilterSettings()
+    @Published var filterSettings: VideoFilterSettings {
+        didSet {
+            guard filterSettings != oldValue else {
+                return
+            }
+
+            EmulatorDefaults.saveVideoFilterSettings(filterSettings, for: machine)
+        }
+    }
     @Published var statusText: String
 
     let frameSource: EmulatorFrameSource
@@ -935,6 +943,7 @@ final class EmulatorSession: ObservableObject {
         videoStandard = EmulatorDefaults.loadVideoStandard(for: machine)
         emulationSpeed = EmulatorDefaults.loadEmulationSpeed(for: machine)
         displayMode = EmulatorDefaults.loadDisplayMode(for: machine)
+        filterSettings = EmulatorDefaults.loadVideoFilterSettings(for: machine)
         displayOutput = EmulatorDefaults.loadDisplayOutput(for: machine)
         sidModel = EmulatorDefaults.loadSIDModel(for: machine)
         soundEnabled = EmulatorDefaults.loadSoundEnabled()
@@ -1273,7 +1282,7 @@ final class EmulatorSession: ObservableObject {
 
     func applyFilterPreset(_ preset: VideoFilterPreset) {
         filterSettings = VideoFilterSettings.defaults(for: preset)
-        statusText = "\(preset.rawValue) filter"
+        statusText = "\(preset.title) display"
     }
 
     @discardableResult
@@ -1523,6 +1532,8 @@ final class EmulatorSession: ObservableObject {
                                                     autorun: autorun)
         case .cartridge:
             return attachCartridge(url: url)
+        case .snapshot:
+            return loadSnapshot(url: url)
         }
     }
 
@@ -1612,6 +1623,50 @@ final class EmulatorSession: ObservableObject {
         }
 
         _ = ViceEngineDetachCartridge()
+    }
+
+    @discardableResult
+    func saveSnapshot(url: URL) -> Bool {
+        guard ViceEngineIsRunning() else {
+            statusText = "\(machine.shortName) is not running"
+            return false
+        }
+
+        let didSave = url.path.withCString { path in
+            ViceEngineSaveSnapshot(path, true, true)
+        }
+
+        if didSave {
+            rememberMedia(url)
+            statusText = "Snapshot saved"
+        } else {
+            statusText = "Unable to save snapshot"
+        }
+
+        return didSave
+    }
+
+    @discardableResult
+    func loadSnapshot(url: URL) -> Bool {
+        guard ViceEngineIsRunning() else {
+            statusText = "\(machine.shortName) is not running"
+            return false
+        }
+
+        releaseAllKeys()
+
+        let didLoad = url.path.withCString { path in
+            ViceEngineLoadSnapshot(path)
+        }
+
+        if didLoad {
+            rememberMedia(url)
+            statusText = "Snapshot loaded"
+        } else {
+            statusText = "Unable to load snapshot"
+        }
+
+        return didLoad
     }
 
     private func attachDiskToFirstCompatibleDrive(url: URL,

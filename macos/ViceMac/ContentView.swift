@@ -66,7 +66,6 @@ struct ContentView: View {
                 SoundToolbarControls()
 
                 VideoFilterPresetPicker()
-                    .frame(width: 224)
                     .fixedSize()
                     .help("Display filter preset")
 
@@ -316,7 +315,7 @@ private struct EmulatorStatusBar: View {
                 StatusPill(text: emulator.displayOutput.statusTitle)
             }
             StatusPill(text: emulator.isPaused ? "Paused" : "READY")
-            StatusPill(text: emulator.filterSettings.preset.rawValue)
+            StatusPill(text: emulator.filterSettings.preset.toolbarTitle)
             if emulator.isRAMExpansionConfigured {
                 RAMExpansionStatusChip()
             }

@@ -4,12 +4,16 @@ struct VideoFilterPresetPicker: View {
     @EnvironmentObject private var emulator: EmulatorSession
 
     var body: some View {
-        Picker("Display", selection: presetBinding) {
+        Picker(selection: presetBinding) {
             ForEach(VideoFilterPreset.allCases) { preset in
-                Text(preset.rawValue).tag(preset)
+                Label(preset.title, systemImage: preset.systemImage)
+                    .tag(preset)
             }
+        } label: {
+            Label(emulator.filterSettings.preset.toolbarTitle,
+                  systemImage: emulator.filterSettings.preset.systemImage)
         }
-        .pickerStyle(.segmented)
+        .pickerStyle(.menu)
     }
 
     private var presetBinding: Binding<VideoFilterPreset> {
@@ -31,6 +35,7 @@ struct VideoFilterSliders: View {
             FilterSlider("Glass curve", value: $emulator.filterSettings.barrelDistortion, range: 0...0.12)
             FilterSlider("Edge falloff", value: $emulator.filterSettings.vignette, range: 0...0.5)
             FilterSlider("Halation", value: $emulator.filterSettings.halation, range: 0...0.45)
+            FilterSlider("Persistence", value: $emulator.filterSettings.phosphorPersistence, range: 0...1.0)
             FilterSlider("Saturation", value: $emulator.filterSettings.saturation, range: 0.65...1.45)
             FilterSlider("Warmth", value: $emulator.filterSettings.warmth, range: -0.25...0.25)
         }

@@ -5,7 +5,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MACOS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(cd "$MACOS_DIR/.." && pwd)"
 VICE_SRC="$REPO_ROOT/vice"
-BUILD_DIR="${VICE_MACOS_ENGINE_BUILD_DIR:-/private/tmp/vice-macos-native-build}"
+
+default_engine_build_dir() {
+    local repo_hash
+
+    repo_hash="$(printf '%s' "$REPO_ROOT" | /usr/bin/shasum -a 256 | awk '{ print substr($1, 1, 12) }')"
+    echo "/private/tmp/vice-macos-native-build-$repo_hash"
+}
+
+BUILD_DIR="${VICE_MACOS_ENGINE_BUILD_DIR:-$(default_engine_build_dir)}"
 PRODUCTS_DIR="$MACOS_DIR/BuildProducts"
 read -r -a MACHINE_TARGETS <<< "${VICE_MACOS_MACHINE_TARGETS:-x64sc}"
 

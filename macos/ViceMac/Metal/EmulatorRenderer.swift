@@ -1,4 +1,5 @@
 import MetalKit
+import QuartzCore
 
 @MainActor
 final class EmulatorRenderer: NSObject, MTKViewDelegate {
@@ -11,6 +12,11 @@ final class EmulatorRenderer: NSObject, MTKViewDelegate {
         let sourceAndRenderSize: SIMD4<Float>
         let controlsA: SIMD4<Float>
         let controlsB: SIMD4<Float>
+        let controlsC: SIMD4<Float>
+    }
+
+    private struct PersistenceUniforms {
+        let controls: SIMD4<Float>
     }
 
     private static let fullscreenVertices = [
@@ -25,6 +31,7 @@ final class EmulatorRenderer: NSObject, MTKViewDelegate {
     private var shaderLibrary: MTLLibrary?
     private var sourcePipelineState: MTLRenderPipelineState?
     private var filterPipelineState: MTLRenderPipelineState?
+    private var persistencePipelineState: MTLRenderPipelineState?
     private var presentPipelineState: MTLRenderPipelineState?
     private var nearestSamplerState: MTLSamplerState?
     private var linearSamplerState: MTLSamplerState?
@@ -33,7 +40,12 @@ final class EmulatorRenderer: NSObject, MTKViewDelegate {
     private var lastFrameSequence: UInt64 = 0
     private var sourceStageTexture: MTLTexture?
     private var filterStageTexture: MTLTexture?
+    private var persistenceStageTextures: [MTLTexture] = []
     private var stageTextureSize = CGSize.zero
+    private var persistenceTextureSize = CGSize.zero
+    private var currentPersistenceTextureIndex = 0
+    private var persistenceHistoryValid = false
+    private var lastPersistenceTimestamp: CFTimeInterval?
     private var filterSettings: VideoFilterSettings
     private var preservesAspectRatio: Bool
 
@@ -48,6 +60,12 @@ final class EmulatorRenderer: NSObject, MTKViewDelegate {
 
     func update(filterSettings: VideoFilterSettings,
                 preservesAspectRatio: Bool) {
+        if filterSettings.preset != self.filterSettings.preset ||
+            self.filterSettings.phosphorPersistence <= 0 && filterSettings.phosphorPersistence > 0 ||
+            filterSettings.phosphorPersistence <= 0 {
+            resetPersistenceHistory()
+        }
+
         self.filterSettings = filterSettings
         self.preservesAspectRatio = preservesAspectRatio
     }
@@ -114,10 +132,15 @@ final class EmulatorRenderer: NSObject, MTKViewDelegate {
             filterPass.endEncoding()
         }
 
+        let outputTexture = renderPersistencePass(commandBuffer: commandBuffer,
+                                                  currentTexture: filterStageTexture,
+                                                  vertices: fullscreenVertices,
+                                                  sampler: linearSamplerState) ?? filterStageTexture
+
         if let presentPass = commandBuffer.makeRenderCommandEncoder(descriptor: descriptor) {
             presentPass.setRenderPipelineState(presentPipelineState)
             encode(vertices: fullscreenVertices, into: presentPass)
-            presentPass.setFragmentTexture(filterStageTexture, index: 0)
+            presentPass.setFragmentTexture(outputTexture, index: 0)
             presentPass.setFragmentSamplerState(linearSamplerState, index: 0)
             presentPass.drawPrimitives(type: .triangleStrip,
                                        vertexStart: 0,
@@ -158,6 +181,13 @@ final class EmulatorRenderer: NSObject, MTKViewDelegate {
                                                     library: shaderLibrary,
                                                     pixelFormat: .bgra8Unorm,
                                                     fragmentName: "filterFragment")
+        }
+
+        if persistencePipelineState == nil {
+            persistencePipelineState = makePipelineState(device: device,
+                                                        library: shaderLibrary,
+                                                        pixelFormat: .bgra8Unorm,
+                                                        fragmentName: "persistenceFragment")
         }
 
         if presentPipelineState == nil {
@@ -216,7 +246,12 @@ final class EmulatorRenderer: NSObject, MTKViewDelegate {
         }
 
         let targetSize = CGSize(width: Int(drawableSize.width), height: Int(drawableSize.height))
-        guard targetSize != stageTextureSize else {
+        let needsStageTextures = targetSize != stageTextureSize ||
+            sourceStageTexture == nil ||
+            filterStageTexture == nil ||
+            persistenceStageTextures.count != 2 ||
+            persistenceTextureSize != targetSize
+        guard needsStageTextures else {
             return
         }
 
@@ -231,7 +266,14 @@ final class EmulatorRenderer: NSObject, MTKViewDelegate {
 
         sourceStageTexture = device.makeTexture(descriptor: descriptor)
         filterStageTexture = device.makeTexture(descriptor: descriptor)
+        persistenceStageTextures = [
+            device.makeTexture(descriptor: descriptor),
+            device.makeTexture(descriptor: descriptor)
+        ].compactMap { $0 }
         stageTextureSize = targetSize
+        persistenceTextureSize = targetSize
+        currentPersistenceTextureIndex = 0
+        resetPersistenceHistory()
     }
 
     private func makeRenderPassDescriptor(texture: MTLTexture) -> MTLRenderPassDescriptor {
@@ -254,6 +296,65 @@ final class EmulatorRenderer: NSObject, MTKViewDelegate {
 
             encoder.setVertexBytes(baseAddress, length: vertexBytes.count, index: 0)
         }
+    }
+
+    private func renderPersistencePass(commandBuffer: MTLCommandBuffer,
+                                       currentTexture: MTLTexture,
+                                       vertices: [Vertex],
+                                       sampler: MTLSamplerState) -> MTLTexture? {
+        guard filterSettings.phosphorPersistence > 0,
+              let persistencePipelineState,
+              persistenceStageTextures.count == 2 else {
+            return nil
+        }
+
+        let now = CACurrentMediaTime()
+        let frameDelta = lastPersistenceTimestamp.map {
+            min(max(now - $0, 1.0 / 240.0), 0.25)
+        } ?? (1.0 / 60.0)
+        lastPersistenceTimestamp = now
+
+        let writeIndex = 1 - currentPersistenceTextureIndex
+        let readTexture = persistenceHistoryValid
+            ? persistenceStageTextures[currentPersistenceTextureIndex]
+            : currentTexture
+        let writeTexture = persistenceStageTextures[writeIndex]
+
+        guard let persistencePass = commandBuffer.makeRenderCommandEncoder(
+            descriptor: makeRenderPassDescriptor(texture: writeTexture)
+        ) else {
+            return nil
+        }
+
+        var uniforms = PersistenceUniforms(
+            controls: SIMD4(Float(filterSettings.phosphorPersistence),
+                            Float(frameDelta),
+                            persistenceHistoryValid ? 1.0 : 0.0,
+                            0.0)
+        )
+
+        persistencePass.setRenderPipelineState(persistencePipelineState)
+        encode(vertices: vertices, into: persistencePass)
+        persistencePass.setFragmentTexture(currentTexture, index: 0)
+        persistencePass.setFragmentTexture(readTexture, index: 1)
+        persistencePass.setFragmentSamplerState(sampler, index: 0)
+        persistencePass.setFragmentBytes(&uniforms,
+                                         length: MemoryLayout<PersistenceUniforms>.stride,
+                                         index: 0)
+        persistencePass.drawPrimitives(type: .triangleStrip,
+                                       vertexStart: 0,
+                                       vertexCount: vertices.count)
+        persistencePass.endEncoding()
+
+        persistenceHistoryValid = true
+        currentPersistenceTextureIndex = writeIndex
+
+        return writeTexture
+    }
+
+    private func resetPersistenceHistory() {
+        persistenceHistoryValid = false
+        lastPersistenceTimestamp = nil
     }
 
     private func makeFrameTexture(device: MTLDevice) -> MTLTexture? {
@@ -370,6 +471,10 @@ final class EmulatorRenderer: NSObject, MTKViewDelegate {
             controlsB: SIMD4(Float(filterSettings.halation),
                              Float(filterSettings.saturation),
                              Float(filterSettings.warmth),
+                             Float(filterSettings.monochromeAmount)),
+            controlsC: SIMD4(Float(filterSettings.phosphorTintRed),
+                             Float(filterSettings.phosphorTintGreen),
+                             Float(filterSettings.phosphorTintBlue),
                              0.0)
         )
     }

@@ -3,8 +3,14 @@ import Foundation
 enum EmulatorMediaFile: Equatable {
     case disk(DiskImageFileType)
     case cartridge(CartridgeImageFileType)
+    case snapshot(SnapshotFileType)
 
     init?(url: URL) {
+        if let snapshotType = SnapshotFileType(url: url) {
+            self = .snapshot(snapshotType)
+            return
+        }
+
         if let diskImageType = DiskImageFileType(url: url) {
             self = .disk(diskImageType)
             return
@@ -24,6 +30,8 @@ enum EmulatorMediaFile: Equatable {
             return "\(type.title) disk image"
         case let .cartridge(type):
             return "\(type.title) cartridge"
+        case let .snapshot(type):
+            return "\(type.title) snapshot"
         }
     }
 
@@ -35,8 +43,20 @@ enum EmulatorMediaFile: Equatable {
         if machine.capabilities.supportsCartridges {
             extensions.formUnion(CartridgeImageFileType.allCases.map(\.rawValue))
         }
+        extensions.formUnion(SnapshotFileType.allCases.map(\.rawValue))
 
         return extensions.sorted()
+    }
+}
+
+enum SnapshotFileType: String, CaseIterable, Identifiable {
+    case vsf
+
+    var id: String { rawValue }
+    var title: String { rawValue.uppercased() }
+
+    init?(url: URL) {
+        self.init(rawValue: url.pathExtension.lowercased())
     }
 }
 

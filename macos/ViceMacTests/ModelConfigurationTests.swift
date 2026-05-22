@@ -179,6 +179,37 @@ final class ModelConfigurationTests: XCTestCase {
         XCTAssertFalse(EmulatedMachine.xv364.capabilities.supportsVideoStandardSelection)
     }
 
+    func testVideoFilterPresetsIncludeMonitorAndPhosphorModes() {
+        XCTAssertTrue(VideoFilterPreset.allCases.contains(.commodore1084))
+        XCTAssertTrue(VideoFilterPreset.allCases.contains(.greenPhosphor))
+        XCTAssertTrue(VideoFilterPreset.allCases.contains(.amberPhosphor))
+
+        let commodore1702 = VideoFilterSettings.defaults(for: .commodore1702)
+        let commodore1084 = VideoFilterSettings.defaults(for: .commodore1084)
+        let green = VideoFilterSettings.defaults(for: .greenPhosphor)
+        let amber = VideoFilterSettings.defaults(for: .amberPhosphor)
+
+        XCTAssertEqual(commodore1084.monochromeAmount, 0.0)
+        XCTAssertLessThan(commodore1084.barrelDistortion, commodore1702.barrelDistortion)
+        XCTAssertEqual(green.monochromeAmount, 1.0)
+        XCTAssertGreaterThan(green.phosphorTintGreen, green.phosphorTintRed)
+        XCTAssertGreaterThan(green.phosphorPersistence, commodore1702.phosphorPersistence)
+        XCTAssertEqual(amber.monochromeAmount, 1.0)
+        XCTAssertGreaterThan(amber.phosphorTintRed, amber.phosphorTintBlue)
+        XCTAssertGreaterThan(amber.phosphorPersistence, commodore1702.phosphorPersistence)
+    }
+
+    func testVideoFilterSettingsRoundTripCustomPersistence() throws {
+        var settings = VideoFilterSettings.defaults(for: .greenPhosphor)
+        settings.phosphorPersistence = 0.91
+
+        let data = try JSONEncoder().encode(settings)
+        let decoded = try JSONDecoder().decode(VideoFilterSettings.self, from: data)
+
+        XCTAssertEqual(decoded.preset, .greenPhosphor)
+        XCTAssertEqual(decoded.phosphorPersistence, 0.91, accuracy: 0.0001)
+    }
+
     func testTEDPrototypeModelsUseMatchingDefaultROMs() {
         let c232 = EmulatedMachine.xc232
         let v364 = EmulatedMachine.xv364
@@ -233,6 +264,7 @@ final class ModelConfigurationTests: XCTestCase {
     func testMediaFileClassifiesDiskAndCartridgeImages() {
         XCTAssertEqual(EmulatorMediaFile(url: URL(fileURLWithPath: "/tmp/demo.d64")), .disk(.d64))
         XCTAssertEqual(EmulatorMediaFile(url: URL(fileURLWithPath: "/tmp/demo.crt")), .cartridge(.crt))
+        XCTAssertEqual(EmulatorMediaFile(url: URL(fileURLWithPath: "/tmp/demo.vsf")), .snapshot(.vsf))
         XCTAssertNil(EmulatorMediaFile(url: URL(fileURLWithPath: "/tmp/demo.txt")))
     }
 
@@ -242,7 +274,9 @@ final class ModelConfigurationTests: XCTestCase {
 
         XCTAssertTrue(c64Extensions.contains("d64"))
         XCTAssertTrue(c64Extensions.contains("crt"))
+        XCTAssertTrue(c64Extensions.contains("vsf"))
         XCTAssertTrue(petExtensions.contains("d80"))
+        XCTAssertTrue(petExtensions.contains("vsf"))
         XCTAssertFalse(petExtensions.contains("crt"))
     }
 

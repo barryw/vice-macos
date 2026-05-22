@@ -112,6 +112,8 @@ int vicemac_queue_drive_attach_disk(uint32_t unit,
 int vicemac_queue_drive_sound_preview(uint32_t unit);
 int vicemac_queue_cartridge_attach(const char *path);
 int vicemac_queue_cartridge_detach(void);
+int vicemac_save_snapshot(const char *path, int save_roms, int save_disks);
+int vicemac_load_snapshot(const char *path);
 int vicemac_peek_memory(uint32_t memspace,
                         int32_t bank,
                         uint32_t address,

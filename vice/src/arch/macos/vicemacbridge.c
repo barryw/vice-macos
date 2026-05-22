@@ -46,6 +46,7 @@
 #define VICEMAC_DRIVE_COMMAND_QUEUE_CAPACITY 64
 #define VICEMAC_CARTRIDGE_COMMAND_QUEUE_CAPACITY 16
 #define VICEMAC_MEMORY_REQUEST_QUEUE_CAPACITY 64
+#define VICEMAC_SNAPSHOT_REQUEST_QUEUE_CAPACITY 8
 #define VICEMAC_PATH_CAPACITY 4096
 #define VICEMAC_CURRENT_MEMORY_BANK -1
 
@@ -70,6 +71,11 @@ typedef enum vicemac_memory_request_type_e {
     VICEMAC_MEMORY_REQUEST_PEEK,
     VICEMAC_MEMORY_REQUEST_POKE
 } vicemac_memory_request_type_t;
+
+typedef enum vicemac_snapshot_request_type_e {
+    VICEMAC_SNAPSHOT_REQUEST_SAVE,
+    VICEMAC_SNAPSHOT_REQUEST_LOAD
+} vicemac_snapshot_request_type_t;
 
 typedef struct vicemac_input_event_s {
     int clear;
@@ -129,6 +135,17 @@ typedef struct vicemac_memory_request_s {
     pthread_cond_t condition;
 } vicemac_memory_request_t;
 
+typedef struct vicemac_snapshot_request_s {
+    vicemac_snapshot_request_type_t type;
+    int save_roms;
+    int save_disks;
+    char path[VICEMAC_PATH_CAPACITY];
+    int completed;
+    int success;
+    pthread_mutex_t mutex;
+    pthread_cond_t condition;
+} vicemac_snapshot_request_t;
+
 static vicemac_video_frame_callback_t video_frame_callback = 0;
 static void *video_frame_context = 0;
 static vicemac_drive_status_callback_t drive_status_callback = 0;
@@ -172,6 +189,10 @@ static pthread_mutex_t memory_request_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 static vicemac_memory_request_t *memory_request_queue[VICEMAC_MEMORY_REQUEST_QUEUE_CAPACITY];
 static unsigned int memory_request_queue_read = 0;
 static unsigned int memory_request_queue_write = 0;
+static pthread_mutex_t snapshot_request_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
+static vicemac_snapshot_request_t *snapshot_request_queue[VICEMAC_SNAPSHOT_REQUEST_QUEUE_CAPACITY];
+static unsigned int snapshot_request_queue_read = 0;
+static unsigned int snapshot_request_queue_write = 0;
 
 static unsigned int vicemac_queue_next(unsigned int index, unsigned int capacity)
 {
@@ -292,7 +313,54 @@ static int vicemac_memory_queue_pop(vicemac_memory_request_t **request)
     return has_request;
 }
 
+static int vicemac_snapshot_queue_push(vicemac_snapshot_request_t *request)
+{
+    unsigned int next_write;
+
+    pthread_mutex_lock(&snapshot_request_queue_mutex);
+
+    next_write = vicemac_queue_next(snapshot_request_queue_write,
+                                    VICEMAC_SNAPSHOT_REQUEST_QUEUE_CAPACITY);
+    if (next_write == snapshot_request_queue_read) {
+        pthread_mutex_unlock(&snapshot_request_queue_mutex);
+        return 0;
+    }
+
+    snapshot_request_queue[snapshot_request_queue_write] = request;
+    snapshot_request_queue_write = next_write;
+
+    pthread_mutex_unlock(&snapshot_request_queue_mutex);
+    return 1;
+}
+
+static int vicemac_snapshot_queue_pop(vicemac_snapshot_request_t **request)
+{
+    int has_request = 0;
+
+    pthread_mutex_lock(&snapshot_request_queue_mutex);
+
+    if (snapshot_request_queue_read != snapshot_request_queue_write) {
+        *request = snapshot_request_queue[snapshot_request_queue_read];
+        snapshot_request_queue[snapshot_request_queue_read] = 0;
+        snapshot_request_queue_read = vicemac_queue_next(snapshot_request_queue_read,
+                                                         VICEMAC_SNAPSHOT_REQUEST_QUEUE_CAPACITY);
+        has_request = 1;
+    }
+
+    pthread_mutex_unlock(&snapshot_request_queue_mutex);
+    return has_request;
+}
+
 static void vicemac_complete_memory_request(vicemac_memory_request_t *request, int success)
+{
+    pthread_mutex_lock(&request->mutex);
+    request->success = success;
+    request->completed = 1;
+    pthread_cond_signal(&request->condition);
+    pthread_mutex_unlock(&request->mutex);
+}
+
+static void vicemac_complete_snapshot_request(vicemac_snapshot_request_t *request, int success)
 {
     pthread_mutex_lock(&request->mutex);
     request->success = success;
@@ -777,6 +845,66 @@ int vicemac_queue_cartridge_detach(void)
                               &command);
 }
 
+static int vicemac_perform_snapshot_request(vicemac_snapshot_request_type_t type,
+                                            const char *path,
+                                            int save_roms,
+                                            int save_disks)
+{
+    vicemac_snapshot_request_t request;
+    int success;
+
+    if (path == 0 || path[0] == '\0' || strlen(path) >= sizeof(request.path)) {
+        return 0;
+    }
+
+    memset(&request, 0, sizeof(request));
+    request.type = type;
+    request.save_roms = save_roms ? 1 : 0;
+    request.save_disks = save_disks ? 1 : 0;
+    vicemac_copy_cstring(request.path, sizeof(request.path), path);
+
+    if (pthread_mutex_init(&request.mutex, 0) != 0) {
+        return 0;
+    }
+    if (pthread_cond_init(&request.condition, 0) != 0) {
+        pthread_mutex_destroy(&request.mutex);
+        return 0;
+    }
+
+    if (!vicemac_snapshot_queue_push(&request)) {
+        pthread_cond_destroy(&request.condition);
+        pthread_mutex_destroy(&request.mutex);
+        return 0;
+    }
+
+    pthread_mutex_lock(&request.mutex);
+    while (!request.completed) {
+        pthread_cond_wait(&request.condition, &request.mutex);
+    }
+    success = request.success;
+    pthread_mutex_unlock(&request.mutex);
+
+    pthread_cond_destroy(&request.condition);
+    pthread_mutex_destroy(&request.mutex);
+    return success;
+}
+
+int vicemac_save_snapshot(const char *path, int save_roms, int save_disks)
+{
+    return vicemac_perform_snapshot_request(VICEMAC_SNAPSHOT_REQUEST_SAVE,
+                                            path,
+                                            save_roms,
+                                            save_disks);
+}
+
+int vicemac_load_snapshot(const char *path)
+{
+    return vicemac_perform_snapshot_request(VICEMAC_SNAPSHOT_REQUEST_LOAD,
+                                            path,
+                                            0,
+                                            0);
+}
+
 static int vicemac_perform_memory_request(vicemac_memory_request_type_t type,
                                           uint32_t memspace,
                                           int32_t bank,
@@ -1080,6 +1208,39 @@ static void vicemac_dispatch_queued_memory_requests(void)
     }
 }
 
+static int vicemac_dispatch_snapshot_request(vicemac_snapshot_request_t *request)
+{
+    if (request == 0 || request->path[0] == '\0') {
+        return 0;
+    }
+
+    switch (request->type) {
+        case VICEMAC_SNAPSHOT_REQUEST_SAVE:
+            return machine_write_snapshot(request->path,
+                                          request->save_roms,
+                                          request->save_disks,
+                                          0) >= 0;
+        case VICEMAC_SNAPSHOT_REQUEST_LOAD:
+            if (machine_read_snapshot(request->path, 0) < 0) {
+                return 0;
+            }
+            vicemac_publish_current_cartridge_status();
+            return 1;
+    }
+
+    return 0;
+}
+
+static void vicemac_dispatch_queued_snapshot_requests(void)
+{
+    vicemac_snapshot_request_t *request;
+
+    while (vicemac_snapshot_queue_pop(&request)) {
+        vicemac_complete_snapshot_request(request,
+                                          vicemac_dispatch_snapshot_request(request));
+    }
+}
+
 static int vicemac_dispatch_machine_model(const char *model)
 {
     typedef int (*pet_set_model_function_t)(const char *model_name, void *extra);
@@ -1252,6 +1413,7 @@ void vicemac_dispatch_queued_events(void)
     vicemac_dispatch_queued_memory_requests();
     vicemac_dispatch_queued_resources();
     vicemac_dispatch_queued_machine_commands();
+    vicemac_dispatch_queued_snapshot_requests();
     vicemac_dispatch_queued_cartridge_commands();
     vicemac_dispatch_queued_drive_commands();
     vicemac_dispatch_queued_joystick_events();

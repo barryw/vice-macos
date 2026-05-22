@@ -36,6 +36,8 @@ typedef int (*ViceQueueDriveAttachDiskFunction)(uint32_t unit,
 typedef int (*ViceQueueDriveSoundPreviewFunction)(uint32_t unit);
 typedef int (*ViceQueueCartridgeAttachFunction)(const char *path);
 typedef int (*ViceQueueCartridgeDetachFunction)(void);
+typedef int (*ViceSaveSnapshotFunction)(const char *path, int save_roms, int save_disks);
+typedef int (*ViceLoadSnapshotFunction)(const char *path);
 typedef int (*VicePeekMemoryFunction)(uint32_t memspace,
                                       int32_t bank,
                                       uint32_t address,
@@ -69,6 +71,8 @@ typedef struct ViceEngineSymbols {
     ViceQueueDriveSoundPreviewFunction queueDriveSoundPreview;
     ViceQueueCartridgeAttachFunction queueCartridgeAttach;
     ViceQueueCartridgeDetachFunction queueCartridgeDetach;
+    ViceSaveSnapshotFunction saveSnapshot;
+    ViceLoadSnapshotFunction loadSnapshot;
     VicePeekMemoryFunction peekMemory;
     VicePokeMemoryFunction pokeMemory;
 } ViceEngineSymbols;
@@ -194,6 +198,8 @@ static int loadRuntimeSymbols(void *handle, ViceEngineSymbols *symbols)
     LOAD_RUNTIME_SYMBOL(queueDriveSoundPreview, "vicemac_queue_drive_sound_preview");
     LOAD_RUNTIME_SYMBOL(queueCartridgeAttach, "vicemac_queue_cartridge_attach");
     LOAD_RUNTIME_SYMBOL(queueCartridgeDetach, "vicemac_queue_cartridge_detach");
+    LOAD_RUNTIME_SYMBOL(saveSnapshot, "vicemac_save_snapshot");
+    LOAD_RUNTIME_SYMBOL(loadSnapshot, "vicemac_load_snapshot");
     LOAD_RUNTIME_SYMBOL(peekMemory, "vicemac_peek_memory");
     LOAD_RUNTIME_SYMBOL(pokeMemory, "vicemac_poke_memory");
 
@@ -449,6 +455,24 @@ bool ViceEngineDetachCartridge(void)
     }
 
     return runtimeSymbols.queueCartridgeDetach() != 0;
+}
+
+bool ViceEngineSaveSnapshot(const char *path, bool saveROMs, bool saveDisks)
+{
+    if (!atomic_load(&engineRunning) || runtimeSymbols.saveSnapshot == NULL) {
+        return false;
+    }
+
+    return runtimeSymbols.saveSnapshot(path, saveROMs ? 1 : 0, saveDisks ? 1 : 0) != 0;
+}
+
+bool ViceEngineLoadSnapshot(const char *path)
+{
+    if (!atomic_load(&engineRunning) || runtimeSymbols.loadSnapshot == NULL) {
+        return false;
+    }
+
+    return runtimeSymbols.loadSnapshot(path) != 0;
 }
 
 bool ViceEnginePeekMemory(uint32_t memorySpace,

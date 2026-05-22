@@ -4,6 +4,8 @@ enum EmulatorDefaults {
     private static let videoStandardKey = "vice.videoStandard"
     private static let emulationSpeedKey = "vice.emulationSpeed"
     private static let displayModeKey = "vice.displayMode"
+    private static let videoFilterPresetKey = "vice.videoFilterPreset"
+    private static let videoFilterSettingsKey = "vice.videoFilterSettings"
     private static let sidModelKey = "vice.sidModel"
     private static let soundEnabledKey = "vice.soundEnabled"
     private static let soundVolumeKey = "vice.soundVolume"
@@ -51,6 +53,38 @@ enum EmulatorDefaults {
 
     static func saveDisplayMode(_ mode: EmulatorSession.DisplayMode, for machine: EmulatedMachine) {
         UserDefaults.standard.set(mode.rawValue, forKey: key(displayModeKey, machine: machine))
+    }
+
+    static func loadVideoFilterPreset(for machine: EmulatedMachine) -> VideoFilterPreset {
+        guard let rawValue = UserDefaults.standard.string(forKey: key(videoFilterPresetKey, machine: machine))
+                ?? legacyString(forKey: videoFilterPresetKey, machine: machine) else {
+            return .commodore1702
+        }
+
+        return VideoFilterPreset(rawValue: rawValue) ?? .commodore1702
+    }
+
+    static func saveVideoFilterPreset(_ preset: VideoFilterPreset, for machine: EmulatedMachine) {
+        UserDefaults.standard.set(preset.rawValue, forKey: key(videoFilterPresetKey, machine: machine))
+    }
+
+    static func loadVideoFilterSettings(for machine: EmulatedMachine) -> VideoFilterSettings {
+        guard let data = UserDefaults.standard.data(forKey: key(videoFilterSettingsKey, machine: machine))
+                ?? legacyData(forKey: videoFilterSettingsKey, machine: machine),
+              let settings = try? JSONDecoder().decode(VideoFilterSettings.self, from: data) else {
+            return VideoFilterSettings.defaults(for: loadVideoFilterPreset(for: machine))
+        }
+
+        return settings
+    }
+
+    static func saveVideoFilterSettings(_ settings: VideoFilterSettings, for machine: EmulatedMachine) {
+        guard let data = try? JSONEncoder().encode(settings) else {
+            return
+        }
+
+        UserDefaults.standard.set(data, forKey: key(videoFilterSettingsKey, machine: machine))
+        saveVideoFilterPreset(settings.preset, for: machine)
     }
 
     static func loadDisplayOutput(for machine: EmulatedMachine) -> MachineDisplayOutput {

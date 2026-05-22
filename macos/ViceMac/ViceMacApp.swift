@@ -31,6 +31,18 @@ struct ViceMacApp: App {
                     MediaOpenPanel.openMedia(for: emulator, autorun: true)
                 }
                 .keyboardShortcut("o", modifiers: [.command, .option])
+
+                Button("Load Snapshot...") {
+                    MediaOpenPanel.loadSnapshot(for: emulator)
+                }
+                .keyboardShortcut("o", modifiers: [.command, .shift])
+
+                Divider()
+
+                Button("Save Snapshot...") {
+                    MediaOpenPanel.saveSnapshot(for: emulator)
+                }
+                .keyboardShortcut("s", modifiers: [.command])
             }
 
             CommandMenu("Machine") {
@@ -129,7 +141,7 @@ struct ViceMacApp: App {
 
                 Picker("Filter", selection: filterPresetBinding) {
                     ForEach(VideoFilterPreset.allCases) { preset in
-                        Text(preset.rawValue).tag(preset)
+                        Label(preset.title, systemImage: preset.systemImage).tag(preset)
                     }
                 }
 
@@ -227,6 +239,43 @@ private enum MediaOpenPanel {
         }
 
         emulator.attachCartridge(url: url)
+    }
+
+    static func loadSnapshot(for emulator: EmulatorSession) {
+        let panel = openPanel(title: "Load Snapshot",
+                              message: "Choose a VICE snapshot for \(emulator.machineDisplayName).",
+                              prompt: "Load",
+                              filenameExtensions: SnapshotFileType.allCases.map(\.rawValue))
+
+        guard panel.runModal() == .OK,
+              let url = panel.url else {
+            return
+        }
+
+        emulator.loadSnapshot(url: url)
+    }
+
+    static func saveSnapshot(for emulator: EmulatorSession) {
+        let panel = NSSavePanel()
+        panel.title = "Save Snapshot"
+        panel.message = "Save the current \(emulator.machineDisplayName) machine state."
+        panel.prompt = "Save"
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = "\(emulator.machine.shortName)-Snapshot.vsf"
+        panel.allowedContentTypes = contentTypes(for: SnapshotFileType.allCases.map(\.rawValue))
+
+        NSApp.activate(ignoringOtherApps: true)
+        panel.center()
+
+        guard panel.runModal() == .OK,
+              let url = panel.url else {
+            return
+        }
+
+        let snapshotURL = SnapshotFileType(url: url) == nil
+            ? url.appendingPathExtension(SnapshotFileType.vsf.rawValue)
+            : url
+        emulator.saveSnapshot(url: snapshotURL)
     }
 
     private static func openPanel(title: String,

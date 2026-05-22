@@ -15,6 +15,11 @@ struct FilterUniforms {
     float4 sourceAndRenderSize;
     float4 controlsA;
     float4 controlsB;
+    float4 controlsC;
+};
+
+struct PersistenceUniforms {
+    float4 controls;
 };
 
 vertex EmulatorRasterVertex emulatorVertex(
@@ -72,6 +77,8 @@ fragment float4 filterFragment(
     float halation = uniforms.controlsB.x;
     float saturation = uniforms.controlsB.y;
     float warmth = uniforms.controlsB.z;
+    float monochromeAmount = uniforms.controlsB.w;
+    float3 phosphorTint = uniforms.controlsC.rgb;
 
     float2 centered = in.textureCoordinate - 0.5;
     float radiusSquared = dot(centered, centered);
@@ -99,8 +106,35 @@ fragment float4 filterFragment(
     color.r += warmth * 0.08;
     color.b -= warmth * 0.06;
 
+    float luma = dot(color, float3(0.2126, 0.7152, 0.0722));
+    color = mix(color, float3(luma) * phosphorTint, monochromeAmount);
+
     float vignette = smoothstep(0.82, 0.28, length(centered));
     color *= mix(1.0 - vignetteIntensity, 1.0, vignette);
 
     return float4(clamp(color, 0.0, 1.0), sampled.a);
+}
+
+fragment float4 persistenceFragment(
+    EmulatorRasterVertex in [[stage_in]],
+    texture2d<float> currentTexture [[texture(0)]],
+    texture2d<float> previousTexture [[texture(1)]],
+    sampler textureSampler [[sampler(0)]],
+    constant PersistenceUniforms &uniforms [[buffer(0)]]
+) {
+    float persistence = clamp(uniforms.controls.x, 0.0, 1.0);
+    float deltaTime = clamp(uniforms.controls.y, 1.0 / 240.0, 0.25);
+
+    float4 current = currentTexture.sample(textureSampler, in.textureCoordinate);
+    if (persistence <= 0.0) {
+        return current;
+    }
+
+    float4 previous = previousTexture.sample(textureSampler, in.textureCoordinate);
+    float halfLife = mix(0.035, 1.70, persistence * persistence);
+    float decay = exp2(-deltaTime / halfLife);
+    float3 persisted = previous.rgb * decay;
+    float3 color = max(current.rgb, persisted);
+
+    return float4(clamp(color, 0.0, 1.0), current.a);
 }

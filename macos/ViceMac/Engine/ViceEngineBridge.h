@@ -83,6 +83,8 @@ bool ViceEngineAttachDisk(uint32_t unit, uint32_t drive, const char *path, bool 
 bool ViceEnginePreviewDriveSound(uint32_t unit);
 bool ViceEngineAttachCartridge(const char *path);
 bool ViceEngineDetachCartridge(void);
+bool ViceEngineSaveSnapshot(const char *path, bool saveROMs, bool saveDisks);
+bool ViceEngineLoadSnapshot(const char *path);
 bool ViceEnginePeekMemory(uint32_t memorySpace,
                           int32_t bank,
                           uint32_t address,
