@@ -46,11 +46,18 @@ Build all release apps and package them into an installable Apple Silicon DMG:
 macos/scripts/package-vicemac-release.sh
 ```
 
-The DMG and `SHA256SUMS.txt` are written to `macos/dist`.
+The DMG and `SHA256SUMS.txt` are written to `macos/dist`. The release DMG
+contains one app per machine: `x64sc.app`, `xvic.app`, `xpet.app`,
+`xplus4.app`, `xc16.app`, `xc232.app`, `xv364.app`, and `x128.app`.
 
 ## Woodpecker CI
 
-The root `.woodpecker.yml` expects a macOS Apple Silicon Woodpecker agent using
-the local backend, with the latest Xcode selected and `dos2unix` installed. Tag
-builds produce the release DMG and upload it to GitHub Releases with the
-`github_token` secret available to the pipeline.
+The `.woodpecker/metal-ui.yaml` workflow runs on the `macos/native-metal`
+branch and expects a macOS Apple Silicon Woodpecker agent using the local
+backend, with the latest Xcode selected and `dos2unix` plus GitHub CLI `gh`
+installed.
+
+Push builds on `macos/native-metal` build, test, package, and publish a GitHub
+Release named `vice-mac-<VICE version>-<git sha>-1`. Tags matching
+`vice-mac-*` also package and publish a release for that tag. The pipeline
+requires the `github_token` secret.

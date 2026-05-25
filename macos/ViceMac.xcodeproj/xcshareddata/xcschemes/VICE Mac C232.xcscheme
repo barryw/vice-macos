@@ -16,7 +16,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "180000000000000000000001"
-               BuildableName = "VICE Mac C232.app"
+               BuildableName = "xc232.app"
                BlueprintName = "ViceMacC232"
                ReferencedContainer = "container:ViceMac.xcodeproj">
             </BuildableReference>
@@ -44,7 +44,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "180000000000000000000001"
-            BuildableName = "VICE Mac C232.app"
+            BuildableName = "xc232.app"
             BlueprintName = "ViceMacC232"
             ReferencedContainer = "container:ViceMac.xcodeproj">
          </BuildableReference>
@@ -61,7 +61,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "180000000000000000000001"
-            BuildableName = "VICE Mac C232.app"
+            BuildableName = "xc232.app"
             BlueprintName = "ViceMacC232"
             ReferencedContainer = "container:ViceMac.xcodeproj">
          </BuildableReference>

@@ -21,6 +21,17 @@ SCHEMES=(
     "VICE Mac C128"
 )
 
+RELEASE_APPS=(
+    x64sc
+    xvic
+    xpet
+    xplus4
+    xc16
+    xc232
+    xv364
+    x128
+)
+
 vice_version() {
     local configure_ac="$REPO_ROOT/vice/configure.ac"
     local major
@@ -40,6 +51,18 @@ vice_version() {
     fi
 }
 
+release_asset_version() {
+    if [[ -n "${VICE_MAC_RELEASE_VERSION:-}" ]]; then
+        echo "${VICE_MAC_RELEASE_VERSION#vice-mac-}"
+    elif [[ -n "${CI_COMMIT_TAG:-}" ]]; then
+        echo "${CI_COMMIT_TAG#vice-mac-}"
+    elif [[ -n "${CI_COMMIT_SHA:-}" ]]; then
+        "$SCRIPT_DIR/compute-vicemac-version.sh" | sed 's/^vice-mac-//'
+    else
+        vice_version
+    fi
+}
+
 require_tool() {
     local tool="$1"
     local hint="$2"
@@ -55,16 +78,24 @@ copy_release_apps() {
     local products_dir="$1"
     local stage_dir="$2"
     local copied=0
+    local app_name
+    local app
 
     mkdir -p "$stage_dir"
 
-    while IFS= read -r app; do
+    for app_name in "${RELEASE_APPS[@]}"; do
+        app="$products_dir/$app_name.app"
+        if [[ ! -d "$app" ]]; then
+            echo "Expected release app is missing: $app" >&2
+            exit 1
+        fi
+
         ditto "$app" "$stage_dir/$(basename "$app")"
         copied=$((copied + 1))
-    done < <(find "$products_dir" -maxdepth 1 -type d -name "VICE Mac*.app" | sort)
+    done
 
     if [[ "$copied" -eq 0 ]]; then
-        echo "No VICE Mac apps were found in $products_dir." >&2
+        echo "No release apps were found in $products_dir." >&2
         exit 1
     fi
 }
@@ -113,10 +144,11 @@ done
 
 PRODUCTS_DIR="$DERIVED_DATA/Build/Products/$CONFIGURATION"
 VICE_VERSION="$(vice_version)"
+RELEASE_ASSET_VERSION="$(release_asset_version)"
 VOLUME_NAME="VICE Mac $VICE_VERSION"
 STAGE_ROOT="$DIST_DIR/stage"
 STAGE_DIR="$STAGE_ROOT/$VOLUME_NAME"
-DMG_PATH="$DIST_DIR/VICE-Mac-$VICE_VERSION-arm64.dmg"
+DMG_PATH="$DIST_DIR/VICE-Mac-$RELEASE_ASSET_VERSION-arm64.dmg"
 
 rm -rf "$STAGE_ROOT"
 mkdir -p "$STAGE_DIR"
@@ -127,7 +159,7 @@ ln -s /Applications "$STAGE_DIR/Applications"
 cat > "$STAGE_DIR/README.txt" <<EOF
 VICE Mac $VICE_VERSION
 
-Drag the VICE Mac apps you want to use into Applications.
+Drag the machine apps you want to use into Applications.
 
 These apps are built for Apple Silicon Macs and use the upstream VICE engine.
 EOF

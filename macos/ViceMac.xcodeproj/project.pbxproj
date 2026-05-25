@@ -209,7 +209,7 @@
 		A10000000000000000000024 /* EmulatorRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmulatorRenderer.swift; sourceTree = "<group>"; };
 		A10000000000000000000025 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		A10000000000000000000026 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Resources/Assets.xcassets; sourceTree = "<group>"; };
-		A10000000000000000000027 /* VICE Mac C64.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "VICE Mac C64.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000000000000000000027 /* x64sc.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "x64sc.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000000000000000000028 /* EmulatorFrameSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmulatorFrameSource.swift; sourceTree = "<group>"; };
 		A10000000000000000000029 /* EmulatorShaders.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = EmulatorShaders.metal; sourceTree = "<group>"; };
 		A1000000000000000000002A /* x64sc-ready.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "x64sc-ready.png"; sourceTree = "<group>"; };
@@ -228,13 +228,13 @@
 		A1000000000000000000003E /* AIAssistantConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIAssistantConfiguration.swift; sourceTree = "<group>"; };
 		AA1000000000000000000020 /* CommodoreDiskImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommodoreDiskImage.swift; sourceTree = "<group>"; };
 		AA1000000000000000000021 /* DiskImageManagerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiskImageManagerView.swift; sourceTree = "<group>"; };
-		B20000000000000000000027 /* VICE Mac VIC-20.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "VICE Mac VIC-20.app"; sourceTree = BUILT_PRODUCTS_DIR; };
-		C30000000000000000000027 /* VICE Mac PET.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "VICE Mac PET.app"; sourceTree = BUILT_PRODUCTS_DIR; };
-		D40000000000000000000027 /* VICE Mac Plus-4.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "VICE Mac Plus-4.app"; sourceTree = BUILT_PRODUCTS_DIR; };
-		E50000000000000000000027 /* VICE Mac C128.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "VICE Mac C128.app"; sourceTree = BUILT_PRODUCTS_DIR; };
-		170000000000000000000027 /* VICE Mac C16.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "VICE Mac C16.app"; sourceTree = BUILT_PRODUCTS_DIR; };
-		180000000000000000000027 /* VICE Mac C232.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "VICE Mac C232.app"; sourceTree = BUILT_PRODUCTS_DIR; };
-		190000000000000000000027 /* VICE Mac V364.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "VICE Mac V364.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		B20000000000000000000027 /* xvic.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "xvic.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		C30000000000000000000027 /* xpet.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "xpet.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		D40000000000000000000027 /* xplus4.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "xplus4.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		E50000000000000000000027 /* x128.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "x128.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		170000000000000000000027 /* xc16.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "xc16.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		180000000000000000000027 /* xc232.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "xc232.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		190000000000000000000027 /* xv364.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "xv364.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		F60000000000000000000020 /* ModelConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelConfigurationTests.swift; sourceTree = "<group>"; };
 		F60000000000000000000027 /* ViceMacTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ViceMacTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		F6000000000000000000002F /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
@@ -375,14 +375,14 @@
 		A10000000000000000000035 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				A10000000000000000000027 /* VICE Mac C64.app */,
-				B20000000000000000000027 /* VICE Mac VIC-20.app */,
-				C30000000000000000000027 /* VICE Mac PET.app */,
-				D40000000000000000000027 /* VICE Mac Plus-4.app */,
-				170000000000000000000027 /* VICE Mac C16.app */,
-				180000000000000000000027 /* VICE Mac C232.app */,
-				190000000000000000000027 /* VICE Mac V364.app */,
-				E50000000000000000000027 /* VICE Mac C128.app */,
+				A10000000000000000000027 /* x64sc.app */,
+				B20000000000000000000027 /* xvic.app */,
+				C30000000000000000000027 /* xpet.app */,
+				D40000000000000000000027 /* xplus4.app */,
+				170000000000000000000027 /* xc16.app */,
+				180000000000000000000027 /* xc232.app */,
+				190000000000000000000027 /* xv364.app */,
+				E50000000000000000000027 /* x128.app */,
 				F60000000000000000000027 /* ViceMacTests.xctest */,
 			);
 			name = Products;
@@ -432,7 +432,7 @@
 			);
 			name = ViceMacC64;
 			productName = ViceMacC64;
-			productReference = A10000000000000000000027 /* VICE Mac C64.app */;
+			productReference = A10000000000000000000027 /* x64sc.app */;
 			productType = "com.apple.product-type.application";
 		};
 		B20000000000000000000001 /* ViceMacVIC20 */ = {
@@ -450,7 +450,7 @@
 			);
 			name = ViceMacVIC20;
 			productName = ViceMacVIC20;
-			productReference = B20000000000000000000027 /* VICE Mac VIC-20.app */;
+			productReference = B20000000000000000000027 /* xvic.app */;
 			productType = "com.apple.product-type.application";
 		};
 		C30000000000000000000001 /* ViceMacPET */ = {
@@ -468,7 +468,7 @@
 			);
 			name = ViceMacPET;
 			productName = ViceMacPET;
-			productReference = C30000000000000000000027 /* VICE Mac PET.app */;
+			productReference = C30000000000000000000027 /* xpet.app */;
 			productType = "com.apple.product-type.application";
 		};
 		D40000000000000000000001 /* ViceMacPlus4 */ = {
@@ -486,7 +486,7 @@
 			);
 			name = ViceMacPlus4;
 			productName = ViceMacPlus4;
-			productReference = D40000000000000000000027 /* VICE Mac Plus-4.app */;
+			productReference = D40000000000000000000027 /* xplus4.app */;
 			productType = "com.apple.product-type.application";
 		};
 		170000000000000000000001 /* ViceMacC16 */ = {
@@ -504,7 +504,7 @@
 			);
 			name = ViceMacC16;
 			productName = ViceMacC16;
-			productReference = 170000000000000000000027 /* VICE Mac C16.app */;
+			productReference = 170000000000000000000027 /* xc16.app */;
 			productType = "com.apple.product-type.application";
 		};
 		180000000000000000000001 /* ViceMacC232 */ = {
@@ -522,7 +522,7 @@
 			);
 			name = ViceMacC232;
 			productName = ViceMacC232;
-			productReference = 180000000000000000000027 /* VICE Mac C232.app */;
+			productReference = 180000000000000000000027 /* xc232.app */;
 			productType = "com.apple.product-type.application";
 		};
 		190000000000000000000001 /* ViceMacV364 */ = {
@@ -540,7 +540,7 @@
 			);
 			name = ViceMacV364;
 			productName = ViceMacV364;
-			productReference = 190000000000000000000027 /* VICE Mac V364.app */;
+			productReference = 190000000000000000000027 /* xv364.app */;
 			productType = "com.apple.product-type.application";
 		};
 		E50000000000000000000001 /* ViceMacC128 */ = {
@@ -558,7 +558,7 @@
 			);
 			name = ViceMacC128;
 			productName = ViceMacC128;
-			productReference = E50000000000000000000027 /* VICE Mac C128.app */;
+			productReference = E50000000000000000000027 /* x128.app */;
 			productType = "com.apple.product-type.application";
 		};
 		F60000000000000000000001 /* ViceMacTests */ = {
@@ -1188,7 +1188,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.4;
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -1242,7 +1242,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.4;
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = macosx;
@@ -1256,6 +1256,7 @@
 			buildSettings = {
 				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
@@ -1270,7 +1271,7 @@
 					"$(SRCROOT)/ViceMac/Engine",
 					"$(SRCROOT)/../vice/src/arch/macos",
 				);
-				INFOPLIST_KEY_CFBundleDisplayName = "VICE Mac C64";
+				INFOPLIST_KEY_CFBundleDisplayName = "x64sc";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1281,7 +1282,7 @@
 					"$(inherited)",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.barrywalker.vicemac.c64;
-				PRODUCT_NAME = "VICE Mac C64";
+				PRODUCT_NAME = "x64sc";
 				SDKROOT = macosx;
 				SUPPORTED_PLATFORMS = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) VICE_MAC_MACHINE_X64SC";
@@ -1298,6 +1299,7 @@
 			buildSettings = {
 				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
@@ -1310,7 +1312,7 @@
 					"$(SRCROOT)/ViceMac/Engine",
 					"$(SRCROOT)/../vice/src/arch/macos",
 				);
-				INFOPLIST_KEY_CFBundleDisplayName = "VICE Mac C64";
+				INFOPLIST_KEY_CFBundleDisplayName = "x64sc";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1321,7 +1323,7 @@
 					"$(inherited)",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.barrywalker.vicemac.c64;
-				PRODUCT_NAME = "VICE Mac C64";
+				PRODUCT_NAME = "x64sc";
 				SDKROOT = macosx;
 				SUPPORTED_PLATFORMS = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) VICE_MAC_MACHINE_X64SC";
@@ -1339,6 +1341,7 @@
 			buildSettings = {
 				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
@@ -1353,7 +1356,7 @@
 					"$(SRCROOT)/ViceMac/Engine",
 					"$(SRCROOT)/../vice/src/arch/macos",
 				);
-				INFOPLIST_KEY_CFBundleDisplayName = "VICE Mac VIC-20";
+				INFOPLIST_KEY_CFBundleDisplayName = "xvic";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1364,7 +1367,7 @@
 					"$(inherited)",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.barrywalker.vicemac.vic20;
-				PRODUCT_NAME = "VICE Mac VIC-20";
+				PRODUCT_NAME = "xvic";
 				SDKROOT = macosx;
 				SUPPORTED_PLATFORMS = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) VICE_MAC_MACHINE_XVIC";
@@ -1381,6 +1384,7 @@
 			buildSettings = {
 				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
@@ -1393,7 +1397,7 @@
 					"$(SRCROOT)/ViceMac/Engine",
 					"$(SRCROOT)/../vice/src/arch/macos",
 				);
-				INFOPLIST_KEY_CFBundleDisplayName = "VICE Mac VIC-20";
+				INFOPLIST_KEY_CFBundleDisplayName = "xvic";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1404,7 +1408,7 @@
 					"$(inherited)",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.barrywalker.vicemac.vic20;
-				PRODUCT_NAME = "VICE Mac VIC-20";
+				PRODUCT_NAME = "xvic";
 				SDKROOT = macosx;
 				SUPPORTED_PLATFORMS = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) VICE_MAC_MACHINE_XVIC";
@@ -1422,6 +1426,7 @@
 			buildSettings = {
 				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
@@ -1436,7 +1441,7 @@
 					"$(SRCROOT)/ViceMac/Engine",
 					"$(SRCROOT)/../vice/src/arch/macos",
 				);
-				INFOPLIST_KEY_CFBundleDisplayName = "VICE Mac PET";
+				INFOPLIST_KEY_CFBundleDisplayName = "xpet";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1447,7 +1452,7 @@
 					"$(inherited)",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.barrywalker.vicemac.pet;
-				PRODUCT_NAME = "VICE Mac PET";
+				PRODUCT_NAME = "xpet";
 				SDKROOT = macosx;
 				SUPPORTED_PLATFORMS = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) VICE_MAC_MACHINE_XPET";
@@ -1464,6 +1469,7 @@
 			buildSettings = {
 				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
@@ -1476,7 +1482,7 @@
 					"$(SRCROOT)/ViceMac/Engine",
 					"$(SRCROOT)/../vice/src/arch/macos",
 				);
-				INFOPLIST_KEY_CFBundleDisplayName = "VICE Mac PET";
+				INFOPLIST_KEY_CFBundleDisplayName = "xpet";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1487,7 +1493,7 @@
 					"$(inherited)",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.barrywalker.vicemac.pet;
-				PRODUCT_NAME = "VICE Mac PET";
+				PRODUCT_NAME = "xpet";
 				SDKROOT = macosx;
 				SUPPORTED_PLATFORMS = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) VICE_MAC_MACHINE_XPET";
@@ -1505,6 +1511,7 @@
 			buildSettings = {
 				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
@@ -1519,7 +1526,7 @@
 					"$(SRCROOT)/ViceMac/Engine",
 					"$(SRCROOT)/../vice/src/arch/macos",
 				);
-				INFOPLIST_KEY_CFBundleDisplayName = "VICE Mac Plus-4";
+				INFOPLIST_KEY_CFBundleDisplayName = "xplus4";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1530,7 +1537,7 @@
 					"$(inherited)",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.barrywalker.vicemac.plus4;
-				PRODUCT_NAME = "VICE Mac Plus-4";
+				PRODUCT_NAME = "xplus4";
 				SDKROOT = macosx;
 				SUPPORTED_PLATFORMS = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) VICE_MAC_MACHINE_XPLUS4";
@@ -1547,6 +1554,7 @@
 			buildSettings = {
 				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
@@ -1559,7 +1567,7 @@
 					"$(SRCROOT)/ViceMac/Engine",
 					"$(SRCROOT)/../vice/src/arch/macos",
 				);
-				INFOPLIST_KEY_CFBundleDisplayName = "VICE Mac Plus-4";
+				INFOPLIST_KEY_CFBundleDisplayName = "xplus4";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1570,7 +1578,7 @@
 					"$(inherited)",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.barrywalker.vicemac.plus4;
-				PRODUCT_NAME = "VICE Mac Plus-4";
+				PRODUCT_NAME = "xplus4";
 				SDKROOT = macosx;
 				SUPPORTED_PLATFORMS = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) VICE_MAC_MACHINE_XPLUS4";
@@ -1588,6 +1596,7 @@
 			buildSettings = {
 				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
@@ -1602,7 +1611,7 @@
 					"$(SRCROOT)/ViceMac/Engine",
 					"$(SRCROOT)/../vice/src/arch/macos",
 				);
-				INFOPLIST_KEY_CFBundleDisplayName = "VICE Mac C16";
+				INFOPLIST_KEY_CFBundleDisplayName = "xc16";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1613,7 +1622,7 @@
 					"$(inherited)",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.barrywalker.vicemac.c16;
-				PRODUCT_NAME = "VICE Mac C16";
+				PRODUCT_NAME = "xc16";
 				SDKROOT = macosx;
 				SUPPORTED_PLATFORMS = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) VICE_MAC_MACHINE_XC16";
@@ -1630,6 +1639,7 @@
 			buildSettings = {
 				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
@@ -1642,7 +1652,7 @@
 					"$(SRCROOT)/ViceMac/Engine",
 					"$(SRCROOT)/../vice/src/arch/macos",
 				);
-				INFOPLIST_KEY_CFBundleDisplayName = "VICE Mac C16";
+				INFOPLIST_KEY_CFBundleDisplayName = "xc16";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1653,7 +1663,7 @@
 					"$(inherited)",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.barrywalker.vicemac.c16;
-				PRODUCT_NAME = "VICE Mac C16";
+				PRODUCT_NAME = "xc16";
 				SDKROOT = macosx;
 				SUPPORTED_PLATFORMS = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) VICE_MAC_MACHINE_XC16";
@@ -1671,6 +1681,7 @@
 			buildSettings = {
 				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
@@ -1685,7 +1696,7 @@
 					"$(SRCROOT)/ViceMac/Engine",
 					"$(SRCROOT)/../vice/src/arch/macos",
 				);
-				INFOPLIST_KEY_CFBundleDisplayName = "VICE Mac C232";
+				INFOPLIST_KEY_CFBundleDisplayName = "xc232";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1696,7 +1707,7 @@
 					"$(inherited)",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.barrywalker.vicemac.c232;
-				PRODUCT_NAME = "VICE Mac C232";
+				PRODUCT_NAME = "xc232";
 				SDKROOT = macosx;
 				SUPPORTED_PLATFORMS = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) VICE_MAC_MACHINE_XC232";
@@ -1713,6 +1724,7 @@
 			buildSettings = {
 				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
@@ -1725,7 +1737,7 @@
 					"$(SRCROOT)/ViceMac/Engine",
 					"$(SRCROOT)/../vice/src/arch/macos",
 				);
-				INFOPLIST_KEY_CFBundleDisplayName = "VICE Mac C232";
+				INFOPLIST_KEY_CFBundleDisplayName = "xc232";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1736,7 +1748,7 @@
 					"$(inherited)",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.barrywalker.vicemac.c232;
-				PRODUCT_NAME = "VICE Mac C232";
+				PRODUCT_NAME = "xc232";
 				SDKROOT = macosx;
 				SUPPORTED_PLATFORMS = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) VICE_MAC_MACHINE_XC232";
@@ -1754,6 +1766,7 @@
 			buildSettings = {
 				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
@@ -1768,7 +1781,7 @@
 					"$(SRCROOT)/ViceMac/Engine",
 					"$(SRCROOT)/../vice/src/arch/macos",
 				);
-				INFOPLIST_KEY_CFBundleDisplayName = "VICE Mac V364";
+				INFOPLIST_KEY_CFBundleDisplayName = "xv364";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1779,7 +1792,7 @@
 					"$(inherited)",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.barrywalker.vicemac.v364;
-				PRODUCT_NAME = "VICE Mac V364";
+				PRODUCT_NAME = "xv364";
 				SDKROOT = macosx;
 				SUPPORTED_PLATFORMS = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) VICE_MAC_MACHINE_XV364";
@@ -1796,6 +1809,7 @@
 			buildSettings = {
 				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
@@ -1808,7 +1822,7 @@
 					"$(SRCROOT)/ViceMac/Engine",
 					"$(SRCROOT)/../vice/src/arch/macos",
 				);
-				INFOPLIST_KEY_CFBundleDisplayName = "VICE Mac V364";
+				INFOPLIST_KEY_CFBundleDisplayName = "xv364";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1819,7 +1833,7 @@
 					"$(inherited)",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.barrywalker.vicemac.v364;
-				PRODUCT_NAME = "VICE Mac V364";
+				PRODUCT_NAME = "xv364";
 				SDKROOT = macosx;
 				SUPPORTED_PLATFORMS = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) VICE_MAC_MACHINE_XV364";
@@ -1837,6 +1851,7 @@
 			buildSettings = {
 				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
@@ -1851,7 +1866,7 @@
 					"$(SRCROOT)/ViceMac/Engine",
 					"$(SRCROOT)/../vice/src/arch/macos",
 				);
-				INFOPLIST_KEY_CFBundleDisplayName = "VICE Mac C128";
+				INFOPLIST_KEY_CFBundleDisplayName = "x128";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1862,7 +1877,7 @@
 					"$(inherited)",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.barrywalker.vicemac.c128;
-				PRODUCT_NAME = "VICE Mac C128";
+				PRODUCT_NAME = "x128";
 				SDKROOT = macosx;
 				SUPPORTED_PLATFORMS = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) VICE_MAC_MACHINE_X128";
@@ -1879,6 +1894,7 @@
 			buildSettings = {
 				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
@@ -1891,7 +1907,7 @@
 					"$(SRCROOT)/ViceMac/Engine",
 					"$(SRCROOT)/../vice/src/arch/macos",
 				);
-				INFOPLIST_KEY_CFBundleDisplayName = "VICE Mac C128";
+				INFOPLIST_KEY_CFBundleDisplayName = "x128";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1902,7 +1918,7 @@
 					"$(inherited)",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.barrywalker.vicemac.c128;
-				PRODUCT_NAME = "VICE Mac C128";
+				PRODUCT_NAME = "x128";
 				SDKROOT = macosx;
 				SUPPORTED_PLATFORMS = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) VICE_MAC_MACHINE_X128";

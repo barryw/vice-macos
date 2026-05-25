@@ -1,3 +1,11 @@
+when:
+  - event: push
+    evaluate: 'CI_COMMIT_BRANCH == "macos/native-metal"'
+  - event: manual
+    evaluate: 'CI_COMMIT_BRANCH == "macos/native-metal"'
+  - event: tag
+    ref: refs/tags/vice-mac-*
+
 labels:
   backend: local
   platform: darwin/arm64
@@ -18,9 +26,9 @@ steps:
     commands:
       - macos/scripts/package-vicemac-release.sh
     when:
-      - event: [tag, manual]
+      - event: [push, manual, tag]
 
-  - name: github_release
+  - name: github-release
     image: bash
     environment:
       GH_TOKEN:
@@ -28,4 +36,4 @@ steps:
     commands:
       - macos/scripts/publish-github-release.sh
     when:
-      - event: tag
+      - event: [push, tag]

@@ -30,6 +30,14 @@ extension FocusedValues {
     }
 }
 
+private final class WeakUndoManagerReference {
+    weak var undoManager: UndoManager?
+
+    init(_ undoManager: UndoManager?) {
+        self.undoManager = undoManager
+    }
+}
+
 @MainActor
 final class DiskImageManagerModel: ObservableObject {
     struct NewImageDraft: Identifiable {
@@ -45,6 +53,15 @@ final class DiskImageManagerModel: ObservableObject {
         var pane: Pane
         var entryID: CommodoreDiskDirectoryEntry.ID
         var fileName: String
+    }
+
+    struct CloneReviewDraft: Identifiable {
+        let id = UUID()
+        var pane: Pane
+        var imageName: String
+        var format: CommodoreDiskImageFormat
+        var analysis: CommodoreDiskRebuildAnalysis
+        var sectors: [CommodoreDiskSector]
     }
 
     enum Pane: Hashable {
@@ -65,6 +82,7 @@ final class DiskImageManagerModel: ObservableObject {
         var entries: [CommodoreDiskDirectoryEntry] = []
         var fileByteCounts: [CommodoreDiskDirectoryEntry.ID: Int] = [:]
         var sectors: [CommodoreDiskSector] = []
+        var rebuildAnalysis: CommodoreDiskRebuildAnalysis?
         var selectedEntryID: CommodoreDiskDirectoryEntry.ID?
         var selectedAddress: CommodoreDiskAddress?
         var sectorEditorText = ""
@@ -90,6 +108,7 @@ final class DiskImageManagerModel: ObservableObject {
     @Published var activePane: Pane = .left
     @Published var newImageDraft: NewImageDraft?
     @Published var renameDraft: RenameDraft?
+    @Published var cloneReviewDraft: CloneReviewDraft?
 
     var canCopyLeftToRight: Bool {
         canCopy(from: .left, to: .right)
@@ -185,14 +204,16 @@ final class DiskImageManagerModel: ObservableObject {
         }
     }
 
-    func copySelectedFile(from sourcePane: Pane, to destinationPane: Pane) {
+    func copySelectedFile(from sourcePane: Pane, to destinationPane: Pane, undoManager: UndoManager? = nil) {
         guard let source = state(for: sourcePane).image,
               let entry = state(for: sourcePane).selectedEntry else {
             return
         }
 
         do {
-            try setImage(in: destinationPane) { destination in
+            try setImage(in: destinationPane,
+                         undoManager: undoManager,
+                         actionName: "Copy File") { destination in
                 try destination.copyFile(entry, from: source)
             }
             setMessage("Copied \(entry.name). Save the image to keep the change.", for: destinationPane)
@@ -201,7 +222,7 @@ final class DiskImageManagerModel: ObservableObject {
         }
     }
 
-    func importProgram(into pane: Pane) {
+    func importProgram(into pane: Pane, undoManager: UndoManager? = nil) {
         guard state(for: pane).image != nil else {
             return
         }
@@ -225,7 +246,9 @@ final class DiskImageManagerModel: ObservableObject {
 
         do {
             let payload = try Data(contentsOf: url)
-            try setImage(in: pane) { image in
+            try setImage(in: pane,
+                         undoManager: undoManager,
+                         actionName: "Import PRG") { image in
                 try image.importFile(named: url.deletingPathExtension().lastPathComponent,
                                      payload: payload)
             }
@@ -270,8 +293,29 @@ final class DiskImageManagerModel: ObservableObject {
             return
         }
 
-        let analysis = image.rebuildAnalysis()
-        guard confirmOptimizedClone(for: image, analysis: analysis) else {
+        let analysis = state(for: pane).rebuildAnalysis ?? image.rebuildAnalysis()
+        let requiresReview = !analysis.canRebuild || analysis.issues.contains { $0.severity != .info }
+        guard !requiresReview else {
+            cloneReviewDraft = CloneReviewDraft(pane: pane,
+                                                imageName: image.displayName,
+                                                format: image.format,
+                                                analysis: analysis,
+                                                sectors: state(for: pane).sectors)
+            return
+        }
+
+        chooseOptimizedCloneDestination(in: pane)
+    }
+
+    func cloneReviewedImage(from draft: CloneReviewDraft) {
+        cloneReviewDraft = nil
+        DispatchQueue.main.async { [weak self] in
+            self?.chooseOptimizedCloneDestination(in: draft.pane)
+        }
+    }
+
+    private func chooseOptimizedCloneDestination(in pane: Pane) {
+        guard let image = state(for: pane).image else {
             return
         }
 
@@ -316,14 +360,16 @@ final class DiskImageManagerModel: ObservableObject {
                                   fileName: entry.name)
     }
 
-    func renameSelectedFile(from draft: RenameDraft) {
+    func renameSelectedFile(from draft: RenameDraft, undoManager: UndoManager? = nil) {
         guard let entry = state(for: draft.pane).entries.first(where: { $0.id == draft.entryID }) else {
             setError(CommodoreDiskImageError.fileNotFound(draft.fileName).localizedDescription, for: draft.pane)
             return
         }
 
         do {
-            try setImage(in: draft.pane) { image in
+            try setImage(in: draft.pane,
+                         undoManager: undoManager,
+                         actionName: "Rename File") { image in
                 try image.renameFile(entry, to: draft.fileName)
             }
             setMessage("Renamed file. Save the image to keep the change.", for: draft.pane)
@@ -332,24 +378,15 @@ final class DiskImageManagerModel: ObservableObject {
         }
     }
 
-    func deleteSelectedFile(in pane: Pane) {
+    func deleteSelectedFile(in pane: Pane, undoManager: UndoManager? = nil) {
         guard let entry = state(for: pane).selectedEntry else {
             return
         }
 
-        let alert = NSAlert()
-        alert.messageText = "Delete \(entry.name)?"
-        alert.informativeText = "The file will be removed from the disk directory and its blocks will be marked free. Save the image to keep the change."
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "Delete")
-        alert.addButton(withTitle: "Cancel")
-
-        guard alert.runModal() == .alertFirstButtonReturn else {
-            return
-        }
-
         do {
-            try setImage(in: pane) { image in
+            try setImage(in: pane,
+                         undoManager: undoManager,
+                         actionName: "Delete File") { image in
                 try image.deleteFile(entry)
             }
             setMessage("Deleted \(entry.name). Save the image to keep the change.", for: pane)
@@ -381,14 +418,16 @@ final class DiskImageManagerModel: ObservableObject {
         selectSector(address, in: pane)
     }
 
-    func writeSelectedSector(in pane: Pane) {
+    func writeSelectedSector(in pane: Pane, undoManager: UndoManager? = nil) {
         guard let address = state(for: pane).selectedAddress else {
             return
         }
 
         do {
             let bytes = try CommodoreHexDump.data(from: state(for: pane).sectorEditorText)
-            try setImage(in: pane) { image in
+            try setImage(in: pane,
+                         undoManager: undoManager,
+                         actionName: "Write Sector") { image in
                 try image.writeSector(bytes, at: address)
             }
             setMessage("Wrote T\(address.track) S\(address.sector). Save the image to keep the change.", for: pane)
@@ -462,40 +501,6 @@ final class DiskImageManagerModel: ObservableObject {
         return destination.geometry.supportsFileWrites
     }
 
-    private func confirmOptimizedClone(for image: CommodoreDiskImage,
-                                       analysis: CommodoreDiskRebuildAnalysis) -> Bool {
-        if !analysis.canRebuild {
-            let alert = NSAlert()
-            alert.messageText = analysis.statusTitle
-            alert.informativeText = issueText(for: analysis.blockingIssues)
-            alert.alertStyle = .critical
-            alert.addButton(withTitle: "OK")
-            alert.runModal()
-            return false
-        }
-
-        let visibleIssues = analysis.issues.filter { $0.severity != .info }
-        guard !visibleIssues.isEmpty else {
-            return true
-        }
-
-        let alert = NSAlert()
-        alert.messageText = "Clone \(image.displayName) with warnings?"
-        alert.informativeText = "\(analysis.statusDetail)\n\n\(issueText(for: visibleIssues))"
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "Clone Copy")
-        alert.addButton(withTitle: "Cancel")
-        return alert.runModal() == .alertFirstButtonReturn
-    }
-
-    private func issueText(for issues: [CommodoreDiskRebuildIssue]) -> String {
-        let visible = issues.prefix(8).map { issue in
-            "- \(issue.severity.label): \(issue.title). \(issue.detail)"
-        }
-        let suffix = issues.count > visible.count ? "\n- \(issues.count - visible.count) more issue\(issues.count - visible.count == 1 ? "" : "s")." : ""
-        return visible.joined(separator: "\n") + suffix
-    }
-
     private func setMessage(_ message: String, for pane: Pane) {
         setState(for: pane) { state in
             state.message = message
@@ -511,12 +516,16 @@ final class DiskImageManagerModel: ObservableObject {
         }
     }
 
-    private func setImage(in pane: Pane, mutate: (inout CommodoreDiskImage) throws -> Void) throws {
+    private func setImage(in pane: Pane,
+                          undoManager: UndoManager? = nil,
+                          actionName: String? = nil,
+                          mutate: (inout CommodoreDiskImage) throws -> Void) throws {
         var state = state(for: pane)
-        guard var image = state.image else {
+        guard let originalImage = state.image else {
             return
         }
 
+        var image = originalImage
         try mutate(&image)
         state.image = image
         refresh(&state)
@@ -527,6 +536,67 @@ final class DiskImageManagerModel: ObservableObject {
         case .right:
             right = state
         }
+
+        if let actionName,
+           image != originalImage {
+            registerUndo(undoManager,
+                         pane: pane,
+                         restoreImage: originalImage,
+                         redoImage: image,
+                         actionName: actionName)
+        }
+    }
+
+    private func registerUndo(_ undoManager: UndoManager?,
+                              pane: Pane,
+                              restoreImage: CommodoreDiskImage,
+                              redoImage: CommodoreDiskImage,
+                              actionName: String) {
+        guard let undoManager else {
+            return
+        }
+
+        let undoManagerReference = WeakUndoManagerReference(undoManager)
+        undoManager.registerUndo(withTarget: self) { model in
+            MainActor.assumeIsolated {
+                model.restoreImage(restoreImage,
+                                   in: pane,
+                                   undoManager: undoManagerReference.undoManager,
+                                   inverseImage: redoImage,
+                                   actionName: actionName)
+            }
+        }
+        undoManager.setActionName(actionName)
+    }
+
+    private func restoreImage(_ image: CommodoreDiskImage,
+                              in pane: Pane,
+                              undoManager: UndoManager?,
+                              inverseImage: CommodoreDiskImage,
+                              actionName: String) {
+        setState(for: pane) { state in
+            state.image = image
+            state.message = nil
+            state.errorMessage = nil
+            refresh(&state)
+        }
+        activePane = pane
+
+        guard let undoManager else {
+            return
+        }
+
+        let undoManagerReference = WeakUndoManagerReference(undoManager)
+        undoManager.registerUndo(withTarget: self) { model in
+            MainActor.assumeIsolated {
+                model.restoreImage(inverseImage,
+                                   in: pane,
+                                   undoManager: undoManagerReference.undoManager,
+                                   inverseImage: image,
+                                   actionName: actionName)
+            }
+        }
+        undoManager.setActionName(actionName)
     }
 
     private func setState(for pane: Pane, mutate: (inout PaneState) -> Void) {
@@ -543,6 +613,7 @@ final class DiskImageManagerModel: ObservableObject {
             state.entries = []
             state.fileByteCounts = [:]
             state.sectors = []
+            state.rebuildAnalysis = nil
             state.selectedAddress = nil
             state.sectorEditorText = ""
             return
@@ -554,6 +625,7 @@ final class DiskImageManagerModel: ObservableObject {
                 (entry.id, (try? image.fileData(for: entry).count) ?? 0)
             })
             state.sectors = image.sectorMap()
+            state.rebuildAnalysis = image.rebuildAnalysis()
 
             if state.selectedAddress == nil {
                 state.selectedAddress = image.geometry.directoryStart
@@ -606,6 +678,7 @@ final class DiskImageManagerModel: ObservableObject {
 }
 
 struct DiskImageManagerView: View {
+    @Environment(\.undoManager) private var undoManager
     @StateObject private var model = DiskImageManagerModel()
 
     var body: some View {
@@ -649,7 +722,7 @@ struct DiskImageManagerView: View {
                 Divider()
 
                 Button {
-                    model.importProgram(into: model.activePane)
+                    model.importProgram(into: model.activePane, undoManager: undoManager)
                 } label: {
                     Label("Import PRG", systemImage: "tray.and.arrow.down")
                 }
@@ -696,7 +769,7 @@ struct DiskImageManagerView: View {
                                                       },
                                                       canImportProgram: model.state(for: model.activePane).image?.geometry.supportsFileWrites == true,
                                                       importProgram: {
-                                                          model.importProgram(into: model.activePane)
+                                                          model.importProgram(into: model.activePane, undoManager: undoManager)
                                                       },
                                                       canExportSelectedFile: model.state(for: model.activePane).selectedEntry != nil,
                                                       exportSelectedFile: {
@@ -714,7 +787,7 @@ struct DiskImageManagerView: View {
                                                       canDeleteSelectedFile: model.state(for: model.activePane).selectedEntry != nil
                                                           && model.state(for: model.activePane).image?.geometry.supportsFileWrites == true,
                                                       deleteSelectedFile: {
-                                                          model.deleteSelectedFile(in: model.activePane)
+                                                          model.deleteSelectedFile(in: model.activePane, undoManager: undoManager)
                                                       }))
         .sheet(item: $model.newImageDraft) { draft in
             NewDiskImageSheet(draft: draft) { updatedDraft in
@@ -727,9 +800,16 @@ struct DiskImageManagerView: View {
         .sheet(item: $model.renameDraft) { draft in
             RenameDiskFileSheet(draft: draft) { updatedDraft in
                 model.renameDraft = nil
-                model.renameSelectedFile(from: updatedDraft)
+                model.renameSelectedFile(from: updatedDraft, undoManager: undoManager)
             } onCancel: {
                 model.renameDraft = nil
+            }
+        }
+        .sheet(item: $model.cloneReviewDraft) { draft in
+            CloneOptimizedReviewSheet(draft: draft) {
+                model.cloneReviewDraft = nil
+            } onClone: {
+                model.cloneReviewedImage(from: draft)
             }
         }
     }
@@ -846,7 +926,235 @@ private struct RenameDiskFileSheet: View {
     }
 }
 
+private struct CloneOptimizedReviewSheet: View {
+    let draft: DiskImageManagerModel.CloneReviewDraft
+    let onCancel: () -> Void
+    let onClone: () -> Void
+
+    var body: some View {
+        let analysis = draft.analysis
+
+        VStack(spacing: 0) {
+            HStack(alignment: .top, spacing: 14) {
+                Image(systemName: analysis.statusSymbolName)
+                    .font(.system(size: 30, weight: .semibold))
+                    .foregroundStyle(analysis.statusColor)
+                    .frame(width: 40, height: 40)
+                    .background(analysis.statusColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(analysis.canRebuild ? "Review Optimized Clone" : "Clone Blocked")
+                        .font(.title3.weight(.semibold))
+                    Text(draft.imageName)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.secondary)
+                    Text(analysis.statusDetail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer()
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 24)
+            .padding(.bottom, 16)
+
+            Divider()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack(spacing: 10) {
+                        CloneReviewFactView(title: "Source",
+                                            value: "Untouched",
+                                            systemImage: "lock.shield")
+                        CloneReviewFactView(title: "Output",
+                                            value: "\(draft.format.title) copy",
+                                            systemImage: "doc.on.doc")
+                        CloneReviewFactView(title: "Layout",
+                                            value: "Drive interleave",
+                                            systemImage: "arrow.triangle.branch")
+                    }
+
+                    VStack(alignment: .leading, spacing: 7) {
+                        HStack {
+                            Text("Sector Layout")
+                                .font(.caption.weight(.semibold))
+                            Spacer()
+                            Text("\(draft.sectors.count) sectors")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        SectorActivityRibbonView(sectors: draft.sectors)
+                            .frame(height: 16)
+                    }
+
+                    if analysis.issues.isEmpty {
+                        CleanCloneSummaryView()
+                    } else {
+                        RebuildIssueGroupView(title: "Must Fix",
+                                              issues: analysis.blockingIssues)
+                        RebuildIssueGroupView(title: "Warnings",
+                                              issues: analysis.warningIssues)
+                        RebuildIssueGroupView(title: "Notes",
+                                              issues: analysis.noteIssues)
+                    }
+                }
+                .padding(24)
+            }
+            .frame(maxHeight: 430)
+
+            Divider()
+
+            HStack(spacing: 12) {
+                Text(analysis.canRebuild
+                     ? "The original image is never modified."
+                     : "Resolve the blocked items, then run clone again.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+
+                Button(analysis.canRebuild ? "Cancel" : "Done") {
+                    onCancel()
+                }
+                .keyboardShortcut(.cancelAction)
+
+                if analysis.canRebuild {
+                    Button("Clone Copy...") {
+                        onClone()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
+                }
+            }
+            .padding(24)
+        }
+        .frame(width: 660)
+    }
+}
+
+private struct CloneReviewFactView: View {
+    let title: String
+    let value: String
+    let systemImage: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: systemImage)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 18)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Text(value)
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity)
+        .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(.separator.opacity(0.5), lineWidth: 1)
+        }
+    }
+}
+
+private struct CleanCloneSummaryView: View {
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "checkmark.seal.fill")
+                .foregroundStyle(.green)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("No rebuild issues found")
+                    .font(.caption.weight(.semibold))
+                Text("The copy can be rebuilt with optimized sector placement and no known loss of directory-visible data.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(10)
+        .background(.green.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+private struct RebuildIssueGroupView: View {
+    let title: String
+    let issues: [CommodoreDiskRebuildIssue]
+
+    var body: some View {
+        if !issues.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    Text(title)
+                        .font(.caption.weight(.semibold))
+                    Text("\(issues.count)")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(.secondary.opacity(0.13), in: Capsule())
+                }
+
+                VStack(spacing: 6) {
+                    ForEach(issues.prefix(6)) { issue in
+                        RebuildIssueReviewRow(issue: issue)
+                    }
+
+                    if issues.count > 6 {
+                        Text("\(issues.count - 6) more issue\(issues.count - 6 == 1 ? "" : "s")")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 6)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct RebuildIssueReviewRow: View {
+    let issue: CommodoreDiskRebuildIssue
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 9) {
+            Image(systemName: issue.severity.symbolName)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(issue.severity.tint)
+                .frame(width: 18)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(issue.title)
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+                Text(issue.detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(9)
+        .background(.quaternary.opacity(0.30), in: RoundedRectangle(cornerRadius: 8))
+    }
+}
+
 private struct CopyRailView: View {
+    @Environment(\.undoManager) private var undoManager
     @ObservedObject var model: DiskImageManagerModel
 
     var body: some View {
@@ -854,7 +1162,7 @@ private struct CopyRailView: View {
             Spacer()
 
             Button {
-                model.copySelectedFile(from: .left, to: .right)
+                model.copySelectedFile(from: .left, to: .right, undoManager: undoManager)
             } label: {
                 Image(systemName: "arrow.right")
                     .font(.system(size: 18, weight: .semibold))
@@ -865,7 +1173,7 @@ private struct CopyRailView: View {
             .help("Copy selected file to the right image")
 
             Button {
-                model.copySelectedFile(from: .right, to: .left)
+                model.copySelectedFile(from: .right, to: .left, undoManager: undoManager)
             } label: {
                 Image(systemName: "arrow.left")
                     .font(.system(size: 18, weight: .semibold))
@@ -894,6 +1202,11 @@ private struct DiskImagePaneView: View {
 
             if let image = state.image {
                 DiskImageSummaryView(image: image)
+                DiskImageRebuildAnalysisView(image: image,
+                                             analysis: state.rebuildAnalysis,
+                                             sectors: state.sectors) {
+                    model.cloneOptimizedImage(in: pane)
+                }
 
                 TabView {
                     DirectoryBrowserView(model: model, pane: pane)
@@ -1063,7 +1376,170 @@ private struct DiskImageSummaryView: View {
     }
 }
 
+private struct DiskImageRebuildAnalysisView: View {
+    let image: CommodoreDiskImage
+    let analysis: CommodoreDiskRebuildAnalysis?
+    let sectors: [CommodoreDiskSector]
+    let onClone: () -> Void
+
+    var body: some View {
+        let analysis = analysis ?? CommodoreDiskRebuildAnalysis(issues: [])
+        let primaryIssue = analysis.primaryIssue
+
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: analysis.statusSymbolName)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(analysis.statusColor)
+                    .frame(width: 22)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(analysis.statusTitle)
+                        .font(.system(size: 12.5, weight: .semibold))
+                    Text(analysis.statusDetail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+
+                Spacer()
+
+                Button {
+                    onClone()
+                } label: {
+                    Label(analysis.canRebuild ? "Clone" : "Review", systemImage: "wand.and.stars")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(image.geometry.supportsFileWrites == false)
+                .help("Review and create an optimized rebuilt copy")
+            }
+
+            SectorActivityRibbonView(sectors: sectors)
+                .frame(height: 13)
+
+            HStack(spacing: 6) {
+                RebuildMetricPill(title: "Blocks", value: "\(image.geometry.totalSectors)")
+                RebuildMetricPill(title: "Warnings", value: "\(analysis.warningIssues.count)", tint: .orange)
+                RebuildMetricPill(title: "Notes", value: "\(analysis.noteIssues.count)", tint: .secondary)
+
+                Spacer()
+            }
+
+            if let primaryIssue {
+                RebuildIssueDigestRow(issue: primaryIssue)
+            }
+        }
+        .padding(10)
+        .background(.quaternary.opacity(0.38), in: RoundedRectangle(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(analysis.statusColor.opacity(0.28), lineWidth: 1)
+        }
+    }
+}
+
+private struct RebuildMetricPill: View {
+    let title: String
+    let value: String
+    var tint: Color = .accentColor
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(title)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .fontWeight(.semibold)
+                .foregroundStyle(tint)
+        }
+        .font(.caption2)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(.secondary.opacity(0.12), in: Capsule())
+    }
+}
+
+private struct RebuildIssueDigestRow: View {
+    let issue: CommodoreDiskRebuildIssue
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 7) {
+            Image(systemName: issue.severity.symbolName)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(issue.severity.tint)
+                .frame(width: 14)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(issue.title)
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+                Text(issue.detail)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+        }
+    }
+}
+
+private struct SectorActivityRibbonView: View {
+    let sectors: [CommodoreDiskSector]
+
+    var body: some View {
+        let sampled = sampledSectors()
+
+        GeometryReader { proxy in
+            let width = cellWidth(for: proxy.size.width, count: sampled.count)
+
+            HStack(spacing: 1) {
+                ForEach(Array(sampled.enumerated()), id: \.offset) { _, sector in
+                    RoundedRectangle(cornerRadius: 1.5)
+                        .fill(color(for: sector.role))
+                        .frame(width: width)
+                }
+            }
+        }
+        .accessibilityLabel("Disk sector layout")
+    }
+
+    private func sampledSectors(limit: Int = 128) -> [CommodoreDiskSector] {
+        guard sectors.count > limit else {
+            return sectors
+        }
+
+        return (0..<limit).map { index in
+            sectors[min(sectors.count - 1, index * sectors.count / limit)]
+        }
+    }
+
+    private func cellWidth(for availableWidth: CGFloat, count: Int) -> CGFloat {
+        guard count > 0 else {
+            return 0
+        }
+
+        return max(1.5, (availableWidth - CGFloat(max(0, count - 1))) / CGFloat(count))
+    }
+
+    private func color(for role: CommodoreDiskSectorRole) -> Color {
+        switch role {
+        case .free:
+            return .green.opacity(0.62)
+        case .allocated:
+            return .secondary.opacity(0.48)
+        case .directory:
+            return .blue.opacity(0.82)
+        case .file:
+            return .orange.opacity(0.78)
+        case .header:
+            return .purple.opacity(0.82)
+        case .unknown:
+            return .secondary.opacity(0.24)
+        }
+    }
+}
+
 private struct DirectoryBrowserView: View {
+    @Environment(\.undoManager) private var undoManager
     @ObservedObject var model: DiskImageManagerModel
     let pane: DiskImageManagerModel.Pane
 
@@ -1083,7 +1559,7 @@ private struct DirectoryBrowserView: View {
                     .frame(width: 170)
 
                 Button {
-                    model.importProgram(into: pane)
+                    model.importProgram(into: pane, undoManager: undoManager)
                 } label: {
                     Label("Import", systemImage: "tray.and.arrow.down")
                 }
@@ -1132,7 +1608,7 @@ private struct DirectoryBrowserView: View {
                 Divider()
 
                 Button("Delete File", role: .destructive) {
-                    model.deleteSelectedFile(in: pane)
+                    model.deleteSelectedFile(in: pane, undoManager: undoManager)
                 }
                 .disabled(state.selectedEntry == nil || state.image?.geometry.supportsFileWrites != true)
             }
@@ -1180,6 +1656,7 @@ private struct SearchField: View {
 }
 
 private struct SelectedFileInspectorView: View {
+    @Environment(\.undoManager) private var undoManager
     @ObservedObject var model: DiskImageManagerModel
     let pane: DiskImageManagerModel.Pane
 
@@ -1222,7 +1699,7 @@ private struct SelectedFileInspectorView: View {
                     Divider()
 
                     Button("Delete", role: .destructive) {
-                        model.deleteSelectedFile(in: pane)
+                        model.deleteSelectedFile(in: pane, undoManager: undoManager)
                     }
                     .disabled(state.image?.geometry.supportsFileWrites != true)
                 } label: {
@@ -1418,6 +1895,7 @@ private struct SectorCell: View {
 }
 
 private struct SectorEditorView: View {
+    @Environment(\.undoManager) private var undoManager
     @ObservedObject var model: DiskImageManagerModel
     let pane: DiskImageManagerModel.Pane
 
@@ -1449,7 +1927,7 @@ private struct SectorEditorView: View {
                 .disabled(state.selectedAddress == nil)
 
                 Button {
-                    model.writeSelectedSector(in: pane)
+                    model.writeSelectedSector(in: pane, undoManager: undoManager)
                 } label: {
                     Label("Write Sector", systemImage: "square.and.pencil")
                 }
@@ -1487,5 +1965,63 @@ private struct StatusLineView: View {
         }
         .font(.caption)
         .frame(height: 16)
+    }
+}
+
+private extension CommodoreDiskRebuildAnalysis {
+    var noteIssues: [CommodoreDiskRebuildIssue] {
+        issues.filter { $0.severity == .info }
+    }
+
+    var primaryIssue: CommodoreDiskRebuildIssue? {
+        blockingIssues.first ?? warningIssues.first ?? noteIssues.first
+    }
+
+    var statusSymbolName: String {
+        if !blockingIssues.isEmpty {
+            return "xmark.octagon.fill"
+        }
+
+        if !warningIssues.isEmpty {
+            return "exclamationmark.triangle.fill"
+        }
+
+        return "checkmark.seal.fill"
+    }
+
+    var statusColor: Color {
+        if !blockingIssues.isEmpty {
+            return .red
+        }
+
+        if !warningIssues.isEmpty {
+            return .orange
+        }
+
+        return .green
+    }
+}
+
+private extension CommodoreDiskRebuildIssueSeverity {
+    var symbolName: String {
+        switch self {
+        case .info:
+            return "info.circle.fill"
+        case .warning:
+            return "exclamationmark.triangle.fill"
+        case .blocked:
+            return "xmark.octagon.fill"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .info:
+            return .blue
+        case .warning:
+            return .orange
+        case .blocked:
+            return .red
+        }
     }
 }

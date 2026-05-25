@@ -16,7 +16,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "E50000000000000000000001"
-               BuildableName = "VICE Mac C128.app"
+               BuildableName = "x128.app"
                BlueprintName = "ViceMacC128"
                ReferencedContainer = "container:ViceMac.xcodeproj">
             </BuildableReference>
@@ -44,7 +44,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "E50000000000000000000001"
-            BuildableName = "VICE Mac C128.app"
+            BuildableName = "x128.app"
             BlueprintName = "ViceMacC128"
             ReferencedContainer = "container:ViceMac.xcodeproj">
          </BuildableReference>
@@ -61,7 +61,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "E50000000000000000000001"
-            BuildableName = "VICE Mac C128.app"
+            BuildableName = "x128.app"
             BlueprintName = "ViceMacC128"
             ReferencedContainer = "container:ViceMac.xcodeproj">
          </BuildableReference>
