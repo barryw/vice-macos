@@ -195,6 +195,39 @@ collect_codesign_keychains() {
     fi
 }
 
+codesign_identity_visible() {
+    local identities="$1"
+
+    printf '%s\n' "$identities" | grep -Fq "$CODE_SIGN_IDENTITY"
+}
+
+configure_codesign_default_keychain() {
+    local identities
+    local keychain
+    local keychain_identities
+
+    if ! codesigning_enabled; then
+        return
+    fi
+
+    identities="$(security find-identity -v -p codesigning 2>&1 || true)"
+    if codesign_identity_visible "$identities"; then
+        return
+    fi
+
+    if [[ "${KEYCHAIN_SEARCH_LIST_COUNT:-0}" -eq 0 ]]; then
+        return
+    fi
+
+    for keychain in "${KEYCHAIN_SEARCH_LIST[@]}"; do
+        keychain_identities="$(security find-identity -v -p codesigning "$keychain" 2>&1 || true)"
+        if codesign_identity_visible "$keychain_identities"; then
+            security default-keychain -d user -s "$keychain"
+            return
+        fi
+    done
+}
+
 verify_codesign_identity_available() {
     local identities
     local keychain
@@ -207,7 +240,7 @@ verify_codesign_identity_available() {
 
     identities="$(security find-identity -v -p codesigning 2>&1 || true)"
 
-    if printf '%s\n' "$identities" | grep -Fq "$CODE_SIGN_IDENTITY"; then
+    if codesign_identity_visible "$identities"; then
         return
     fi
 
@@ -413,6 +446,7 @@ elif codesigning_enabled; then
 fi
 
 collect_codesign_keychains
+configure_codesign_default_keychain
 verify_codesign_identity_available
 configure_xcodebuild_settings
 configure_xcodebuild_args
