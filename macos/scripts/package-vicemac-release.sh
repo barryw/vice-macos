@@ -11,6 +11,7 @@ CONFIGURATION="${VICE_MAC_RELEASE_CONFIGURATION:-Release}"
 DESTINATION="${VICE_MAC_RELEASE_DESTINATION:-platform=macOS,arch=arm64}"
 XCODE_TOOLCHAIN="${VICE_MAC_XCODE_TOOLCHAIN:-}"
 CODE_SIGN_IDENTITY="${VICE_MAC_CODESIGN_IDENTITY:-}"
+CODE_SIGN_KEYCHAIN="${VICE_MAC_CODESIGN_KEYCHAIN:-}"
 DEVELOPMENT_TEAM="${VICE_MAC_DEVELOPMENT_TEAM:-}"
 NOTARIZE_MODE="${VICE_MAC_NOTARIZE:-auto}"
 NOTARYTOOL_PROFILE="${VICE_MAC_NOTARYTOOL_PROFILE:-}"
@@ -105,6 +106,34 @@ codesigning_enabled() {
     [[ -n "$CODE_SIGN_IDENTITY" && "$CODE_SIGN_IDENTITY" != "-" ]]
 }
 
+configure_codesign_keychain_search_list() {
+    local login_keychain
+    local existing_keychain
+    local keychains
+
+    if ! codesigning_enabled || [[ -n "$CODE_SIGN_KEYCHAIN" ]]; then
+        return
+    fi
+
+    login_keychain="${VICE_MAC_CODESIGN_LOGIN_KEYCHAIN:-$HOME/Library/Keychains/login.keychain-db}"
+    if [[ ! -f "$login_keychain" ]]; then
+        return
+    fi
+
+    keychains=("$login_keychain")
+    while IFS= read -r existing_keychain; do
+        existing_keychain="${existing_keychain//\"/}"
+        existing_keychain="${existing_keychain#"${existing_keychain%%[![:space:]]*}"}"
+        existing_keychain="${existing_keychain%"${existing_keychain##*[![:space:]]}"}"
+
+        if [[ -n "$existing_keychain" && "$existing_keychain" != "$login_keychain" ]]; then
+            keychains+=("$existing_keychain")
+        fi
+    done < <(security list-keychains -d user 2>/dev/null || true)
+
+    security list-keychains -d user -s "${keychains[@]}" >/dev/null 2>&1 || true
+}
+
 configure_notarytool_args() {
     NOTARYTOOL_ARGS=()
 
@@ -134,7 +163,14 @@ configure_xcodebuild_settings() {
         XCODEBUILD_SETTINGS+=("CODE_SIGN_IDENTITY=$CODE_SIGN_IDENTITY")
 
         if [[ "$CODE_SIGN_IDENTITY" != "-" ]]; then
-            XCODEBUILD_SETTINGS+=("OTHER_CODE_SIGN_FLAGS=--timestamp")
+            local other_code_sign_flags
+
+            other_code_sign_flags="--timestamp"
+            if [[ -n "$CODE_SIGN_KEYCHAIN" ]]; then
+                other_code_sign_flags+=" --keychain $CODE_SIGN_KEYCHAIN"
+            fi
+
+            XCODEBUILD_SETTINGS+=("OTHER_CODE_SIGN_FLAGS=$other_code_sign_flags")
             XCODEBUILD_SETTINGS+=("CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO")
         fi
     fi
@@ -233,12 +269,19 @@ verify_release_apps() {
 
 sign_dmg() {
     local dmg_path="$1"
+    local codesign_args
 
     if ! codesigning_enabled; then
         return
     fi
 
-    codesign --force --sign "$CODE_SIGN_IDENTITY" --timestamp "$dmg_path"
+    codesign_args=(--force)
+    if [[ -n "$CODE_SIGN_KEYCHAIN" ]]; then
+        codesign_args+=(--keychain "$CODE_SIGN_KEYCHAIN")
+    fi
+    codesign_args+=(--sign "$CODE_SIGN_IDENTITY" --timestamp "$dmg_path")
+
+    codesign "${codesign_args[@]}"
     codesign --verify --verbose=2 "$dmg_path"
 }
 
@@ -273,6 +316,7 @@ elif codesigning_enabled; then
     require_tool codesign "codesign ships with macOS."
 fi
 
+configure_codesign_keychain_search_list
 configure_xcodebuild_settings
 configure_xcodebuild_args
 

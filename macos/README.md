@@ -99,7 +99,8 @@ Release named `vice-mac-<VICE version>-<git sha>-1`. Tags matching
 requires the `github_token` secret.
 
 Notarized release builds also require `apple_codesign_identity` and
-`apple_development_team`. CI uses `apple_notarytool_profile`, so the runner
-keychain must already store that notarytool profile. For local runs outside CI,
-the package script also supports `VICE_MAC_NOTARYTOOL_APPLE_ID`,
-`VICE_MAC_NOTARYTOOL_PASSWORD`, and `VICE_MAC_NOTARYTOOL_TEAM_ID`.
+`apple_development_team`. CI expects the runner login keychain to contain that
+Developer ID Application certificate and the `apple_notarytool_profile`
+notarytool profile. For local runs outside CI, the package script also supports
+`VICE_MAC_NOTARYTOOL_APPLE_ID`, `VICE_MAC_NOTARYTOOL_PASSWORD`, and
+`VICE_MAC_NOTARYTOOL_TEAM_ID`.

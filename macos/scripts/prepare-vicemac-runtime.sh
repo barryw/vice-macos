@@ -182,16 +182,24 @@ make -C "$BUILD_DIR/src/lib/linenoise-ng" V=1
 codesign_dylib() {
     local dylib="$1"
     local identity="${EXPANDED_CODE_SIGN_IDENTITY:--}"
+    local codesign_args
 
     if [[ -z "$identity" ]]; then
         identity="-"
     fi
 
-    if [[ "$identity" != "-" ]]; then
-        codesign --force --options runtime --sign "$identity" --timestamp "$dylib"
-    else
-        codesign --force --sign "$identity" --timestamp=none "$dylib"
+    codesign_args=(--force)
+    if [[ -n "${VICE_MAC_CODESIGN_KEYCHAIN:-}" ]]; then
+        codesign_args+=(--keychain "$VICE_MAC_CODESIGN_KEYCHAIN")
     fi
+
+    if [[ "$identity" != "-" ]]; then
+        codesign_args+=(--options runtime --sign "$identity" --timestamp "$dylib")
+    else
+        codesign_args+=(--sign "$identity" --timestamp=none "$dylib")
+    fi
+
+    codesign "${codesign_args[@]}"
 }
 
 for machine_target in "${MACHINE_TARGETS[@]}"; do
