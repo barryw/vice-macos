@@ -408,6 +408,42 @@ verify_release_apps() {
     for app_name in "${RELEASE_APPS[@]}"; do
         app="$stage_dir/$app_name.app"
         codesign --verify --deep --strict --verbose=2 "$app"
+        verify_release_app_dependencies "$app"
+    done
+}
+
+is_disallowed_runtime_dependency() {
+    local dependency="$1"
+
+    case "$dependency" in
+        /opt/homebrew/*|/usr/local/*|/opt/local/*)
+            return 0
+            ;;
+    esac
+
+    return 1
+}
+
+verify_binary_dependencies() {
+    local binary="$1"
+    local dependency
+
+    while IFS= read -r dependency; do
+        if [[ -n "$dependency" ]] && is_disallowed_runtime_dependency "$dependency"; then
+            echo "Release binary has an unbundled local dependency: $binary -> $dependency" >&2
+            exit 1
+        fi
+    done < <(otool -L "$binary" | sed '1d; s/^[[:space:]]*//; s/[[:space:]]*(.*//')
+}
+
+verify_release_app_dependencies() {
+    local app="$1"
+    local binary
+
+    for binary in "$app/Contents/MacOS"/* "$app/Contents/Frameworks"/*.dylib; do
+        if [[ -f "$binary" ]]; then
+            verify_binary_dependencies "$binary"
+        fi
     done
 }
 
@@ -441,6 +477,7 @@ require_tool xcodebuild "Install the latest Xcode and select it with xcode-selec
 require_tool hdiutil "hdiutil ships with macOS."
 require_tool ditto "ditto ships with macOS."
 require_tool shasum "shasum ships with macOS."
+require_tool otool "otool ships with Xcode command line tools."
 
 NOTARIZE=0
 if notarization_enabled; then

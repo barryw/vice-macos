@@ -147,6 +147,8 @@ if [[ -f "$BUILD_DIR/src/Makefile" ]]; then
     fi
 fi
 
+require_build_tool "install_name_tool" "Install Xcode command line tools."
+
 if [[ ! -f "$BUILD_DIR/Makefile" || ! -f "$BUILD_DIR/src/arch/macos/Makefile" ]]; then
     require_build_tool "dos2unix" "Install it with: brew install dos2unix"
 
@@ -202,6 +204,120 @@ codesign_dylib() {
     codesign "${codesign_args[@]}"
 }
 
+is_system_dylib_dependency() {
+    local dependency="$1"
+
+    case "$dependency" in
+        /System/Library/*|/usr/lib/*|@rpath/*|@loader_path/*|@executable_path/*)
+            return 0
+            ;;
+    esac
+
+    return 1
+}
+
+dylib_dependencies() {
+    local binary="$1"
+
+    otool -L "$binary" |
+        sed '1d; s/^[[:space:]]*//; s/[[:space:]]*(.*//'
+}
+
+rewrite_dependency_load_paths() {
+    local binary="$1"
+    local frameworks_dir="$2"
+    local binary_name
+    local dependency
+    local dependency_name
+    local bundled_dependency
+
+    binary_name="$(basename "$binary")"
+    while IFS= read -r dependency; do
+        if [[ -z "$dependency" ]] || is_system_dylib_dependency "$dependency"; then
+            continue
+        fi
+
+        dependency_name="$(basename "$dependency")"
+        if [[ "$dependency_name" == "$binary_name" ]]; then
+            continue
+        fi
+
+        bundled_dependency="$frameworks_dir/$dependency_name"
+        if [[ ! -f "$bundled_dependency" ]]; then
+            echo "Expected bundled runtime dependency is missing: $bundled_dependency" >&2
+            exit 1
+        fi
+
+        install_name_tool -change "$dependency" "@rpath/$dependency_name" "$binary"
+    done < <(dylib_dependencies "$binary")
+}
+
+bundle_runtime_dependencies() {
+    local binary="$1"
+    local frameworks_dir="$2"
+    local binary_name
+    local dependency
+    local dependency_name
+    local bundled_dependency
+
+    binary_name="$(basename "$binary")"
+    while IFS= read -r dependency; do
+        if [[ -z "$dependency" ]] || is_system_dylib_dependency "$dependency"; then
+            continue
+        fi
+
+        if [[ ! -f "$dependency" ]]; then
+            echo "Runtime dependency is missing: $dependency" >&2
+            exit 1
+        fi
+
+        dependency_name="$(basename "$dependency")"
+        if [[ "$dependency_name" == "$binary_name" ]]; then
+            continue
+        fi
+
+        bundled_dependency="$frameworks_dir/$dependency_name"
+
+        if [[ "$dependency" != "$bundled_dependency" ]]; then
+            cp "$dependency" "$bundled_dependency"
+            chmod u+w "$bundled_dependency"
+        fi
+
+        bundle_runtime_dependencies "$bundled_dependency" "$frameworks_dir"
+        rewrite_dependency_load_paths "$bundled_dependency" "$frameworks_dir"
+        install_name_tool -id "@rpath/$dependency_name" "$bundled_dependency"
+        codesign_dylib "$bundled_dependency"
+    done < <(dylib_dependencies "$binary")
+
+    rewrite_dependency_load_paths "$binary" "$frameworks_dir"
+}
+
+copy_prepared_runtime_dependencies() {
+    local source_dir="$1"
+    local frameworks_dir="$2"
+    local dependency
+    local dependency_name
+    local copied_dependency
+
+    for dependency in "$source_dir"/*.dylib; do
+        if [[ ! -f "$dependency" ]]; then
+            continue
+        fi
+
+        dependency_name="$(basename "$dependency")"
+        case "$dependency_name" in
+            libvicemac*.dylib)
+                continue
+                ;;
+        esac
+
+        copied_dependency="$frameworks_dir/$dependency_name"
+        cp "$dependency" "$copied_dependency"
+        chmod u+w "$copied_dependency"
+        codesign_dylib "$copied_dependency"
+    done
+}
+
 for machine_target in "${MACHINE_TARGETS[@]}"; do
     dylib_name="libvicemac${machine_target}.dylib"
     dylib_path="$PRODUCTS_DIR/$dylib_name"
@@ -220,11 +336,15 @@ for machine_target in "${MACHINE_TARGETS[@]}"; do
     dylib_command="${link_command/ -o $machine_target / -dynamiclib -install_name @rpath\/$dylib_name -o $dylib_path }"
     (cd "$BUILD_DIR/src" && eval "$dylib_command")
 
+    bundle_runtime_dependencies "$dylib_path" "$PRODUCTS_DIR"
     codesign_dylib "$dylib_path"
 
     if [[ -n "${TARGET_BUILD_DIR:-}" && -n "${FRAMEWORKS_FOLDER_PATH:-}" ]]; then
         mkdir -p "$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH"
         cp "$dylib_path" "$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH/$dylib_name"
+        copy_prepared_runtime_dependencies "$PRODUCTS_DIR" "$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH"
+        bundle_runtime_dependencies "$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH/$dylib_name" \
+            "$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH"
         codesign_dylib "$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH/$dylib_name"
     fi
 done
