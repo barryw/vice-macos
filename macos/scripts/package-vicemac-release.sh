@@ -126,13 +126,16 @@ append_existing_keychain() {
         return
     fi
 
-    for existing_keychain in "${KEYCHAIN_SEARCH_LIST[@]}"; do
-        if [[ "$existing_keychain" == "$keychain" ]]; then
-            return
-        fi
-    done
+    if [[ "${KEYCHAIN_SEARCH_LIST_COUNT:-0}" -gt 0 ]]; then
+        for existing_keychain in "${KEYCHAIN_SEARCH_LIST[@]}"; do
+            if [[ "$existing_keychain" == "$keychain" ]]; then
+                return
+            fi
+        done
+    fi
 
-    KEYCHAIN_SEARCH_LIST+=("$keychain")
+    KEYCHAIN_SEARCH_LIST[$KEYCHAIN_SEARCH_LIST_COUNT]="$keychain"
+    KEYCHAIN_SEARCH_LIST_COUNT=$((KEYCHAIN_SEARCH_LIST_COUNT + 1))
 }
 
 current_user_home() {
@@ -162,6 +165,7 @@ collect_codesign_keychains() {
     fi
 
     KEYCHAIN_SEARCH_LIST=()
+    KEYCHAIN_SEARCH_LIST_COUNT=0
 
     if [[ -n "$CODE_SIGN_KEYCHAIN" ]]; then
         append_existing_keychain "$CODE_SIGN_KEYCHAIN"
@@ -186,7 +190,7 @@ collect_codesign_keychains() {
         append_existing_keychain "$existing_keychain"
     done < <(security list-keychains -d user 2>/dev/null || true)
 
-    if [[ "${#KEYCHAIN_SEARCH_LIST[@]}" -eq 0 ]]; then
+    if [[ "$KEYCHAIN_SEARCH_LIST_COUNT" -eq 0 ]]; then
         echo "No user keychains were found for codesigning." >&2
     fi
 }
@@ -207,10 +211,12 @@ verify_codesign_identity_available() {
         return
     fi
 
-    for keychain in "${KEYCHAIN_SEARCH_LIST[@]}"; do
-        keychain_identities="$(security find-identity -v -p codesigning "$keychain" 2>&1 || true)"
-        keychain_identity_reports+=$'\n'"$keychain:"$'\n'"$keychain_identities"$'\n'
-    done
+    if [[ "${KEYCHAIN_SEARCH_LIST_COUNT:-0}" -gt 0 ]]; then
+        for keychain in "${KEYCHAIN_SEARCH_LIST[@]}"; do
+            keychain_identities="$(security find-identity -v -p codesigning "$keychain" 2>&1 || true)"
+            keychain_identity_reports+=$'\n'"$keychain:"$'\n'"$keychain_identities"$'\n'
+        done
+    fi
 
     echo "Configured codesign identity is not visible to this process." >&2
     echo "User keychain search list:" >&2
