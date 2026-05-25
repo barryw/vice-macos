@@ -26,6 +26,14 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
     exit 1
 fi
 
+metal_toolchain_installed() {
+    xcodebuild -showComponent MetalToolchain 2>/dev/null | grep -q '^Status: installed$'
+}
+
+if [[ "${VICE_MAC_INSTALL_METAL_TOOLCHAIN:-1}" == "1" ]] && ! metal_toolchain_installed; then
+    xcodebuild -downloadComponent MetalToolchain
+fi
+
 if [[ "${VICE_MAC_CI_FETCH_UPSTREAM:-1}" == "1" ]]; then
     if ! git -C "$REPO_ROOT" remote get-url upstream >/dev/null 2>&1; then
         git -C "$REPO_ROOT" remote add upstream https://github.com/VICE-Team/svn-mirror.git

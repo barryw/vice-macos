@@ -49,6 +49,15 @@ macos/scripts/package-vicemac-release.sh
 The DMG and `SHA256SUMS.txt` are written to `macos/dist`. The release DMG
 contains one app per machine: `x64sc.app`, `xvic.app`, `xpet.app`,
 `xplus4.app`, `xc16.app`, `xc232.app`, `xv364.app`, and `x128.app`.
+With current Xcode releases, install the separate Metal toolchain first:
+
+```sh
+xcodebuild -downloadComponent MetalToolchain
+```
+
+The package script auto-detects the installed Metal toolchain. Set
+`VICE_MAC_XCODE_TOOLCHAIN` to override it, or
+`VICE_MAC_AUTO_METAL_TOOLCHAIN=0` to use Xcode's default toolchain behavior.
 
 For a signed and notarized release, provide a Developer ID Application identity
 and notarytool credentials:
@@ -81,6 +90,8 @@ The `.woodpecker/metal-ui.yaml` workflow runs on the `macos/native-metal`
 branch and expects a macOS Apple Silicon Woodpecker agent using the local
 backend, with the latest Xcode selected and `dos2unix` plus GitHub CLI `gh`
 installed.
+The prepare step downloads the Xcode Metal Toolchain component when it is not
+already installed.
 
 Push builds on `macos/native-metal` build, test, package, and publish a GitHub
 Release named `vice-mac-<VICE version>-<git sha>-1`. Tags matching

@@ -9,6 +9,7 @@ DERIVED_DATA="${VICE_MAC_RELEASE_DERIVED_DATA:-/private/tmp/vice-macos-release-d
 DIST_DIR="${VICE_MAC_DIST_DIR:-$MACOS_DIR/dist}"
 CONFIGURATION="${VICE_MAC_RELEASE_CONFIGURATION:-Release}"
 DESTINATION="${VICE_MAC_RELEASE_DESTINATION:-platform=macOS,arch=arm64}"
+XCODE_TOOLCHAIN="${VICE_MAC_XCODE_TOOLCHAIN:-}"
 CODE_SIGN_IDENTITY="${VICE_MAC_CODESIGN_IDENTITY:-}"
 DEVELOPMENT_TEAM="${VICE_MAC_DEVELOPMENT_TEAM:-}"
 NOTARIZE_MODE="${VICE_MAC_NOTARIZE:-auto}"
@@ -143,6 +144,32 @@ configure_xcodebuild_settings() {
     fi
 }
 
+detect_metal_toolchain() {
+    local component_info
+    local status
+    local identifier
+
+    component_info="$(xcodebuild -showComponent MetalToolchain 2>/dev/null || true)"
+    status="$(printf '%s\n' "$component_info" | sed -n 's/^Status: //p' | head -n 1)"
+    identifier="$(printf '%s\n' "$component_info" | sed -n 's/^Toolchain Identifier: //p' | head -n 1)"
+
+    if [[ "$status" == "installed" && -n "$identifier" ]]; then
+        echo "$identifier"
+    fi
+}
+
+configure_xcodebuild_args() {
+    XCODEBUILD_ARGS=()
+
+    if [[ -z "$XCODE_TOOLCHAIN" && "${VICE_MAC_AUTO_METAL_TOOLCHAIN:-1}" != "0" ]]; then
+        XCODE_TOOLCHAIN="$(detect_metal_toolchain)"
+    fi
+
+    if [[ -n "$XCODE_TOOLCHAIN" ]]; then
+        XCODEBUILD_ARGS+=("-toolchain" "$XCODE_TOOLCHAIN")
+    fi
+}
+
 copy_release_apps() {
     local products_dir="$1"
     local stage_dir="$2"
@@ -247,12 +274,14 @@ elif codesigning_enabled; then
 fi
 
 configure_xcodebuild_settings
+configure_xcodebuild_args
 
 rm -rf "$DIST_DIR"
 mkdir -p "$DIST_DIR"
 
 for scheme in "${SCHEMES[@]}"; do
     xcodebuild \
+        "${XCODEBUILD_ARGS[@]}" \
         -project "$PROJECT" \
         -scheme "$scheme" \
         -configuration "$CONFIGURATION" \
