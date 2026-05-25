@@ -222,6 +222,7 @@ configure_codesign_default_keychain() {
     for keychain in "${KEYCHAIN_SEARCH_LIST[@]}"; do
         keychain_identities="$(security find-identity -v -p codesigning "$keychain" 2>&1 || true)"
         if codesign_identity_visible "$keychain_identities"; then
+            security list-keychains -d user -s "${KEYCHAIN_SEARCH_LIST[@]}"
             security default-keychain -d user -s "$keychain"
             return
         fi
