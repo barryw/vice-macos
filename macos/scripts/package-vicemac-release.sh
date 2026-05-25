@@ -106,32 +106,122 @@ codesigning_enabled() {
     [[ -n "$CODE_SIGN_IDENTITY" && "$CODE_SIGN_IDENTITY" != "-" ]]
 }
 
-configure_codesign_keychain_search_list() {
-    local login_keychain
+trim_keychain_path() {
+    local keychain="$1"
+
+    keychain="${keychain//\"/}"
+    keychain="${keychain#"${keychain%%[![:space:]]*}"}"
+    keychain="${keychain%"${keychain##*[![:space:]]}"}"
+    keychain="${keychain/#\~\//$HOME/}"
+
+    echo "$keychain"
+}
+
+append_existing_keychain() {
+    local keychain="$1"
     local existing_keychain
-    local keychains
 
-    if ! codesigning_enabled || [[ -n "$CODE_SIGN_KEYCHAIN" ]]; then
+    keychain="$(trim_keychain_path "$keychain")"
+    if [[ -z "$keychain" || ! -f "$keychain" ]]; then
         return
     fi
 
-    login_keychain="${VICE_MAC_CODESIGN_LOGIN_KEYCHAIN:-$HOME/Library/Keychains/login.keychain-db}"
-    if [[ ! -f "$login_keychain" ]]; then
-        return
-    fi
-
-    keychains=("$login_keychain")
-    while IFS= read -r existing_keychain; do
-        existing_keychain="${existing_keychain//\"/}"
-        existing_keychain="${existing_keychain#"${existing_keychain%%[![:space:]]*}"}"
-        existing_keychain="${existing_keychain%"${existing_keychain##*[![:space:]]}"}"
-
-        if [[ -n "$existing_keychain" && "$existing_keychain" != "$login_keychain" ]]; then
-            keychains+=("$existing_keychain")
+    for existing_keychain in "${KEYCHAIN_SEARCH_LIST[@]}"; do
+        if [[ "$existing_keychain" == "$keychain" ]]; then
+            return
         fi
+    done
+
+    KEYCHAIN_SEARCH_LIST+=("$keychain")
+}
+
+current_user_home() {
+    local user_name
+    local user_home
+
+    user_name="$(id -un 2>/dev/null || true)"
+    if [[ -n "$user_name" ]]; then
+        user_home="$(dscl . -read "/Users/$user_name" NFSHomeDirectory 2>/dev/null | sed -n 's/^NFSHomeDirectory: //p' | head -n 1)"
+        if [[ -n "$user_home" ]]; then
+            echo "$user_home"
+            return
+        fi
+    fi
+
+    echo "$HOME"
+}
+
+collect_codesign_keychains() {
+    local default_keychain
+    local existing_keychain
+    local login_keychain
+    local user_home
+
+    if ! codesigning_enabled; then
+        return
+    fi
+
+    KEYCHAIN_SEARCH_LIST=()
+
+    if [[ -n "$CODE_SIGN_KEYCHAIN" ]]; then
+        append_existing_keychain "$CODE_SIGN_KEYCHAIN"
+    fi
+
+    if [[ -n "${VICE_MAC_CODESIGN_LOGIN_KEYCHAIN:-}" ]]; then
+        append_existing_keychain "$VICE_MAC_CODESIGN_LOGIN_KEYCHAIN"
+    fi
+
+    login_keychain="$(security login-keychain -d user 2>/dev/null || true)"
+    append_existing_keychain "$login_keychain"
+
+    default_keychain="$(security default-keychain -d user 2>/dev/null || true)"
+    append_existing_keychain "$default_keychain"
+
+    append_existing_keychain "$HOME/Library/Keychains/login.keychain-db"
+
+    user_home="$(current_user_home)"
+    append_existing_keychain "$user_home/Library/Keychains/login.keychain-db"
+
+    while IFS= read -r existing_keychain; do
+        append_existing_keychain "$existing_keychain"
     done < <(security list-keychains -d user 2>/dev/null || true)
 
-    security list-keychains -d user -s "${keychains[@]}" >/dev/null 2>&1 || true
+    if [[ "${#KEYCHAIN_SEARCH_LIST[@]}" -eq 0 ]]; then
+        echo "No user keychains were found for codesigning." >&2
+    fi
+}
+
+verify_codesign_identity_available() {
+    local identities
+    local keychain
+    local keychain_identities
+    local keychain_identity_reports=""
+
+    if ! codesigning_enabled; then
+        return
+    fi
+
+    identities="$(security find-identity -v -p codesigning 2>&1 || true)"
+
+    if printf '%s\n' "$identities" | grep -Fq "$CODE_SIGN_IDENTITY"; then
+        return
+    fi
+
+    for keychain in "${KEYCHAIN_SEARCH_LIST[@]}"; do
+        keychain_identities="$(security find-identity -v -p codesigning "$keychain" 2>&1 || true)"
+        keychain_identity_reports+=$'\n'"$keychain:"$'\n'"$keychain_identities"$'\n'
+    done
+
+    echo "Configured codesign identity is not visible to this process." >&2
+    echo "User keychain search list:" >&2
+    security list-keychains -d user >&2 || true
+    echo "Visible codesigning identities:" >&2
+    printf '%s\n' "$identities" >&2
+    if [[ -n "$keychain_identity_reports" ]]; then
+        echo "Codesigning identities by keychain:" >&2
+        printf '%s' "$keychain_identity_reports" >&2
+    fi
+    exit 1
 }
 
 configure_notarytool_args() {
@@ -316,7 +406,8 @@ elif codesigning_enabled; then
     require_tool codesign "codesign ships with macOS."
 fi
 
-configure_codesign_keychain_search_list
+collect_codesign_keychains
+verify_codesign_identity_available
 configure_xcodebuild_settings
 configure_xcodebuild_args
 
