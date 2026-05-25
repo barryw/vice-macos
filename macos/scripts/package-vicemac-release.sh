@@ -151,7 +151,21 @@ current_user_home() {
         fi
     fi
 
+    if [[ -n "$user_name" && -d "/Users/$user_name" ]]; then
+        echo "/Users/$user_name"
+        return
+    fi
+
     echo "$HOME"
+}
+
+configure_user_home() {
+    local user_home
+
+    user_home="$(current_user_home)"
+    if [[ -n "$user_home" && -d "$user_home" ]]; then
+        export HOME="$user_home"
+    fi
 }
 
 collect_codesign_keychains() {
@@ -446,6 +460,7 @@ elif codesigning_enabled; then
     require_tool codesign "codesign ships with macOS."
 fi
 
+configure_user_home
 collect_codesign_keychains
 configure_codesign_default_keychain
 verify_codesign_identity_available
