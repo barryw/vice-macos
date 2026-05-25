@@ -50,6 +50,31 @@ The DMG and `SHA256SUMS.txt` are written to `macos/dist`. The release DMG
 contains one app per machine: `x64sc.app`, `xvic.app`, `xpet.app`,
 `xplus4.app`, `xc16.app`, `xc232.app`, `xv364.app`, and `x128.app`.
 
+For a signed and notarized release, provide a Developer ID Application identity
+and notarytool credentials:
+
+```sh
+VICE_MAC_CODESIGN_IDENTITY="Developer ID Application: Example Name (TEAMID)" \
+VICE_MAC_DEVELOPMENT_TEAM="TEAMID" \
+VICE_MAC_NOTARYTOOL_PROFILE="vice-mac-notary" \
+macos/scripts/package-vicemac-release.sh
+```
+
+Create the notarytool profile on the release machine with:
+
+```sh
+xcrun notarytool store-credentials vice-mac-notary \
+  --apple-id you@example.com \
+  --team-id TEAMID \
+  --password APP_SPECIFIC_PASSWORD
+```
+
+When notarization is enabled, the script signs the apps and DMG, submits the
+DMG to Apple, staples the ticket, validates it, and then writes checksums.
+Set `VICE_MAC_NOTARIZE=0` to sign without notarizing, or use
+`VICE_MAC_NOTARYTOOL_APPLE_ID`, `VICE_MAC_NOTARYTOOL_PASSWORD`, and
+`VICE_MAC_NOTARYTOOL_TEAM_ID` instead of a stored profile.
+
 ## Woodpecker CI
 
 The `.woodpecker/metal-ui.yaml` workflow runs on the `macos/native-metal`
@@ -61,3 +86,9 @@ Push builds on `macos/native-metal` build, test, package, and publish a GitHub
 Release named `vice-mac-<VICE version>-<git sha>-1`. Tags matching
 `vice-mac-*` also package and publish a release for that tag. The pipeline
 requires the `github_token` secret.
+
+Notarized release builds also require `apple_codesign_identity` and
+`apple_development_team`. Provide either `apple_notarytool_profile`, when the
+runner keychain already stores the notarytool profile, or both
+`apple_notarytool_apple_id` and `apple_notarytool_password`. The notarytool
+team defaults to `apple_development_team`.
