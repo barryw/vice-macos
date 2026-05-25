@@ -30,10 +30,6 @@ steps:
         from_secret: apple_development_team
       VICE_MAC_NOTARYTOOL_PROFILE:
         from_secret: apple_notarytool_profile
-      VICE_MAC_NOTARYTOOL_APPLE_ID:
-        from_secret: apple_notarytool_apple_id
-      VICE_MAC_NOTARYTOOL_PASSWORD:
-        from_secret: apple_notarytool_password
     commands:
       - macos/scripts/package-vicemac-release.sh
     when:
