@@ -37,6 +37,20 @@
 		<dict>
 			<key>CFBundleTypeExtensions</key>
 			<array>
+				<string>prg</string>
+				<string>t64</string>
+				<string>tap</string>
+			</array>
+			<key>CFBundleTypeName</key>
+			<string>Commodore Program or Tape Media</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+		</dict>
+		<dict>
+			<key>CFBundleTypeExtensions</key>
+			<array>
 				<string>crt</string>
 			</array>
 			<key>CFBundleTypeName</key>

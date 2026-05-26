@@ -261,8 +261,11 @@ final class ModelConfigurationTests: XCTestCase {
         XCTAssertTrue(DriveType.c1571.supportsDiskImage(url: URL(fileURLWithPath: "/tmp/demo.d71")))
     }
 
-    func testMediaFileClassifiesDiskAndCartridgeImages() {
+    func testMediaFileClassifiesSupportedMedia() {
         XCTAssertEqual(EmulatorMediaFile(url: URL(fileURLWithPath: "/tmp/demo.d64")), .disk(.d64))
+        XCTAssertEqual(EmulatorMediaFile(url: URL(fileURLWithPath: "/tmp/demo.prg")), .autostart(.prg))
+        XCTAssertEqual(EmulatorMediaFile(url: URL(fileURLWithPath: "/tmp/demo.t64")), .autostart(.t64))
+        XCTAssertEqual(EmulatorMediaFile(url: URL(fileURLWithPath: "/tmp/demo.tap")), .autostart(.tap))
         XCTAssertEqual(EmulatorMediaFile(url: URL(fileURLWithPath: "/tmp/demo.crt")), .cartridge(.crt))
         XCTAssertEqual(EmulatorMediaFile(url: URL(fileURLWithPath: "/tmp/demo.vsf")), .snapshot(.vsf))
         XCTAssertNil(EmulatorMediaFile(url: URL(fileURLWithPath: "/tmp/demo.txt")))
@@ -273,9 +276,14 @@ final class ModelConfigurationTests: XCTestCase {
         let petExtensions = EmulatorMediaFile.supportedFilenameExtensions(for: .xpet)
 
         XCTAssertTrue(c64Extensions.contains("d64"))
+        XCTAssertTrue(c64Extensions.contains("prg"))
+        XCTAssertTrue(c64Extensions.contains("t64"))
+        XCTAssertTrue(c64Extensions.contains("tap"))
         XCTAssertTrue(c64Extensions.contains("crt"))
         XCTAssertTrue(c64Extensions.contains("vsf"))
         XCTAssertTrue(petExtensions.contains("d80"))
+        XCTAssertTrue(petExtensions.contains("prg"))
+        XCTAssertTrue(petExtensions.contains("tap"))
         XCTAssertTrue(petExtensions.contains("vsf"))
         XCTAssertFalse(petExtensions.contains("crt"))
     }

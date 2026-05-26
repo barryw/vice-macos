@@ -35,6 +35,7 @@ typedef int (*ViceQueueDriveAttachDiskFunction)(uint32_t unit,
                                                 const char *path,
                                                 int autorun);
 typedef int (*ViceQueueDriveSoundPreviewFunction)(uint32_t unit);
+typedef int (*ViceQueueMediaAutostartFunction)(const char *path, int autorun);
 typedef int (*ViceQueueCartridgeAttachFunction)(const char *path);
 typedef int (*ViceQueueCartridgeDetachFunction)(void);
 typedef int (*ViceSaveSnapshotFunction)(const char *path, int save_roms, int save_disks);
@@ -70,6 +71,7 @@ typedef struct ViceEngineSymbols {
     ViceQueueDriveResetFunction queueDriveReset;
     ViceQueueDriveAttachDiskFunction queueDriveAttachDisk;
     ViceQueueDriveSoundPreviewFunction queueDriveSoundPreview;
+    ViceQueueMediaAutostartFunction queueMediaAutostart;
     ViceQueueCartridgeAttachFunction queueCartridgeAttach;
     ViceQueueCartridgeDetachFunction queueCartridgeDetach;
     ViceSaveSnapshotFunction saveSnapshot;
@@ -234,6 +236,7 @@ static int loadRuntimeSymbols(void *handle, ViceEngineSymbols *symbols)
     LOAD_RUNTIME_SYMBOL(queueDriveReset, "vicemac_queue_drive_reset");
     LOAD_RUNTIME_SYMBOL(queueDriveAttachDisk, "vicemac_queue_drive_attach_disk");
     LOAD_RUNTIME_SYMBOL(queueDriveSoundPreview, "vicemac_queue_drive_sound_preview");
+    LOAD_RUNTIME_SYMBOL(queueMediaAutostart, "vicemac_queue_media_autostart");
     LOAD_RUNTIME_SYMBOL(queueCartridgeAttach, "vicemac_queue_cartridge_attach");
     LOAD_RUNTIME_SYMBOL(queueCartridgeDetach, "vicemac_queue_cartridge_detach");
     LOAD_RUNTIME_SYMBOL(saveSnapshot, "vicemac_save_snapshot");
@@ -495,6 +498,15 @@ bool ViceEnginePreviewDriveSound(uint32_t unit)
     }
 
     return runtimeSymbols.queueDriveSoundPreview(unit) != 0;
+}
+
+bool ViceEngineAutostartMedia(const char *path, bool autorun)
+{
+    if (!atomic_load(&engineRunning) || runtimeSymbols.queueMediaAutostart == NULL) {
+        return false;
+    }
+
+    return runtimeSymbols.queueMediaAutostart(path, autorun ? 1 : 0) != 0;
 }
 
 bool ViceEngineAttachCartridge(const char *path)

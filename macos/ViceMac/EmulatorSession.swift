@@ -1562,6 +1562,8 @@ final class EmulatorSession: ObservableObject {
             return attachDiskToFirstCompatibleDrive(url: url,
                                                     diskImageType: diskImageType,
                                                     autorun: autorun)
+        case .autostart:
+            return autostartMedia(url: url, autorun: autorun)
         case .cartridge:
             return attachCartridge(url: url)
         case .snapshot:
@@ -1616,6 +1618,24 @@ final class EmulatorSession: ObservableObject {
         }
 
         return didAttach
+    }
+
+    @discardableResult
+    func autostartMedia(url: URL, autorun: Bool) -> Bool {
+        let didStart = url.path.withCString { path in
+            ViceEngineAutostartMedia(path, autorun)
+        }
+
+        if didStart {
+            rememberMedia(url)
+            statusText = autorun
+                ? "\(url.lastPathComponent) started"
+                : "\(url.lastPathComponent) loading"
+        } else {
+            statusText = "Unable to open \(url.lastPathComponent)"
+        }
+
+        return didStart
     }
 
     func setROMImage(_ image: MachineROMSlot, path: String?) {

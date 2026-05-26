@@ -44,6 +44,7 @@
 #define VICEMAC_JOYSTICK_QUEUE_CAPACITY 256
 #define VICEMAC_MACHINE_COMMAND_QUEUE_CAPACITY 64
 #define VICEMAC_DRIVE_COMMAND_QUEUE_CAPACITY 64
+#define VICEMAC_MEDIA_COMMAND_QUEUE_CAPACITY 32
 #define VICEMAC_CARTRIDGE_COMMAND_QUEUE_CAPACITY 16
 #define VICEMAC_MEMORY_REQUEST_QUEUE_CAPACITY 64
 #define VICEMAC_SNAPSHOT_REQUEST_QUEUE_CAPACITY 8
@@ -61,6 +62,10 @@ typedef enum vicemac_drive_command_type_e {
     VICEMAC_DRIVE_COMMAND_ATTACH_DISK,
     VICEMAC_DRIVE_COMMAND_PREVIEW_SOUND
 } vicemac_drive_command_type_t;
+
+typedef enum vicemac_media_command_type_e {
+    VICEMAC_MEDIA_COMMAND_AUTOSTART
+} vicemac_media_command_type_t;
 
 typedef enum vicemac_cartridge_command_type_e {
     VICEMAC_CARTRIDGE_COMMAND_ATTACH,
@@ -115,6 +120,12 @@ typedef struct vicemac_drive_command_s {
     int autorun;
     char path[VICEMAC_PATH_CAPACITY];
 } vicemac_drive_command_t;
+
+typedef struct vicemac_media_command_s {
+    vicemac_media_command_type_t type;
+    int autorun;
+    char path[VICEMAC_PATH_CAPACITY];
+} vicemac_media_command_t;
 
 typedef struct vicemac_cartridge_command_s {
     vicemac_cartridge_command_type_t type;
@@ -181,6 +192,10 @@ static pthread_mutex_t drive_command_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 static vicemac_drive_command_t drive_command_queue[VICEMAC_DRIVE_COMMAND_QUEUE_CAPACITY];
 static unsigned int drive_command_queue_read = 0;
 static unsigned int drive_command_queue_write = 0;
+static pthread_mutex_t media_command_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
+static vicemac_media_command_t media_command_queue[VICEMAC_MEDIA_COMMAND_QUEUE_CAPACITY];
+static unsigned int media_command_queue_read = 0;
+static unsigned int media_command_queue_write = 0;
 static pthread_mutex_t cartridge_command_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 static vicemac_cartridge_command_t cartridge_command_queue[VICEMAC_CARTRIDGE_COMMAND_QUEUE_CAPACITY];
 static unsigned int cartridge_command_queue_read = 0;
@@ -808,6 +823,28 @@ int vicemac_queue_drive_sound_preview(uint32_t unit)
                               &command);
 }
 
+int vicemac_queue_media_autostart(const char *path, int autorun)
+{
+    vicemac_media_command_t command;
+
+    if (path == 0 || path[0] == '\0') {
+        return 0;
+    }
+
+    memset(&command, 0, sizeof(command));
+    command.type = VICEMAC_MEDIA_COMMAND_AUTOSTART;
+    command.autorun = autorun ? 1 : 0;
+    vicemac_copy_cstring(command.path, sizeof(command.path), path);
+
+    return vicemac_queue_push(&media_command_queue_mutex,
+                              media_command_queue,
+                              sizeof(media_command_queue[0]),
+                              VICEMAC_MEDIA_COMMAND_QUEUE_CAPACITY,
+                              &media_command_queue_read,
+                              &media_command_queue_write,
+                              &command);
+}
+
 int vicemac_queue_cartridge_attach(const char *path)
 {
     vicemac_cartridge_command_t command;
@@ -1106,6 +1143,17 @@ static int vicemac_pop_drive_command(vicemac_drive_command_t *command)
                              command);
 }
 
+static int vicemac_pop_media_command(vicemac_media_command_t *command)
+{
+    return vicemac_queue_pop(&media_command_queue_mutex,
+                             media_command_queue,
+                             sizeof(media_command_queue[0]),
+                             VICEMAC_MEDIA_COMMAND_QUEUE_CAPACITY,
+                             &media_command_queue_read,
+                             &media_command_queue_write,
+                             command);
+}
+
 static int vicemac_pop_cartridge_command(vicemac_cartridge_command_t *command)
 {
     return vicemac_queue_pop(&cartridge_command_queue_mutex,
@@ -1385,6 +1433,27 @@ static void vicemac_dispatch_queued_drive_commands(void)
     }
 }
 
+static void vicemac_dispatch_media_command(vicemac_media_command_t *command)
+{
+    switch (command->type) {
+        case VICEMAC_MEDIA_COMMAND_AUTOSTART:
+            (void)autostart_autodetect(command->path,
+                                       0,
+                                       0,
+                                       command->autorun ? AUTOSTART_MODE_RUN : AUTOSTART_MODE_LOAD);
+            break;
+    }
+}
+
+static void vicemac_dispatch_queued_media_commands(void)
+{
+    vicemac_media_command_t command;
+
+    while (vicemac_pop_media_command(&command)) {
+        vicemac_dispatch_media_command(&command);
+    }
+}
+
 static void vicemac_dispatch_cartridge_command(vicemac_cartridge_command_t *command)
 {
     switch (command->type) {
@@ -1416,6 +1485,7 @@ void vicemac_dispatch_queued_events(void)
     vicemac_dispatch_queued_snapshot_requests();
     vicemac_dispatch_queued_cartridge_commands();
     vicemac_dispatch_queued_drive_commands();
+    vicemac_dispatch_queued_media_commands();
     vicemac_dispatch_queued_joystick_events();
     vicemac_dispatch_queued_input();
 }

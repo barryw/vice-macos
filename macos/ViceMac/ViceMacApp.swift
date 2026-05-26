@@ -506,7 +506,7 @@ private enum MediaOpenPanel {
     static func openMedia(for emulator: EmulatorSession, autorun: Bool) {
         let extensions = EmulatorMediaFile.supportedFilenameExtensions(for: emulator.machine)
         let panel = openPanel(title: autorun ? "Open and Run Media" : "Open Media",
-                              message: "Choose disk or cartridge media for \(emulator.machineDisplayName).",
+                              message: "Choose media for \(emulator.machineDisplayName).",
                               prompt: autorun ? "Open and Run" : "Open",
                               filenameExtensions: extensions)
 

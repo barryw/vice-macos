@@ -82,6 +82,7 @@ bool ViceEngineSetWarpMode(bool enabled);
 bool ViceEngineResetDrive(uint32_t unit);
 bool ViceEngineAttachDisk(uint32_t unit, uint32_t drive, const char *path, bool autorun);
 bool ViceEnginePreviewDriveSound(uint32_t unit);
+bool ViceEngineAutostartMedia(const char *path, bool autorun);
 bool ViceEngineAttachCartridge(const char *path);
 bool ViceEngineDetachCartridge(void);
 bool ViceEngineSaveSnapshot(const char *path, bool saveROMs, bool saveDisks);

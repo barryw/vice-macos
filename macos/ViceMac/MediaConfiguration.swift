@@ -2,6 +2,7 @@ import Foundation
 
 enum EmulatorMediaFile: Equatable {
     case disk(DiskImageFileType)
+    case autostart(AutostartMediaFileType)
     case cartridge(CartridgeImageFileType)
     case snapshot(SnapshotFileType)
 
@@ -13,6 +14,11 @@ enum EmulatorMediaFile: Equatable {
 
         if let diskImageType = DiskImageFileType(url: url) {
             self = .disk(diskImageType)
+            return
+        }
+
+        if let autostartMediaType = AutostartMediaFileType(url: url) {
+            self = .autostart(autostartMediaType)
             return
         }
 
@@ -28,6 +34,8 @@ enum EmulatorMediaFile: Equatable {
         switch self {
         case let .disk(type):
             return "\(type.title) disk image"
+        case let .autostart(type):
+            return type.title
         case let .cartridge(type):
             return "\(type.title) cartridge"
         case let .snapshot(type):
@@ -40,12 +48,36 @@ enum EmulatorMediaFile: Equatable {
             .flatMap(\.supportedDiskImageTypes)
             .map(\.rawValue))
 
+        extensions.formUnion(AutostartMediaFileType.allCases.map(\.rawValue))
         if machine.capabilities.supportsCartridges {
             extensions.formUnion(CartridgeImageFileType.allCases.map(\.rawValue))
         }
         extensions.formUnion(SnapshotFileType.allCases.map(\.rawValue))
 
         return extensions.sorted()
+    }
+}
+
+enum AutostartMediaFileType: String, CaseIterable, Identifiable {
+    case prg
+    case t64
+    case tap
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .prg:
+            return "PRG program"
+        case .t64:
+            return "T64 tape archive"
+        case .tap:
+            return "TAP tape image"
+        }
+    }
+
+    init?(url: URL) {
+        self.init(rawValue: url.pathExtension.lowercased())
     }
 }
 
