@@ -15,6 +15,7 @@ CODE_SIGN_KEYCHAIN="${VICE_MAC_CODESIGN_KEYCHAIN:-}"
 DEVELOPMENT_TEAM="${VICE_MAC_DEVELOPMENT_TEAM:-}"
 NOTARIZE_MODE="${VICE_MAC_NOTARIZE:-auto}"
 NOTARYTOOL_PROFILE="${VICE_MAC_NOTARYTOOL_PROFILE:-}"
+NOTARYTOOL_KEYCHAIN="${VICE_MAC_NOTARYTOOL_KEYCHAIN:-}"
 NOTARYTOOL_APPLE_ID="${VICE_MAC_NOTARYTOOL_APPLE_ID:-}"
 NOTARYTOOL_PASSWORD="${VICE_MAC_NOTARYTOOL_PASSWORD:-}"
 NOTARYTOOL_TEAM_ID="${VICE_MAC_NOTARYTOOL_TEAM_ID:-$DEVELOPMENT_TEAM}"
@@ -368,6 +369,12 @@ configure_notarytool_args() {
 
     if [[ -n "$NOTARYTOOL_PROFILE" ]]; then
         NOTARYTOOL_ARGS=(--keychain-profile "$NOTARYTOOL_PROFILE")
+        local notarytool_keychain
+
+        notarytool_keychain="$(resolve_notarytool_keychain)"
+        if [[ -n "$notarytool_keychain" ]]; then
+            NOTARYTOOL_ARGS+=(--keychain "$notarytool_keychain")
+        fi
         return
     fi
 
@@ -383,6 +390,32 @@ configure_notarytool_args() {
     echo "Notarization is enabled, but notarytool credentials are incomplete." >&2
     echo "Set VICE_MAC_NOTARYTOOL_PROFILE or set VICE_MAC_NOTARYTOOL_APPLE_ID, VICE_MAC_NOTARYTOOL_PASSWORD, and VICE_MAC_NOTARYTOOL_TEAM_ID." >&2
     exit 1
+}
+
+resolve_notarytool_keychain() {
+    local keychain
+
+    if [[ -n "$NOTARYTOOL_KEYCHAIN" ]]; then
+        keychain="$(trim_keychain_path "$NOTARYTOOL_KEYCHAIN")"
+        if [[ ! -f "$keychain" ]]; then
+            echo "Configured notarytool keychain does not exist: $keychain" >&2
+            exit 1
+        fi
+        echo "$keychain"
+        return
+    fi
+
+    keychain="$(security login-keychain -d user 2>/dev/null || true)"
+    keychain="$(trim_keychain_path "$keychain")"
+    if [[ -f "$keychain" ]]; then
+        echo "$keychain"
+        return
+    fi
+
+    keychain="$HOME/Library/Keychains/login.keychain-db"
+    if [[ -f "$keychain" ]]; then
+        echo "$keychain"
+    fi
 }
 
 configure_xcodebuild_settings() {
