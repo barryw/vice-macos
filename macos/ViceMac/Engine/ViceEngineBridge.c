@@ -29,6 +29,7 @@ typedef int (*ViceQueuePauseFunction)(int paused);
 typedef int (*ViceQueueMachineModelFunction)(const char *model);
 typedef int (*ViceQueueMachineResetFunction)(uint32_t reset_mode);
 typedef int (*ViceQueueWarpModeFunction)(int enabled);
+typedef int (*ViceQueueQuitFunction)(void);
 typedef int (*ViceQueueDriveResetFunction)(uint32_t unit);
 typedef int (*ViceQueueDriveAttachDiskFunction)(uint32_t unit,
                                                 uint32_t drive,
@@ -69,6 +70,7 @@ typedef struct ViceEngineSymbols {
     ViceQueueMachineModelFunction queueMachineModel;
     ViceQueueMachineResetFunction queueMachineReset;
     ViceQueueWarpModeFunction queueWarpMode;
+    ViceQueueQuitFunction queueQuit;
     ViceQueueDriveResetFunction queueDriveReset;
     ViceQueueDriveAttachDiskFunction queueDriveAttachDisk;
     ViceQueueDriveDetachDiskFunction queueDriveDetachDisk;
@@ -235,6 +237,7 @@ static int loadRuntimeSymbols(void *handle, ViceEngineSymbols *symbols)
     LOAD_RUNTIME_SYMBOL(queueMachineModel, "vicemac_queue_machine_model");
     LOAD_RUNTIME_SYMBOL(queueMachineReset, "vicemac_queue_machine_reset");
     LOAD_RUNTIME_SYMBOL(queueWarpMode, "vicemac_queue_warp_mode");
+    LOAD_RUNTIME_SYMBOL(queueQuit, "vicemac_queue_quit");
     LOAD_RUNTIME_SYMBOL(queueDriveReset, "vicemac_queue_drive_reset");
     LOAD_RUNTIME_SYMBOL(queueDriveAttachDisk, "vicemac_queue_drive_attach_disk");
     LOAD_RUNTIME_SYMBOL(queueDriveDetachDisk, "vicemac_queue_drive_detach_disk");
@@ -384,6 +387,34 @@ const char *ViceEngineGetLastError(void)
 bool ViceEngineIsRunning(void)
 {
     return atomic_load(&engineRunning);
+}
+
+bool ViceEngineRequestQuit(void)
+{
+    bool queued = false;
+
+    if (!atomic_load(&engineRunning)) {
+        return true;
+    }
+
+    pthread_mutex_lock(&runtimeMutex);
+    if (runtimeHandle != NULL && runtimeSymbols.queueQuit != NULL) {
+        runtimeSymbols.setVideoFrameCallback(NULL, NULL);
+        runtimeSymbols.setDriveStatusCallback(NULL, NULL);
+        runtimeSymbols.setCartridgeStatusCallback(NULL, NULL);
+
+        videoFrameCallback = NULL;
+        videoFrameCallbackContext = NULL;
+        driveStatusCallback = NULL;
+        driveStatusCallbackContext = NULL;
+        cartridgeStatusCallback = NULL;
+        cartridgeStatusCallbackContext = NULL;
+
+        queued = runtimeSymbols.queueQuit() != 0;
+    }
+    pthread_mutex_unlock(&runtimeMutex);
+
+    return queued;
 }
 
 void ViceEngineSendKeyEvent(int64_t key, int32_t modifiers, bool pressed)

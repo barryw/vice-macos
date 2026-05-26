@@ -69,6 +69,7 @@ bool ViceEngineStartMachine(const char *machineID,
                             int32_t argc,
                             const char * const *argv);
 bool ViceEngineIsRunning(void);
+bool ViceEngineRequestQuit(void);
 void ViceEngineSendKeyEvent(int64_t key, int32_t modifiers, bool pressed);
 void ViceEngineReleaseAllKeys(void);
 bool ViceEngineFeedKeyboardText(const char *text);

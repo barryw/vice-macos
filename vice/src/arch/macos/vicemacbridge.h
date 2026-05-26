@@ -104,6 +104,7 @@ int vicemac_queue_pause(int paused);
 int vicemac_queue_machine_model(const char *model);
 int vicemac_queue_machine_reset(uint32_t reset_mode);
 int vicemac_queue_warp_mode(int enabled);
+int vicemac_queue_quit(void);
 int vicemac_queue_drive_reset(uint32_t unit);
 int vicemac_queue_drive_attach_disk(uint32_t unit,
                                     uint32_t drive,

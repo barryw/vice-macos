@@ -303,6 +303,7 @@ struct ViceMacApp: App {
 @MainActor
 private final class ViceMacAppDelegate: NSObject, NSApplicationDelegate {
     private var smokeTestSession: EmulatorSession?
+    private var didRequestEngineTermination = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard let configuration = ViceMacLaunchConfiguration.current.releaseSmokeTest else {
@@ -317,6 +318,28 @@ private final class ViceMacAppDelegate: NSObject, NSApplicationDelegate {
         Task { @MainActor [emulator] in
             await ReleaseSmokeTestRunner.run(configuration: configuration, emulator: emulator)
         }
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard ViceEngineIsRunning() else {
+            return .terminateNow
+        }
+
+        guard !didRequestEngineTermination else {
+            return .terminateLater
+        }
+
+        didRequestEngineTermination = true
+        if !ViceEngineRequestQuit() {
+            Darwin._exit(0)
+        }
+
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            Darwin._exit(0)
+        }
+
+        return .terminateLater
     }
 }
 

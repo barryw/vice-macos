@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "archdep.h"
 #include "attach.h"
 #include "autostart.h"
 #include "cartridge.h"
@@ -54,7 +55,8 @@
 typedef enum vicemac_machine_command_type_e {
     VICEMAC_MACHINE_COMMAND_PAUSE,
     VICEMAC_MACHINE_COMMAND_RESET,
-    VICEMAC_MACHINE_COMMAND_WARP
+    VICEMAC_MACHINE_COMMAND_WARP,
+    VICEMAC_MACHINE_COMMAND_QUIT
 } vicemac_machine_command_type_t;
 
 typedef enum vicemac_drive_command_type_e {
@@ -763,6 +765,11 @@ int vicemac_queue_warp_mode(int enabled)
                                          enabled ? 1 : 0);
 }
 
+int vicemac_queue_quit(void)
+{
+    return vicemac_queue_machine_command(VICEMAC_MACHINE_COMMAND_QUIT, 0);
+}
+
 int vicemac_queue_drive_reset(uint32_t unit)
 {
     vicemac_drive_command_t command;
@@ -1392,6 +1399,9 @@ static void vicemac_dispatch_machine_command(vicemac_machine_command_t *command)
             break;
         case VICEMAC_MACHINE_COMMAND_WARP:
             vsync_set_warp_mode(command->value);
+            break;
+        case VICEMAC_MACHINE_COMMAND_QUIT:
+            archdep_vice_exit(0);
             break;
     }
 }
