@@ -321,6 +321,8 @@ private final class ViceMacAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        WindowFrameRestoration.saveOpenWindowFrames()
+
         guard ViceEngineIsRunning() else {
             return .terminateNow
         }

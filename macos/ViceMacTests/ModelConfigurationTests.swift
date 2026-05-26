@@ -329,6 +329,14 @@ final class ModelConfigurationTests: XCTestCase {
         }
     }
 
+    func testWindowFrameAutosaveNamesAreMachineSpecific() {
+        let autosaveNames = Self.allMachines.map(\.mainWindowFrameAutosaveName)
+
+        XCTAssertEqual(Set(autosaveNames).count, Self.allMachines.count)
+        XCTAssertEqual(EmulatedMachine.x64sc.mainWindowFrameAutosaveName, "ViceMac.MainWindow.x64sc")
+        XCTAssertTrue(autosaveNames.allSatisfy { $0.hasPrefix("ViceMac.MainWindow.") })
+    }
+
     func testDisplayOutputFallsBackToDefault() {
         let machine = EmulatedMachine.x128
 

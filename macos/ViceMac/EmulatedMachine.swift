@@ -411,6 +411,10 @@ struct EmulatedMachine: Identifiable, Equatable {
         model.family
     }
 
+    var mainWindowFrameAutosaveName: String {
+        "ViceMac.MainWindow.\(id.rawValue)"
+    }
+
     var usesVIC20MemoryExpansion: Bool {
         model.usesVIC20MemoryStartupOption
     }

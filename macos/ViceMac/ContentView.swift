@@ -35,7 +35,8 @@ struct ContentView: View {
 
             WindowChromeObserver(isFullScreen: $isFullScreen,
                                  topChromeActive: $topChromeActive,
-                                 bottomChromeActive: $bottomChromeActive)
+                                 bottomChromeActive: $bottomChromeActive,
+                                 frameAutosaveName: emulator.machine.mainWindowFrameAutosaveName)
                 .allowsHitTesting(false)
         }
         .toolbar {
@@ -64,26 +65,15 @@ struct ContentView: View {
                 }
 
                 SoundToolbarControls()
+            }
 
-                VideoFilterPresetPicker()
-                    .fixedSize()
-                    .help("Display filter preset")
+            ToolbarItemGroup {
+                DisplaySettingsToolbarControls(showingFilterPanel: $showingFilterPanel)
+            }
 
-                DisplayToolbarControls()
-
-                if aiSettings.isConfigured {
+            if aiSettings.isConfigured {
+                ToolbarItem {
                     AIAssistantToolbarButton()
-                }
-
-                Button {
-                    showingFilterPanel.toggle()
-                } label: {
-                    Label("Tune Display", systemImage: "slider.horizontal.3")
-                }
-                .help("Tune display filters")
-                .popover(isPresented: $showingFilterPanel, arrowEdge: .bottom) {
-                    VideoFilterToolbarPanel()
-                        .environmentObject(emulator)
                 }
             }
         }
@@ -800,6 +790,32 @@ private struct DisplayToolbarControls: View {
     }
 }
 
+private struct DisplaySettingsToolbarControls: View {
+    @Binding var showingFilterPanel: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            DisplayToolbarControls()
+
+            VideoFilterPresetPicker()
+                .fixedSize()
+                .help("Display profile")
+
+            Button {
+                showingFilterPanel.toggle()
+            } label: {
+                ToolbarIconLabel(title: "Tune Display", systemImage: "slider.horizontal.3")
+            }
+            .frame(width: 58)
+            .help("Custom display settings")
+            .popover(isPresented: $showingFilterPanel, arrowEdge: .bottom) {
+                VideoFilterToolbarPanel()
+            }
+        }
+        .fixedSize()
+    }
+}
+
 private struct DisplayOutputToolbarPicker: View {
     @EnvironmentObject private var emulator: EmulatorSession
 
@@ -860,10 +876,24 @@ enum WindowActions {
     }
 }
 
+enum WindowFrameRestoration {
+    @MainActor
+    static func saveOpenWindowFrames() {
+        for window in NSApp.windows
+            where !window.frameAutosaveName.isEmpty
+                && !window.styleMask.contains(.fullScreen) {
+            window.saveFrame(usingName: window.frameAutosaveName)
+        }
+
+        UserDefaults.standard.synchronize()
+    }
+}
+
 private struct WindowChromeObserver: NSViewRepresentable {
     @Binding var isFullScreen: Bool
     @Binding var topChromeActive: Bool
     @Binding var bottomChromeActive: Bool
+    let frameAutosaveName: String
 
     func makeCoordinator() -> Coordinator {
         Coordinator(observer: self)
@@ -888,6 +918,7 @@ private struct WindowChromeObserver: NSViewRepresentable {
         private var notificationObservers: [NSObjectProtocol] = []
         private var previousToolbarVisibility: Bool?
         private var previousAcceptsMouseMovedEvents: Bool?
+        private var configuredFrameAutosaveName: String?
         private let revealThreshold: CGFloat = 74
 
         init(observer: WindowChromeObserver) {
@@ -902,11 +933,13 @@ private struct WindowChromeObserver: NSViewRepresentable {
 
         func update(observer: WindowChromeObserver) {
             self.observer = observer
+            configureFrameRestoration()
             updateWindowChrome()
         }
 
         func attach(to window: NSWindow?) {
             guard self.window !== window else {
+                configureFrameRestoration()
                 updateFullScreenState()
                 return
             }
@@ -918,6 +951,8 @@ private struct WindowChromeObserver: NSViewRepresentable {
                 setFullScreen(false)
                 return
             }
+
+            configureFrameRestoration()
 
             let center = NotificationCenter.default
             notificationObservers = [
@@ -968,7 +1003,21 @@ private struct WindowChromeObserver: NSViewRepresentable {
             }
             previousToolbarVisibility = nil
             previousAcceptsMouseMovedEvents = nil
+            configuredFrameAutosaveName = nil
             window = nil
+        }
+
+        private func configureFrameRestoration() {
+            guard let window,
+                  configuredFrameAutosaveName != observer.frameAutosaveName else {
+                return
+            }
+
+            let autosaveName = NSWindow.FrameAutosaveName(observer.frameAutosaveName)
+            configuredFrameAutosaveName = observer.frameAutosaveName
+            window.isRestorable = true
+            window.setFrameAutosaveName(autosaveName)
+            window.setFrameUsingName(autosaveName, force: true)
         }
 
         private func updateFullScreenState() {
