@@ -537,6 +537,68 @@ verify_release_app_dependencies() {
     done
 }
 
+codesign_release_path() {
+    local path="$1"
+    shift
+    local codesign_args
+
+    codesign_args=(--force)
+    if [[ -n "$CODE_SIGN_KEYCHAIN" ]]; then
+        codesign_args+=(--keychain "$CODE_SIGN_KEYCHAIN")
+    fi
+    codesign_args+=(--sign "$CODE_SIGN_IDENTITY" --options runtime --timestamp)
+    codesign_args+=("$@")
+    codesign_args+=("$path")
+
+    codesign "${codesign_args[@]}"
+}
+
+resign_sparkle_framework() {
+    local app="$1"
+    local sparkle_framework="$app/Contents/Frameworks/Sparkle.framework"
+    local sparkle_version="$sparkle_framework/Versions/B"
+    local component
+
+    if [[ ! -d "$sparkle_framework" ]]; then
+        return
+    fi
+
+    if [[ ! -d "$sparkle_version" ]]; then
+        sparkle_version="$sparkle_framework/Versions/Current"
+    fi
+
+    if [[ ! -d "$sparkle_version" ]]; then
+        echo "Sparkle.framework has an unexpected layout in $app." >&2
+        exit 1
+    fi
+
+    echo "Re-signing Sparkle helpers in $(basename "$app")"
+
+    for component in \
+        "$sparkle_version/Autoupdate" \
+        "$sparkle_version/Updater.app" \
+        "$sparkle_version"/XPCServices/*.xpc
+    do
+        if [[ -e "$component" ]]; then
+            codesign_release_path "$component" --preserve-metadata=identifier,entitlements,flags
+        fi
+    done
+
+    codesign_release_path "$sparkle_framework" --preserve-metadata=identifier,entitlements,flags
+}
+
+resign_release_apps() {
+    local stage_dir="$1"
+    local app_name
+    local app
+
+    for app_name in "${RELEASE_APPS[@]}"; do
+        app="$stage_dir/$app_name.app"
+        resign_sparkle_framework "$app"
+        codesign_release_path "$app" --preserve-metadata=identifier,entitlements,flags
+    done
+}
+
 sign_dmg() {
     local dmg_path="$1"
     local codesign_args
@@ -627,6 +689,7 @@ copy_release_apps "$PRODUCTS_DIR" "$STAGE_DIR"
 ln -s /Applications "$STAGE_DIR/Applications"
 
 if codesigning_enabled; then
+    resign_release_apps "$STAGE_DIR"
     verify_release_apps "$STAGE_DIR"
 fi
 
