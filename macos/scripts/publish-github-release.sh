@@ -80,6 +80,10 @@ cdata_escape() {
     sed 's/]]>/]]]]><![CDATA[>/g'
 }
 
+html_escape() {
+    xml_escape
+}
+
 normalize_system_version() {
     local version="$1"
 
@@ -173,31 +177,118 @@ sign_sparkle_artifact() {
 write_release_notes() {
     local tag="$1"
     local notes_file="$2"
+    local release_label="${tag#vice-mac-}"
     local previous_tag
-    local notes
+    local notes_dir
+    local rev_args
+    local commit
+    local subject
+    local category
+    local category_file
+    local commit_count=0
 
     previous_tag="$(git -C "$REPO_ROOT" tag -l 'vice-mac-*' --sort=-creatordate | grep -v "^$tag$" | head -1 || true)"
+    notes_dir="$(mktemp -d "${TMPDIR:-/tmp}/vicemac-notes.XXXXXX")"
 
     if [[ -n "$previous_tag" ]]; then
-        notes="$(git -C "$REPO_ROOT" log "$previous_tag..HEAD" --pretty=format:"- %s" --no-merges)"
+        rev_args=("$previous_tag..HEAD")
     else
-        notes="$(git -C "$REPO_ROOT" log --pretty=format:"- %s" --no-merges -20)"
+        rev_args=("HEAD")
     fi
 
-    if [[ -z "$notes" ]]; then
-        notes="- No changes since the previous VICE Mac release."
+    while IFS= read -r commit; do
+        subject="$(git -C "$REPO_ROOT" show -s --format=%s "$commit")"
+        category="$(release_note_category "$subject")"
+        category_file="$notes_dir/$category.html"
+
+        printf '            <li>%s%s</li>\n' \
+            "$(printf '%s' "$subject" | html_escape)" \
+            "$(release_note_source_badge "$commit")" \
+            >> "$category_file"
+        commit_count=$((commit_count + 1))
+    done < <(git -C "$REPO_ROOT" rev-list --no-merges --max-count=20 "${rev_args[@]}")
+
+    if [[ "$commit_count" -eq 0 ]]; then
+        printf '            <li>No source changes since the previous VICE Mac release.</li>\n' >> "$notes_dir/changed.html"
     fi
 
-    cat > "$notes_file" <<EOF
-Apple Silicon macOS builds of the native VICE Mac apps.
+    write_release_notes_html "$release_label" "$notes_dir" > "$notes_file"
+    rm -rf "$notes_dir"
+}
 
-Artifacts:
-- DMG installer image
-- SHA256 checksums
-- Sparkle appcast
+release_note_category() {
+    local subject="$1"
+    local lower
 
-Changes:
-$notes
+    lower="$(printf '%s' "$subject" | tr '[:upper:]' '[:lower:]')"
+
+    case "$lower" in
+        deprecate*|deprecated*|remove*|removed*|drop*|dropped*|retire*|retired*)
+            echo "deprecated"
+            ;;
+        fix*|fixed*|repair*|repaired*|correct*|corrected*|restore*|restored*|normalize*|normalized*|*crash*|*error*|*failure*|*failed*|*sign*|*notar*|*smoke*|*version*)
+            echo "fixed"
+            ;;
+        add*|added*|introduce*|introduced*|implement*|implemented*|support*|supported*|enable*|enabled*|bundle*|bundled*|ship*|shipped*|publish*|published*|wire*|wired*)
+            echo "new"
+            ;;
+        *)
+            echo "changed"
+            ;;
+    esac
+}
+
+release_note_source_badge() {
+    local commit="$1"
+    local path
+
+    while IFS= read -r path; do
+        if [[ "$path" == vice/* ]]; then
+            printf ' <span title="Upstream VICE change" style="display:inline-block;margin-left:6px;padding:1px 5px;border-radius:5px;background:#263f77;color:#dce8ff;font-size:10px;font-weight:800;letter-spacing:0;vertical-align:1px;">VICE</span>'
+            return
+        fi
+    done < <(git -C "$REPO_ROOT" diff-tree --no-commit-id --name-only -r "$commit")
+}
+
+write_release_notes_html() {
+    local release_label="$1"
+    local notes_dir="$2"
+
+    cat <<EOF
+<div style="font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Helvetica,Arial,sans-serif;line-height:1.36;color:#f4f4f4;">
+    <p style="margin:0 0 14px 0;font-size:14px;color:#f4f4f4;">
+        Focus: native Apple Silicon VICE Mac $release_label with signed DMG delivery, Sparkle updates, and targeted front-end or upstream emulator fixes.
+    </p>
+$(release_note_section "$notes_dir/new.html" "NEW" "#102d1b" "#48d17b")
+$(release_note_section "$notes_dir/changed.html" "CHANGED" "#102b3d" "#57c7ff")
+$(release_note_section "$notes_dir/fixed.html" "FIXED" "#302409" "#ffcf5a")
+$(release_note_section "$notes_dir/deprecated.html" "DEPRECATED" "#32151a" "#ff6b7a")
+    <p style="margin:12px 0 0 0;color:#b8b8b8;font-size:12px;">
+        Package: notarized Apple Silicon DMG, SHA256 checksums, and Sparkle appcast. Bullets marked <span style="display:inline-block;padding:1px 5px;border-radius:5px;background:#263f77;color:#dce8ff;font-size:10px;font-weight:800;letter-spacing:0;">VICE</span> come from the upstream VICE tree.
+    </p>
+</div>
+EOF
+}
+
+release_note_section() {
+    local section_file="$1"
+    local label="$2"
+    local background="$3"
+    local foreground="$4"
+
+    if [[ ! -s "$section_file" ]]; then
+        return
+    fi
+
+    cat <<EOF
+    <div style="margin:0 0 12px 0;">
+        <div style="margin:0 0 5px 0;">
+            <span style="display:inline-block;border-radius:999px;background:$background;color:$foreground;border:1px solid $foreground;padding:2px 8px;font-size:11px;font-weight:800;letter-spacing:0;">$label</span>
+        </div>
+        <ul style="margin:0 0 0 18px;padding:0;color:#f4f4f4;">
+$(cat "$section_file")
+        </ul>
+    </div>
 EOF
 }
 

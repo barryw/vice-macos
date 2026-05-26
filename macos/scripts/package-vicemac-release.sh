@@ -388,7 +388,7 @@ configure_notarytool_args() {
 configure_xcodebuild_settings() {
     XCODEBUILD_SETTINGS=()
 
-    XCODEBUILD_SETTINGS+=("MARKETING_VERSION=$VICE_VERSION")
+    XCODEBUILD_SETTINGS+=("MARKETING_VERSION=$DISPLAY_VERSION")
     XCODEBUILD_SETTINGS+=("CURRENT_PROJECT_VERSION=$BUNDLE_VERSION")
     XCODEBUILD_SETTINGS+=("VICE_MAC_GIT_SHA=$MAC_GIT_SHA")
     XCODEBUILD_SETTINGS+=("VICE_UPSTREAM_GIT_SHA=$UPSTREAM_GIT_SHA")
@@ -655,6 +655,7 @@ configure_codesign_default_keychain
 verify_codesign_identity_available
 VICE_VERSION="$(vice_version)"
 RELEASE_ASSET_VERSION="$(release_asset_version)"
+DISPLAY_VERSION="${VICE_MAC_DISPLAY_VERSION:-$RELEASE_ASSET_VERSION}"
 BUNDLE_VERSION="$(release_bundle_version)"
 MAC_GIT_SHA="$(release_mac_git_sha)"
 UPSTREAM_GIT_SHA="$(release_upstream_git_sha)"
