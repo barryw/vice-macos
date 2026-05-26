@@ -344,10 +344,35 @@ copy_prepared_runtime_dependencies() {
     done
 }
 
+build_machine_runtime_libraries() {
+    local machine_target="$1"
+
+    case "$machine_target" in
+        x64sc)
+            make -C "$BUILD_DIR/src/c64" V=1
+            ;;
+        x128)
+            make -C "$BUILD_DIR/src/c64" V=1
+            make -C "$BUILD_DIR/src/c128" V=1
+            ;;
+        xvic)
+            make -C "$BUILD_DIR/src/vic20" V=1
+            ;;
+        xpet)
+            make -C "$BUILD_DIR/src/pet" V=1
+            ;;
+        xplus4|xc16|xc232|xv364)
+            make -C "$BUILD_DIR/src/plus4" V=1
+            ;;
+    esac
+}
+
 for machine_target in "${MACHINE_TARGETS[@]}"; do
     dylib_name="libvicemac${machine_target}.dylib"
     dylib_path="$PRODUCTS_DIR/$dylib_name"
     link_log="/private/tmp/vice-macos-native-${machine_target}.log"
+
+    build_machine_runtime_libraries "$machine_target"
 
     rm -f "$BUILD_DIR/src/$machine_target"
     make -C "$BUILD_DIR/src" "$machine_target" V=1 > "$link_log" 2>&1

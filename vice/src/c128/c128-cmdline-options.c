@@ -53,7 +53,14 @@ struct model_s {
 
 static struct model_s model_match[] = {
     { "c128", C128MODEL_C128_PAL },
+    { "c128pal", C128MODEL_C128_PAL },
+    { "c128ntsc", C128MODEL_C128_NTSC },
+    { "c128d", C128MODEL_C128D_PAL },
+    { "c128dpal", C128MODEL_C128D_PAL },
+    { "c128dntsc", C128MODEL_C128D_NTSC },
     { "c128dcr", C128MODEL_C128DCR_PAL },
+    { "c128dcrpal", C128MODEL_C128DCR_PAL },
+    { "c128dcrntsc", C128MODEL_C128DCR_NTSC },
     { "pal", C128MODEL_C128_PAL },
     { "ntsc", C128MODEL_C128_NTSC },
     { NULL, C128MODEL_UNKNOWN }

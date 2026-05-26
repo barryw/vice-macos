@@ -12,11 +12,14 @@ enum EmulatorDefaults {
     private static let soundEnabledKey = "vice.soundEnabled"
     private static let soundVolumeKey = "vice.soundVolume"
     private static let displayOutputKey = "vice.displayOutput"
+    private static let c64ModelKey = "vice.c64Model"
+    private static let c128ModelKey = "vice.c128Model"
     private static let petModelKey = "vice.petModel"
     private static let romImagesKey = "vice.romImages"
     private static let ramExpansionKey = "vice.ramExpansion"
     private static let controlPortsKey = "vice.controlPorts"
     private static let driveConfigurationsKey = "vice.driveConfigurations"
+    private static let keyboardMappingKey = "vice.keyboardMapping"
 
     static func loadVideoStandard(for machine: EmulatedMachine) -> EmulatorSession.VideoStandard {
         guard let rawValue = UserDefaults.standard.string(forKey: key(videoStandardKey, machine: machine))
@@ -128,6 +131,40 @@ enum EmulatorDefaults {
         UserDefaults.standard.set(output.id, forKey: key(displayOutputKey, machine: machine))
     }
 
+    static func loadC64Model(for machine: EmulatedMachine) -> C64MachineModel {
+        guard machine.family == .c64,
+              let rawValue = UserDefaults.standard.string(forKey: key(c64ModelKey, machine: machine)) else {
+            return .c64
+        }
+
+        return C64MachineModel(rawValue: rawValue) ?? .c64
+    }
+
+    static func saveC64Model(_ model: C64MachineModel, for machine: EmulatedMachine) {
+        guard machine.family == .c64 else {
+            return
+        }
+
+        UserDefaults.standard.set(model.rawValue, forKey: key(c64ModelKey, machine: machine))
+    }
+
+    static func loadC128Model(for machine: EmulatedMachine) -> C128MachineModel {
+        guard machine.family == .c128,
+              let rawValue = UserDefaults.standard.string(forKey: key(c128ModelKey, machine: machine)) else {
+            return .c128
+        }
+
+        return C128MachineModel(rawValue: rawValue) ?? .c128
+    }
+
+    static func saveC128Model(_ model: C128MachineModel, for machine: EmulatedMachine) {
+        guard machine.family == .c128 else {
+            return
+        }
+
+        UserDefaults.standard.set(model.rawValue, forKey: key(c128ModelKey, machine: machine))
+    }
+
     static func loadPETModel(for machine: EmulatedMachine) -> PETMachineModel {
         guard machine.family == .pet,
               let rawValue = UserDefaults.standard.string(forKey: key(petModelKey, machine: machine)) else {
@@ -145,17 +182,18 @@ enum EmulatorDefaults {
         UserDefaults.standard.set(model.rawValue, forKey: key(petModelKey, machine: machine))
     }
 
-    static func loadSIDModel(for machine: EmulatedMachine) -> EmulatorSession.SIDModel {
+    static func loadSIDModel(for machine: EmulatedMachine,
+                             fallback: EmulatorSession.SIDModel = .mos8580) -> EmulatorSession.SIDModel {
         let defaultsKey = key(sidModelKey, machine: machine)
         let legacyKey = machine.id == .x64sc ? sidModelKey : defaultsKey
         let activeKey = UserDefaults.standard.object(forKey: defaultsKey) != nil ? defaultsKey : legacyKey
 
         guard UserDefaults.standard.object(forKey: activeKey) != nil else {
-            return .mos8580
+            return fallback
         }
 
         let rawValue = Int32(UserDefaults.standard.integer(forKey: activeKey))
-        return EmulatorSession.SIDModel(rawValue: rawValue) ?? .mos8580
+        return EmulatorSession.SIDModel(rawValue: rawValue) ?? fallback
     }
 
     static func saveSIDModel(_ model: EmulatorSession.SIDModel, for machine: EmulatedMachine) {
@@ -258,6 +296,25 @@ enum EmulatorDefaults {
         }
 
         UserDefaults.standard.set(data, forKey: key(driveConfigurationsKey, machine: machine))
+    }
+
+    static func loadKeyboardMapping(for machine: EmulatedMachine) -> VICEKeyboardMappingConfiguration {
+        guard let data = UserDefaults.standard.data(forKey: key(keyboardMappingKey, machine: machine))
+                ?? legacyData(forKey: keyboardMappingKey, machine: machine),
+              let configuration = try? JSONDecoder().decode(VICEKeyboardMappingConfiguration.self, from: data) else {
+            return .standard
+        }
+
+        return configuration
+    }
+
+    static func saveKeyboardMapping(_ configuration: VICEKeyboardMappingConfiguration,
+                                    for machine: EmulatedMachine) {
+        guard let data = try? JSONEncoder().encode(configuration) else {
+            return
+        }
+
+        UserDefaults.standard.set(data, forKey: key(keyboardMappingKey, machine: machine))
     }
 
     private static func key(_ baseKey: String, machine: EmulatedMachine) -> String {

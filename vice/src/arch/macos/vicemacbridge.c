@@ -16,6 +16,8 @@
 #include "archdep.h"
 #include "attach.h"
 #include "autostart.h"
+#include "c64model.h"
+#include "c128model.h"
 #include "cartridge.h"
 #include "crt.h"
 #include "drive.h"
@@ -1315,11 +1317,92 @@ static void vicemac_dispatch_queued_snapshot_requests(void)
     }
 }
 
+static int vicemac_c64_model_for_name(const char *model)
+{
+    if (strcmp(model, "c64") == 0 || strcmp(model, "c64pal") == 0) {
+        return C64MODEL_C64_PAL;
+    }
+    if (strcmp(model, "c64ntsc") == 0) {
+        return C64MODEL_C64_NTSC;
+    }
+    if (strcmp(model, "c64c") == 0 || strcmp(model, "c64cpal") == 0) {
+        return C64MODEL_C64C_PAL;
+    }
+    if (strcmp(model, "c64cntsc") == 0) {
+        return C64MODEL_C64C_NTSC;
+    }
+    if (strcmp(model, "c64old") == 0 || strcmp(model, "c64oldpal") == 0) {
+        return C64MODEL_C64_OLD_PAL;
+    }
+    if (strcmp(model, "c64oldntsc") == 0) {
+        return C64MODEL_C64_OLD_NTSC;
+    }
+    if (strcmp(model, "sx64") == 0 || strcmp(model, "sx64pal") == 0) {
+        return C64MODEL_C64SX_PAL;
+    }
+    if (strcmp(model, "sx64ntsc") == 0) {
+        return C64MODEL_C64SX_NTSC;
+    }
+
+    return C64MODEL_UNKNOWN;
+}
+
+static int vicemac_c128_model_for_name(const char *model)
+{
+    if (strcmp(model, "c128") == 0 || strcmp(model, "c128pal") == 0) {
+        return C128MODEL_C128_PAL;
+    }
+    if (strcmp(model, "c128ntsc") == 0) {
+        return C128MODEL_C128_NTSC;
+    }
+    if (strcmp(model, "c128d") == 0 || strcmp(model, "c128dpal") == 0) {
+        return C128MODEL_C128D_PAL;
+    }
+    if (strcmp(model, "c128dntsc") == 0) {
+        return C128MODEL_C128D_NTSC;
+    }
+    if (strcmp(model, "c128dcr") == 0 || strcmp(model, "c128dcrpal") == 0) {
+        return C128MODEL_C128DCR_PAL;
+    }
+    if (strcmp(model, "c128dcrntsc") == 0) {
+        return C128MODEL_C128DCR_NTSC;
+    }
+
+    return C128MODEL_UNKNOWN;
+}
+
+static int vicemac_dispatch_integer_machine_model(const char *symbol_name, int model)
+{
+    typedef void (*machine_model_set_function_t)(int model);
+    machine_model_set_function_t set_model_function;
+
+    set_model_function = (machine_model_set_function_t)dlsym(RTLD_SELF, symbol_name);
+    if (set_model_function == 0) {
+        return 0;
+    }
+
+    set_model_function(model);
+    return 1;
+}
+
 static int vicemac_dispatch_machine_model(const char *model)
 {
     typedef int (*pet_set_model_function_t)(const char *model_name, void *extra);
     static pet_set_model_function_t pet_set_model_function = 0;
     static int did_lookup_pet_set_model = 0;
+    int machine_model;
+
+    machine_model = vicemac_c64_model_for_name(model);
+    if (machine_model != C64MODEL_UNKNOWN
+        && vicemac_dispatch_integer_machine_model("c64model_set", machine_model)) {
+        return 1;
+    }
+
+    machine_model = vicemac_c128_model_for_name(model);
+    if (machine_model != C128MODEL_UNKNOWN
+        && vicemac_dispatch_integer_machine_model("c128model_set", machine_model)) {
+        return 1;
+    }
 
     if (!did_lookup_pet_set_model) {
         pet_set_model_function = (pet_set_model_function_t)dlsym(RTLD_SELF, "pet_set_model");

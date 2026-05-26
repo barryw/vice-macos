@@ -603,6 +603,28 @@ struct RAMExpansionResourcePlan: Equatable {
 final class EmulatorSession: ObservableObject {
     let machine = EmulatedMachine.current
 
+    @Published var c64Model: C64MachineModel {
+        didSet {
+            guard c64Model != oldValue,
+                  machine.family == .c64 else {
+                return
+            }
+
+            EmulatorDefaults.saveC64Model(c64Model, for: machine)
+            applyMachineModelChange(.x64sc(c64Model))
+        }
+    }
+    @Published var c128Model: C128MachineModel {
+        didSet {
+            guard c128Model != oldValue,
+                  machine.family == .c128 else {
+                return
+            }
+
+            EmulatorDefaults.saveC128Model(c128Model, for: machine)
+            applyMachineModelChange(.x128(c128Model))
+        }
+    }
     @Published var petModel: PETMachineModel {
         didSet {
             guard petModel != oldValue,
@@ -611,7 +633,9 @@ final class EmulatorSession: ObservableObject {
             }
 
             EmulatorDefaults.savePETModel(petModel, for: machine)
-            applyPETModel()
+            applyMachineModel()
+            applyROMImages()
+            applyKeyboardMapping(forceReload: true)
         }
     }
     @Published var isPaused = false {
@@ -753,6 +777,16 @@ final class EmulatorSession: ObservableObject {
 
             EmulatorDefaults.saveDriveConfigurations(driveConfigurations, for: machine)
             applyDriveConfigurationChanges(from: oldValue)
+        }
+    }
+    @Published var keyboardMapping: VICEKeyboardMappingConfiguration {
+        didSet {
+            guard keyboardMapping != oldValue else {
+                return
+            }
+
+            EmulatorDefaults.saveKeyboardMapping(keyboardMapping, for: machine)
+            applyKeyboardMapping()
         }
     }
     @Published private var driveActivities: [Int: DriveActivity] = [:]
@@ -946,20 +980,36 @@ final class EmulatorSession: ObservableObject {
 
     init() {
         let machine = EmulatedMachine.current
+        let loadedC64Model = EmulatorDefaults.loadC64Model(for: machine)
+        let loadedC128Model = EmulatorDefaults.loadC128Model(for: machine)
+        let sidFallback: SIDModel
 
+        switch machine.family {
+        case .c64:
+            sidFallback = loadedC64Model.defaultSIDModel
+        case .c128:
+            sidFallback = loadedC128Model.defaultSIDModel
+        default:
+            sidFallback = .mos8580
+        }
+
+        c64Model = loadedC64Model
+        c128Model = loadedC128Model
         petModel = EmulatorDefaults.loadPETModel(for: machine)
         videoStandard = EmulatorDefaults.loadVideoStandard(for: machine)
         emulationSpeed = EmulatorDefaults.loadEmulationSpeed(for: machine)
         displayMode = EmulatorDefaults.loadDisplayMode(for: machine)
         filterSettings = EmulatorDefaults.loadVideoFilterSettings(for: machine)
         displayOutput = EmulatorDefaults.loadDisplayOutput(for: machine)
-        sidModel = EmulatorDefaults.loadSIDModel(for: machine)
+        sidModel = EmulatorDefaults.loadSIDModel(for: machine,
+                                                 fallback: sidFallback)
         soundEnabled = EmulatorDefaults.loadSoundEnabled()
         soundVolume = EmulatorDefaults.loadSoundVolume()
         romImages = EmulatorDefaults.loadROMImages(for: machine)
         ramExpansion = EmulatorDefaults.loadRAMExpansion(for: machine)
         controlPorts = EmulatorDefaults.loadControlPorts(for: machine)
         driveConfigurations = EmulatorDefaults.loadDriveConfigurations(for: machine)
+        keyboardMapping = EmulatorDefaults.loadKeyboardMapping(for: machine)
         statusText = "Starting \(machine.shortName)"
         frameSource = EmulatorFrameSource.displaySource(for: machine)
         setupGameControllerMonitoring()
@@ -979,22 +1029,40 @@ final class EmulatorSession: ObservableObject {
     }
 
     var activeMachineModel: MachineModel {
-        guard machine.family == .pet else {
+        switch machine.family {
+        case .c64:
+            return .x64sc(c64Model)
+        case .c128:
+            return .x128(c128Model)
+        case .pet:
+            return .xpet(petModel)
+        case .vic20, .ted:
             return machine.model
         }
+    }
 
-        return .xpet(petModel)
+    var keyboardMappingMachine: EmulatedMachine {
+        guard machine.family == .pet else {
+            return machine
+        }
+
+        return EmulatedMachine(id: machine.id,
+                               model: .xpet(petModel),
+                               displayName: petModel.displayName,
+                               shortName: machine.shortName,
+                               viceTarget: machine.viceTarget,
+                               dynamicLibraryName: machine.dynamicLibraryName,
+                               displayProfile: machine.displayProfile,
+                               startupOptions: machine.startupOptions,
+                               displayOutputs: machine.displayOutputs,
+                               romSlots: machine.romSlots,
+                               ramExpansions: machine.ramExpansions,
+                               capabilities: machine.capabilities,
+                               videoStandardResources: machine.videoStandardResources)
     }
 
     var machineDisplayName: String {
-        switch activeMachineModel {
-        case let .xpet(model):
-            return model.displayName
-        case let .ted(model):
-            return model.displayName
-        default:
-            return machine.displayName
-        }
+        activeMachineModel.displayName ?? machine.displayName
     }
 
     var availableControlPorts: [ControlPort] {
@@ -1213,6 +1281,78 @@ final class EmulatorSession: ObservableObject {
         var updatedConfiguration = controlPorts
         updatedConfiguration.removeDevice(id: id)
         controlPorts = updatedConfiguration
+    }
+
+    func setKeyboardMappingMode(_ mode: VICEKeyboardMappingMode) {
+        guard keyboardMapping.mode != mode else {
+            return
+        }
+
+        keyboardMapping = VICEKeyboardMappingConfiguration(mode: mode,
+                                                           profile: keyboardMapping.profile)
+    }
+
+    func useVICEKeyboardDefaults() {
+        keyboardMapping = VICEKeyboardMappingConfiguration(mode: keyboardMapping.mode,
+                                                           profile: .viceDefault)
+    }
+
+    @discardableResult
+    func useCustomKeyboardMapping() -> Bool {
+        do {
+            try VICEKeymapStore.ensureCustomKeymap(for: keyboardMappingMachine, mode: keyboardMapping.mode)
+            keyboardMapping = VICEKeyboardMappingConfiguration(mode: keyboardMapping.mode,
+                                                               profile: .custom)
+            return true
+        } catch {
+            statusText = error.localizedDescription
+            return false
+        }
+    }
+
+    @discardableResult
+    func saveKeyboardMapEntry(_ entry: VICEKeymapEntry) -> Bool {
+        do {
+            let document = try VICEKeymapStore.ensureCustomKeymap(for: keyboardMappingMachine,
+                                                                  mode: keyboardMapping.mode)
+                .updating(entry: entry)
+                .syncingModifierDirectives(for: entry)
+            let url = VICEKeymapStore.customKeymapURL(for: keyboardMappingMachine,
+                                                      mode: keyboardMapping.mode)
+            try VICEKeymapStore.save(document,
+                                     to: url,
+                                     title: "Custom \(machine.shortName) \(keyboardMapping.mode.shortTitle) map")
+            keyboardMapping = VICEKeyboardMappingConfiguration(mode: keyboardMapping.mode,
+                                                               profile: .custom)
+            applyKeyboardMapping(forceReload: true)
+            statusText = "Keyboard map updated"
+            return true
+        } catch {
+            statusText = error.localizedDescription
+            return false
+        }
+    }
+
+    @discardableResult
+    func removeKeyboardMapEntry(_ entry: VICEKeymapEntry) -> Bool {
+        do {
+            let document = try VICEKeymapStore.ensureCustomKeymap(for: keyboardMappingMachine,
+                                                                  mode: keyboardMapping.mode)
+                .removingEntry(id: entry.id)
+            let url = VICEKeymapStore.customKeymapURL(for: keyboardMappingMachine,
+                                                      mode: keyboardMapping.mode)
+            try VICEKeymapStore.save(document,
+                                     to: url,
+                                     title: "Custom \(machine.shortName) \(keyboardMapping.mode.shortTitle) map")
+            keyboardMapping = VICEKeyboardMappingConfiguration(mode: keyboardMapping.mode,
+                                                               profile: .custom)
+            applyKeyboardMapping(forceReload: true)
+            statusText = "Keyboard mapping removed"
+            return true
+        } catch {
+            statusText = error.localizedDescription
+            return false
+        }
     }
 
     func start() {
@@ -1901,6 +2041,7 @@ final class EmulatorSession: ObservableObject {
             applyROMImages()
         }
         applyRAMExpansion(updateStatus: false)
+        applyKeyboardMapping(updateStatus: false)
         applyControlPorts()
     }
 
@@ -1922,8 +2063,15 @@ final class EmulatorSession: ObservableObject {
             return
         }
 
-        for assignment in machine.videoStandardAssignments(for: videoStandard) {
-            setVICEIntResource(assignment.name, value: assignment.value)
+        if case .x64sc = activeMachineModel {
+            applyMachineModel(updateStatus: false)
+            applySIDModel(updateStatus: false)
+            applyROMImages()
+            applyDriveConfigurations(updateStatus: false)
+        } else {
+            for assignment in machine.videoStandardAssignments(for: videoStandard) {
+                setVICEIntResource(assignment.name, value: assignment.value)
+            }
         }
 
         if updateStatus {
@@ -1973,25 +2121,37 @@ final class EmulatorSession: ObservableObject {
         }
     }
 
-    private func applyPETModel(updateStatus: Bool = true) {
+    private func applyMachineModelChange(_ model: MachineModel) {
+        if let defaultSIDModel = model.defaultSIDModel,
+           sidModel != defaultSIDModel {
+            sidModel = defaultSIDModel
+        }
+
+        applyMachineModel()
+        applySIDModel(updateStatus: false)
+        applyROMImages()
+        applyDriveConfigurations(updateStatus: false)
+    }
+
+    private func applyMachineModel(updateStatus: Bool = true) {
         guard ViceEngineIsRunning(),
-              machine.family == .pet else {
+              activeMachineModel.supportsRuntimeModelSelection,
+              let modelName = activeMachineModel.viceModelName(for: videoStandard) else {
             return
         }
 
-        let didQueueModel = petModel.viceModelName.withCString { modelName in
-            ViceEngineSetMachineModel(modelName)
+        let didQueueModel = modelName.withCString { modelNamePointer in
+            ViceEngineSetMachineModel(modelNamePointer)
         }
         guard didQueueModel else {
             if updateStatus {
-                statusText = "PET model unavailable"
+                statusText = "\(machineDisplayName) model unavailable"
             }
             return
         }
-        applyROMImages()
 
         if updateStatus {
-            statusText = petModel.displayName
+            statusText = machineDisplayName
         }
     }
 
@@ -2036,6 +2196,34 @@ final class EmulatorSession: ObservableObject {
                 _ = ViceEngineTriggerMachineReset(true)
             }
             statusText = "RAM expansion \(ramExpansion.statusTitle)"
+        }
+    }
+
+    private func applyKeyboardMapping(updateStatus: Bool = true, forceReload: Bool = false) {
+        guard ViceEngineIsRunning() else {
+            return
+        }
+
+        if keyboardMapping.profile == .custom {
+            do {
+                try VICEKeymapStore.ensureCustomKeymap(for: keyboardMappingMachine,
+                                                       mode: keyboardMapping.mode)
+                setVICEStringResource(keyboardMapping.mode.userResourceName,
+                                      value: VICEKeymapStore.customKeymapURL(for: keyboardMappingMachine,
+                                                                             mode: keyboardMapping.mode).path)
+                if forceReload {
+                    setVICEIntResource("KeymapIndex", value: keyboardMapping.mode.defaultKeymapIndex)
+                }
+            } catch {
+                statusText = error.localizedDescription
+                return
+            }
+        }
+
+        setVICEIntResource("KeymapIndex", value: keyboardMapping.keymapIndex)
+
+        if updateStatus {
+            statusText = "Keyboard \(keyboardMapping.statusTitle)"
         }
     }
 

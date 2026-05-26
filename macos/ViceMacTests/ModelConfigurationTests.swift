@@ -74,6 +74,73 @@ final class ModelConfigurationTests: XCTestCase {
         XCTAssertFalse(arguments.contains("-40col"))
     }
 
+    func testC64StartupArgumentsUseSelectedModelVariant() {
+        let machine = EmulatedMachine.x64sc
+        let cases: [(C64MachineModel, EmulatorSession.VideoStandard, String)] = [
+            (.c64, .pal, "c64"),
+            (.c64, .ntsc, "c64ntsc"),
+            (.c64c, .pal, "c64c"),
+            (.c64c, .ntsc, "c64cntsc"),
+            (.earlyC64, .pal, "c64old"),
+            (.earlyC64, .ntsc, "c64oldntsc"),
+            (.sx64, .pal, "sx64pal"),
+            (.sx64, .ntsc, "sx64ntsc")
+        ]
+
+        for (model, standard, viceModelName) in cases {
+            let arguments = machine.startupArguments(configuration: startupConfiguration(for: machine,
+                                                                                         machineModel: .x64sc(model),
+                                                                                         videoStandard: standard))
+
+            XCTAssertEqual(arguments.value(after: "-model"), viceModelName)
+        }
+    }
+
+    func testC128StartupArgumentsUseSelectedModelVariant() {
+        let machine = EmulatedMachine.x128
+        let cases: [(C128MachineModel, EmulatorSession.VideoStandard, String)] = [
+            (.c128, .pal, "pal"),
+            (.c128, .ntsc, "ntsc"),
+            (.c128d, .pal, "c128dpal"),
+            (.c128d, .ntsc, "c128dntsc"),
+            (.c128dcr, .pal, "c128dcr"),
+            (.c128dcr, .ntsc, "c128dcrntsc")
+        ]
+
+        for (model, standard, viceModelName) in cases {
+            let arguments = machine.startupArguments(configuration: startupConfiguration(for: machine,
+                                                                                         machineModel: .x128(model),
+                                                                                         videoStandard: standard))
+
+            XCTAssertEqual(arguments.value(after: "-model"), viceModelName)
+        }
+    }
+
+    func testC64ModelVariantsUseMatchingDefaultKernals() {
+        let machine = EmulatedMachine.x64sc
+
+        XCTAssertEqual(
+            machine.startupArguments(configuration: startupConfiguration(for: machine,
+                                                                         machineModel: .x64sc(.earlyC64),
+                                                                         videoStandard: .pal))
+                .value(after: "-kernal"),
+            "kernal-901227-02.bin"
+        )
+        XCTAssertEqual(
+            machine.startupArguments(configuration: startupConfiguration(for: machine,
+                                                                         machineModel: .x64sc(.earlyC64),
+                                                                         videoStandard: .ntsc))
+                .value(after: "-kernal"),
+            "kernal-901227-01.bin"
+        )
+        XCTAssertEqual(
+            machine.startupArguments(configuration: startupConfiguration(for: machine,
+                                                                         machineModel: .x64sc(.sx64)))
+                .value(after: "-kernal"),
+            "kernal-251104-04.bin"
+        )
+    }
+
     func testVIC20StartupArgumentsIncludeSelectedMemory() {
         let machine = EmulatedMachine.xvic
         let arguments = machine.startupArguments(configuration: startupConfiguration(for: machine,
@@ -303,6 +370,129 @@ final class ModelConfigurationTests: XCTestCase {
         XCTAssertEqual(chunks[0].count, EmulatorSession.maxKeyboardTextChunkLength)
         XCTAssertEqual(chunks[1].count, 5)
         XCTAssertTrue(chunks.allSatisfy { $0.utf8.count <= EmulatorSession.maxKeyboardTextChunkLength })
+    }
+
+    func testVICEKeymapParserExpandsIncludesAndMatrixLabels() throws {
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.removeItem(at: directory)
+        }
+
+        try """
+        # |Bit 0| DEL |Retrn|C_L/R|  F7 |  F1 |  F3 |  F5 |C_U/D|
+        !CLEAR
+        Return 0 1 8
+        """.write(to: directory.appendingPathComponent("child.vkm"),
+                   atomically: true,
+                   encoding: .utf8)
+
+        let document = try VICEKeymapDocument.parse(text: "!INCLUDE child.vkm",
+                                                    baseURL: directory)
+
+        XCTAssertEqual(document.entries.count, 1)
+        XCTAssertEqual(document.entries.first?.symbol, "Return")
+        XCTAssertEqual(document.targetTitle(for: try XCTUnwrap(document.entries.first)),
+                       "Retrn (row 0, column 1)")
+    }
+
+    func testVICEKeymapParserReadsNumberedMatrixLabels() throws {
+        let document = try VICEKeymapDocument.parse(text: """
+        # 0 |INST/DEL|RETURN  |--------|F7/HELP |F4/F1   |F5/F2   |F6/F3   |@       |
+        Return 0 1 8
+        """)
+
+        XCTAssertEqual(document.matrixKey(row: 0, column: 0)?.title, "INST/DEL")
+        XCTAssertEqual(document.matrixKey(row: 0, column: 1)?.title, "RETURN")
+        XCTAssertNil(document.matrixKey(row: 0, column: 2))
+        XCTAssertEqual(document.matrixKey(row: 0, column: 7)?.title, "@")
+        XCTAssertEqual(document.targetTitle(for: try XCTUnwrap(document.entries.first)),
+                       "RETURN (row 0, column 1)")
+    }
+
+    func testVICEKeymapDocumentUpdatesEntryAndRendersVKM() throws {
+        let document = try VICEKeymapDocument.parse(text: "Return 0 1 8")
+        var entry = try XCTUnwrap(document.entries.first)
+        entry.symbol = "F1"
+        entry.row = 0
+        entry.column = 4
+        entry.flags = 0x8
+
+        let rendered = document.updating(entry: entry).rendered(customTitle: "Test map")
+
+        XCTAssertTrue(rendered.contains("F1"))
+        XCTAssertTrue(rendered.contains("0x8"))
+        XCTAssertFalse(rendered.contains("Return 0 1 8"))
+    }
+
+    func testVICEKeymapDocumentAddsAndRemovesMappings() throws {
+        let document = try VICEKeymapDocument.parse(text: """
+        !CLEAR
+        Return 0 1 8
+        """)
+        let added = VICEKeymapEntry(id: document.nextEntryID,
+                                    symbol: "KP_Enter",
+                                    row: 0,
+                                    column: 1,
+                                    flags: VICEKeymapFlags.anyShiftState,
+                                    trailingComment: nil)
+
+        let updated = document.appending(entry: added)
+        XCTAssertEqual(updated.entries.count, 2)
+        XCTAssertTrue(updated.rendered(customTitle: "Test map").contains("VICE Mac custom mappings"))
+
+        let removed = updated.removingEntry(id: added.id)
+        XCTAssertEqual(removed.entries.map(\.symbol), ["Return"])
+    }
+
+    func testVICEKeymapDocumentSyncsModifierDirectives() throws {
+        let document = try VICEKeymapDocument.parse(text: """
+        !CLEAR
+        !LSHIFT 1 7
+        Shift_L 2 3 0x2
+        """)
+        let entry = try XCTUnwrap(document.entries.first)
+
+        let rendered = document
+            .syncingModifierDirectives(for: entry)
+            .rendered(customTitle: "Test map")
+
+        XCTAssertTrue(rendered.contains("!LSHIFT 2 3"))
+    }
+
+    func testAllMachinesResolveBundledMacKeymaps() throws {
+        for machine in Self.allMachines {
+            for mode in VICEKeyboardMappingMode.allCases {
+                let url = try XCTUnwrap(VICEKeymapStore.bundledKeymapURL(for: machine, mode: mode),
+                                        "\(machine.shortName) \(mode.shortTitle)")
+                XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+            }
+        }
+    }
+
+    func testPETModelSpecificMacKeymapsResolve() throws {
+        for model in PETMachineModel.allCases {
+            let machine = EmulatedMachine(id: .xpet,
+                                          model: .xpet(model),
+                                          displayName: model.displayName,
+                                          shortName: "xpet",
+                                          viceTarget: "xpet",
+                                          dynamicLibraryName: "libvicemacxpet.dylib",
+                                          displayProfile: EmulatedMachine.xpet.displayProfile,
+                                          startupOptions: [],
+                                          displayOutputs: EmulatedMachine.xpet.displayOutputs,
+                                          romSlots: EmulatedMachine.xpet.romSlots,
+                                          ramExpansions: EmulatedMachine.xpet.ramExpansions,
+                                          capabilities: EmulatedMachine.xpet.capabilities,
+                                          videoStandardResources: EmulatedMachine.xpet.videoStandardResources)
+
+            for mode in VICEKeyboardMappingMode.allCases {
+                let url = try XCTUnwrap(VICEKeymapStore.bundledKeymapURL(for: machine, mode: mode),
+                                        "\(model.displayName) \(mode.shortTitle)")
+                XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+            }
+        }
     }
 
     func testNormalizedDriveConfigurationsReplacesInvalidMachineDriveType() {

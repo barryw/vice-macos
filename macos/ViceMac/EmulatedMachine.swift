@@ -23,8 +23,8 @@ enum MachineFamily: String, Codable, Equatable {
 }
 
 enum MachineModel: Equatable {
-    case x64sc
-    case x128
+    case x64sc(C64MachineModel)
+    case x128(C128MachineModel)
     case xvic
     case xpet(PETMachineModel)
     case ted(TEDMachineModel)
@@ -44,6 +44,32 @@ enum MachineModel: Equatable {
         }
     }
 
+    var displayName: String? {
+        switch self {
+        case let .x64sc(model):
+            return model.displayName
+        case let .x128(model):
+            return model.displayName
+        case let .xpet(model):
+            return model.displayName
+        case let .ted(model):
+            return model.displayName
+        case .xvic:
+            return nil
+        }
+    }
+
+    var defaultSIDModel: EmulatorSession.SIDModel? {
+        switch self {
+        case let .x64sc(model):
+            return model.defaultSIDModel
+        case let .x128(model):
+            return model.defaultSIDModel
+        default:
+            return nil
+        }
+    }
+
     var usesVIC20MemoryStartupOption: Bool {
         self == .xvic
     }
@@ -56,13 +82,40 @@ enum MachineModel: Equatable {
         family != .ted
     }
 
+    var supportsRuntimeModelSelection: Bool {
+        switch self {
+        case .x64sc, .x128, .xpet:
+            return true
+        case .xvic, .ted:
+            return false
+        }
+    }
+
+    func viceModelName(for videoStandard: EmulatorSession.VideoStandard) -> String? {
+        switch self {
+        case let .x64sc(model):
+            return model.viceModelName(for: videoStandard)
+        case let .x128(model):
+            return model.viceModelName(for: videoStandard)
+        case let .xpet(model):
+            return model.viceModelName
+        case .xvic, .ted:
+            return nil
+        }
+    }
+
     func startupOptions(for configuration: MachineStartupConfiguration,
                         baseOptions: [String]) -> [String] {
         switch self {
-        case .x128:
+        case let .x64sc(model):
             return [
                 "-model",
-                configuration.videoStandard == .ntsc ? "ntsc" : "pal"
+                model.viceModelName(for: configuration.videoStandard)
+            ]
+        case let .x128(model):
+            return [
+                "-model",
+                model.startupModelName(for: configuration.videoStandard)
             ]
         case let .xpet(model):
             return [
@@ -84,6 +137,9 @@ enum MachineModel: Equatable {
     func defaultROMFileName(for slot: MachineROMSlot,
                             videoStandard: EmulatorSession.VideoStandard) -> String {
         switch self {
+        case let .x64sc(model):
+            return model.defaultROMFileName(for: slot,
+                                            videoStandard: videoStandard)
         case let .xpet(model):
             return model.defaultROMFileName(for: slot)
         case let .ted(model):
@@ -91,6 +147,132 @@ enum MachineModel: Equatable {
                                             videoStandard: videoStandard)
         default:
             return slot.defaultFileName
+        }
+    }
+}
+
+enum C64MachineModel: String, Codable, Equatable, CaseIterable, Identifiable {
+    case c64
+    case c64c
+    case earlyC64
+    case sx64
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .c64:
+            return "Commodore 64"
+        case .c64c:
+            return "Commodore 64C"
+        case .earlyC64:
+            return "Early Commodore 64"
+        case .sx64:
+            return "SX-64"
+        }
+    }
+
+    var defaultSIDModel: EmulatorSession.SIDModel {
+        switch self {
+        case .c64c:
+            return .mos8580
+        case .c64, .earlyC64, .sx64:
+            return .mos6581
+        }
+    }
+
+    func viceModelName(for videoStandard: EmulatorSession.VideoStandard) -> String {
+        switch (self, videoStandard) {
+        case (.c64, .pal):
+            return "c64"
+        case (.c64, .ntsc):
+            return "c64ntsc"
+        case (.c64c, .pal):
+            return "c64c"
+        case (.c64c, .ntsc):
+            return "c64cntsc"
+        case (.earlyC64, .pal):
+            return "c64old"
+        case (.earlyC64, .ntsc):
+            return "c64oldntsc"
+        case (.sx64, .pal):
+            return "sx64pal"
+        case (.sx64, .ntsc):
+            return "sx64ntsc"
+        }
+    }
+
+    func defaultROMFileName(for slot: MachineROMSlot,
+                            videoStandard: EmulatorSession.VideoStandard) -> String {
+        guard slot.id == MachineROMSlot.c64Kernal.id else {
+            return slot.defaultFileName
+        }
+
+        switch self {
+        case .earlyC64:
+            return videoStandard == .ntsc ? "kernal-901227-01.bin" : "kernal-901227-02.bin"
+        case .sx64:
+            return "kernal-251104-04.bin"
+        case .c64, .c64c:
+            return slot.defaultFileName
+        }
+    }
+}
+
+enum C128MachineModel: String, Codable, Equatable, CaseIterable, Identifiable {
+    case c128
+    case c128d
+    case c128dcr
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .c128:
+            return "Commodore 128"
+        case .c128d:
+            return "Commodore 128D"
+        case .c128dcr:
+            return "Commodore 128DCR"
+        }
+    }
+
+    var defaultSIDModel: EmulatorSession.SIDModel {
+        switch self {
+        case .c128, .c128d:
+            return .mos6581
+        case .c128dcr:
+            return .mos8580
+        }
+    }
+
+    func viceModelName(for videoStandard: EmulatorSession.VideoStandard) -> String {
+        switch (self, videoStandard) {
+        case (.c128, .pal):
+            return "c128pal"
+        case (.c128, .ntsc):
+            return "c128ntsc"
+        case (.c128d, .pal):
+            return "c128dpal"
+        case (.c128d, .ntsc):
+            return "c128dntsc"
+        case (.c128dcr, .pal):
+            return "c128dcrpal"
+        case (.c128dcr, .ntsc):
+            return "c128dcrntsc"
+        }
+    }
+
+    func startupModelName(for videoStandard: EmulatorSession.VideoStandard) -> String {
+        switch (self, videoStandard) {
+        case (.c128, .pal):
+            return "pal"
+        case (.c128, .ntsc):
+            return "ntsc"
+        case (.c128dcr, .pal):
+            return "c128dcr"
+        default:
+            return viceModelName(for: videoStandard)
         }
     }
 }
@@ -751,7 +933,7 @@ extension EmulatedMachine {
     static var x64sc: EmulatedMachine {
         EmulatedMachine(
             id: .x64sc,
-            model: .x64sc,
+            model: .x64sc(.c64),
             displayName: "Commodore 64",
             shortName: "x64sc",
             viceTarget: "x64sc",
@@ -789,7 +971,7 @@ extension EmulatedMachine {
     static var x128: EmulatedMachine {
         EmulatedMachine(
             id: .x128,
-            model: .x128,
+            model: .x128(.c128),
             displayName: "Commodore 128",
             shortName: "x128",
             viceTarget: "x128",
