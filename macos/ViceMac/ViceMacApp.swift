@@ -1,5 +1,6 @@
 import AppKit
 import Darwin
+import Sparkle
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -10,7 +11,16 @@ struct ViceMacApp: App {
     @NSApplicationDelegateAdaptor(ViceMacAppDelegate.self) private var appDelegate
     @StateObject private var emulator = EmulatorSession()
     @StateObject private var aiSettings = AIAssistantSettings()
-    private let launchConfiguration = ViceMacLaunchConfiguration.current
+    private let launchConfiguration: ViceMacLaunchConfiguration
+    private let updaterController: SPUStandardUpdaterController
+
+    init() {
+        let launchConfiguration = ViceMacLaunchConfiguration.current
+        self.launchConfiguration = launchConfiguration
+        updaterController = SPUStandardUpdaterController(startingUpdater: launchConfiguration.releaseSmokeTest == nil,
+                                                        updaterDelegate: nil,
+                                                        userDriverDelegate: nil)
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -29,6 +39,13 @@ struct ViceMacApp: App {
                 Button("About VICE Mac") {
                     openWindow(id: AboutWindow.id)
                 }
+            }
+
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates...") {
+                    updaterController.checkForUpdates(nil)
+                }
+                .disabled(!updaterController.updater.canCheckForUpdates)
             }
 
             CommandGroup(replacing: .newItem) {

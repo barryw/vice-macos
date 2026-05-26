@@ -72,6 +72,91 @@ release_asset_version() {
     fi
 }
 
+release_bundle_version() {
+    if [[ -n "${VICE_MAC_BUILD_VERSION:-}" ]]; then
+        echo "$VICE_MAC_BUILD_VERSION"
+        return
+    fi
+
+    if [[ -n "${CI_COMMIT_SHA:-}" ]]; then
+        git -C "$REPO_ROOT" show -s --format=%ct "$CI_COMMIT_SHA"
+        return
+    fi
+
+    if git -C "$REPO_ROOT" rev-parse --verify HEAD >/dev/null 2>&1; then
+        git -C "$REPO_ROOT" show -s --format=%ct HEAD
+        return
+    fi
+
+    date +%s
+}
+
+short_git_sha_value() {
+    local value="$1"
+    local short_value
+
+    short_value="$(git -C "$REPO_ROOT" rev-parse --short=12 "$value" 2>/dev/null || true)"
+    if [[ -n "$short_value" ]]; then
+        echo "$short_value"
+        return
+    fi
+
+    printf '%s\n' "${value:0:12}"
+}
+
+release_mac_git_sha() {
+    local sha
+
+    if [[ -n "${VICE_MAC_GIT_SHA:-}" ]]; then
+        echo "$VICE_MAC_GIT_SHA"
+        return
+    fi
+
+    if [[ -n "${CI_COMMIT_SHA:-}" ]]; then
+        short_git_sha_value "$CI_COMMIT_SHA"
+        return
+    fi
+
+    sha="$(short_git_sha_value HEAD)"
+    if [[ -n "$(git -C "$REPO_ROOT" status --porcelain 2>/dev/null)" ]]; then
+        sha="${sha}-dirty"
+    fi
+
+    echo "$sha"
+}
+
+release_upstream_git_sha() {
+    local merge_base
+    local parents
+    local upstream_ref
+
+    if [[ -n "${VICE_UPSTREAM_GIT_SHA:-}" ]]; then
+        echo "$VICE_UPSTREAM_GIT_SHA"
+        return
+    fi
+
+    for upstream_ref in refs/remotes/upstream/main upstream/main FETCH_HEAD; do
+        if ! git -C "$REPO_ROOT" rev-parse --verify "$upstream_ref^{commit}" >/dev/null 2>&1; then
+            continue
+        fi
+
+        merge_base="$(git -C "$REPO_ROOT" merge-base HEAD "$upstream_ref" 2>/dev/null || true)"
+        if [[ -n "$merge_base" ]]; then
+            short_git_sha_value "$merge_base"
+            return
+        fi
+    done
+
+    parents="$(git -C "$REPO_ROOT" log --merges --first-parent --format=%P -n 1 HEAD 2>/dev/null || true)"
+    set -- $parents
+    if [[ $# -ge 2 ]]; then
+        short_git_sha_value "$2"
+        return
+    fi
+
+    echo "unknown"
+}
+
 require_tool() {
     local tool="$1"
     local hint="$2"
@@ -303,6 +388,11 @@ configure_notarytool_args() {
 configure_xcodebuild_settings() {
     XCODEBUILD_SETTINGS=()
 
+    XCODEBUILD_SETTINGS+=("MARKETING_VERSION=$VICE_VERSION")
+    XCODEBUILD_SETTINGS+=("CURRENT_PROJECT_VERSION=$BUNDLE_VERSION")
+    XCODEBUILD_SETTINGS+=("VICE_MAC_GIT_SHA=$MAC_GIT_SHA")
+    XCODEBUILD_SETTINGS+=("VICE_UPSTREAM_GIT_SHA=$UPSTREAM_GIT_SHA")
+
     if [[ -n "$CODE_SIGN_IDENTITY" ]]; then
         XCODEBUILD_SETTINGS+=("CODE_SIGN_IDENTITY=$CODE_SIGN_IDENTITY")
 
@@ -501,6 +591,11 @@ configure_user_home
 collect_codesign_keychains
 configure_codesign_default_keychain
 verify_codesign_identity_available
+VICE_VERSION="$(vice_version)"
+RELEASE_ASSET_VERSION="$(release_asset_version)"
+BUNDLE_VERSION="$(release_bundle_version)"
+MAC_GIT_SHA="$(release_mac_git_sha)"
+UPSTREAM_GIT_SHA="$(release_upstream_git_sha)"
 configure_xcodebuild_settings
 configure_xcodebuild_args
 
@@ -520,8 +615,6 @@ for scheme in "${SCHEMES[@]}"; do
 done
 
 PRODUCTS_DIR="$DERIVED_DATA/Build/Products/$CONFIGURATION"
-VICE_VERSION="$(vice_version)"
-RELEASE_ASSET_VERSION="$(release_asset_version)"
 VOLUME_NAME="VICE Mac $VICE_VERSION"
 STAGE_ROOT="$DIST_DIR/stage"
 STAGE_DIR="$STAGE_ROOT/$VOLUME_NAME"

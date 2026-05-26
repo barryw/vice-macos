@@ -49,6 +49,12 @@ macos/scripts/package-vicemac-release.sh
 The DMG and `SHA256SUMS.txt` are written to `macos/dist`. The release DMG
 contains one app per machine: `x64sc.app`, `xvic.app`, `xpet.app`,
 `xplus4.app`, `xc16.app`, `xc232.app`, `xv364.app`, and `x128.app`.
+Sparkle updates use the latest GitHub Release appcast at:
+
+```text
+https://github.com/barryw/vice-macos/releases/latest/download/appcast.xml
+```
+
 With current Xcode releases, install the separate Metal toolchain first:
 
 ```sh
@@ -96,7 +102,9 @@ already installed.
 Push builds on `macos/native-metal` build, test, package, and publish a GitHub
 Release named `vice-mac-<VICE version>-<git sha>-1`. Tags matching
 `vice-mac-*` also package and publish a release for that tag. The pipeline
-requires the `github_token` secret.
+requires the `github_token` and `sparkle_private_key` secrets. The release
+publisher signs the DMG with Sparkle's EdDSA key and uploads `appcast.xml`
+alongside the DMG and checksums.
 
 Notarized release builds also require `apple_codesign_identity` and
 `apple_development_team`. CI expects the runner login keychain to contain that

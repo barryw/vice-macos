@@ -47,6 +47,8 @@ steps:
     environment:
       GH_TOKEN:
         from_secret: github_token
+      SPARKLE_PRIVATE_KEY:
+        from_secret: sparkle_private_key
     commands:
       - macos/scripts/publish-github-release.sh
     when:

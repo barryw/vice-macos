@@ -199,6 +199,14 @@
 		F60000000000000000000055 /* MediaConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003D /* MediaConfiguration.swift */; };
 		F60000000000000000000056 /* AIAssistantConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003E /* AIAssistantConfiguration.swift */; };
 		F60000000000000000000070 /* CommodoreDiskImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000000000000000000020 /* CommodoreDiskImage.swift */; };
+		FA0000000000000000000010 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = FA0000000000000000000020 /* Sparkle */; };
+		FA0000000000000000000011 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = FA0000000000000000000021 /* Sparkle */; };
+		FA0000000000000000000012 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = FA0000000000000000000022 /* Sparkle */; };
+		FA0000000000000000000013 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = FA0000000000000000000023 /* Sparkle */; };
+		FA0000000000000000000014 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = FA0000000000000000000024 /* Sparkle */; };
+		FA0000000000000000000015 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = FA0000000000000000000025 /* Sparkle */; };
+		FA0000000000000000000016 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = FA0000000000000000000026 /* Sparkle */; };
+		FA0000000000000000000017 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = FA0000000000000000000027 /* Sparkle */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -245,6 +253,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				FA0000000000000000000010 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -252,6 +261,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				FA0000000000000000000011 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -259,6 +269,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				FA0000000000000000000012 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -266,6 +277,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				FA0000000000000000000013 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -273,6 +285,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				FA0000000000000000000017 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -280,6 +293,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				FA0000000000000000000014 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -287,6 +301,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				FA0000000000000000000015 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -294,6 +309,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				FA0000000000000000000016 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -431,6 +447,9 @@
 			dependencies = (
 			);
 			name = ViceMacC64;
+			packageProductDependencies = (
+				FA0000000000000000000020 /* Sparkle */,
+			);
 			productName = ViceMacC64;
 			productReference = A10000000000000000000027 /* x64sc.app */;
 			productType = "com.apple.product-type.application";
@@ -449,6 +468,9 @@
 			dependencies = (
 			);
 			name = ViceMacVIC20;
+			packageProductDependencies = (
+				FA0000000000000000000021 /* Sparkle */,
+			);
 			productName = ViceMacVIC20;
 			productReference = B20000000000000000000027 /* xvic.app */;
 			productType = "com.apple.product-type.application";
@@ -467,6 +489,9 @@
 			dependencies = (
 			);
 			name = ViceMacPET;
+			packageProductDependencies = (
+				FA0000000000000000000022 /* Sparkle */,
+			);
 			productName = ViceMacPET;
 			productReference = C30000000000000000000027 /* xpet.app */;
 			productType = "com.apple.product-type.application";
@@ -485,6 +510,9 @@
 			dependencies = (
 			);
 			name = ViceMacPlus4;
+			packageProductDependencies = (
+				FA0000000000000000000023 /* Sparkle */,
+			);
 			productName = ViceMacPlus4;
 			productReference = D40000000000000000000027 /* xplus4.app */;
 			productType = "com.apple.product-type.application";
@@ -503,6 +531,9 @@
 			dependencies = (
 			);
 			name = ViceMacC16;
+			packageProductDependencies = (
+				FA0000000000000000000024 /* Sparkle */,
+			);
 			productName = ViceMacC16;
 			productReference = 170000000000000000000027 /* xc16.app */;
 			productType = "com.apple.product-type.application";
@@ -521,6 +552,9 @@
 			dependencies = (
 			);
 			name = ViceMacC232;
+			packageProductDependencies = (
+				FA0000000000000000000025 /* Sparkle */,
+			);
 			productName = ViceMacC232;
 			productReference = 180000000000000000000027 /* xc232.app */;
 			productType = "com.apple.product-type.application";
@@ -539,6 +573,9 @@
 			dependencies = (
 			);
 			name = ViceMacV364;
+			packageProductDependencies = (
+				FA0000000000000000000026 /* Sparkle */,
+			);
 			productName = ViceMacV364;
 			productReference = 190000000000000000000027 /* xv364.app */;
 			productType = "com.apple.product-type.application";
@@ -557,6 +594,9 @@
 			dependencies = (
 			);
 			name = ViceMacC128;
+			packageProductDependencies = (
+				FA0000000000000000000027 /* Sparkle */,
+			);
 			productName = ViceMacC128;
 			productReference = E50000000000000000000027 /* x128.app */;
 			productType = "com.apple.product-type.application";
@@ -625,6 +665,9 @@
 				Base,
 			);
 			mainGroup = A10000000000000000000030;
+			packageReferences = (
+				FA0000000000000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */,
+			);
 			productRefGroup = A10000000000000000000035 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -1136,6 +1179,60 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		FA0000000000000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.9.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		FA0000000000000000000020 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FA0000000000000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
+		FA0000000000000000000021 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FA0000000000000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
+		FA0000000000000000000022 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FA0000000000000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
+		FA0000000000000000000023 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FA0000000000000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
+		FA0000000000000000000024 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FA0000000000000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
+		FA0000000000000000000025 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FA0000000000000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
+		FA0000000000000000000026 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FA0000000000000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
+		FA0000000000000000000027 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FA0000000000000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
+/* End XCSwiftPackageProductDependency section */
 
 /* Begin XCBuildConfiguration section */
 		A10000000000000000000060 /* Debug */ = {

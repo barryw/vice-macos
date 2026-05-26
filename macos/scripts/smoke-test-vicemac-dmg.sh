@@ -8,6 +8,7 @@ SMOKE_APPS="${VICE_MAC_SMOKE_APPS:-x64sc xvic xpet xplus4 xc16 xc232 xv364 x128}
 SMOKE_TIMEOUT="${VICE_MAC_SMOKE_TIMEOUT:-35}"
 SMOKE_ATTEMPTS="${VICE_MAC_SMOKE_ATTEMPTS:-2}"
 KEEP_LOGS="${VICE_MAC_SMOKE_KEEP_LOGS:-0}"
+STRICT_METADATA="${VICE_MAC_SMOKE_STRICT_METADATA:-}"
 DMG_PATH="${1:-}"
 
 WORK_DIR=""
@@ -100,6 +101,52 @@ assert_no_loader_errors() {
     fi
 }
 
+strict_metadata_enabled() {
+    case "$STRICT_METADATA" in
+        1|true|TRUE|yes|YES|on|ON)
+            return 0
+            ;;
+        0|false|FALSE|no|NO|off|OFF)
+            return 1
+            ;;
+        "")
+            [[ -n "${CI_COMMIT_SHA:-}" ]]
+            ;;
+        *)
+            fail "VICE_MAC_SMOKE_STRICT_METADATA must be 1, 0, or unset"
+            ;;
+    esac
+}
+
+plist_string() {
+    local plist="$1"
+    local key="$2"
+
+    /usr/libexec/PlistBuddy -c "Print :$key" "$plist" 2>/dev/null || true
+}
+
+assert_release_metadata() {
+    local app_bundle="$1"
+    local plist="$app_bundle/Contents/Info.plist"
+    local mac_sha
+    local vice_sha
+
+    strict_metadata_enabled || return
+
+    [[ -f "$plist" ]] || fail "$CURRENT_APP Info.plist is missing"
+
+    mac_sha="$(plist_string "$plist" "VICEMacGitSHA")"
+    vice_sha="$(plist_string "$plist" "VICEUpstreamGitSHA")"
+
+    if [[ -z "$mac_sha" || "$mac_sha" == "unknown" || "$mac_sha" == *-dirty ]]; then
+        fail "$CURRENT_APP has invalid Mac build metadata: ${mac_sha:-missing}"
+    fi
+
+    if [[ -z "$vice_sha" || "$vice_sha" == "unknown" || "$vice_sha" == *-dirty ]]; then
+        fail "$CURRENT_APP has invalid VICE upstream metadata: ${vice_sha:-missing}"
+    fi
+}
+
 run_app_smoke_test() {
     local app="$1"
     local attempt
@@ -137,6 +184,7 @@ run_app_smoke_test_attempt() {
 
     [[ -d "$app_bundle" ]] || fail "app bundle is missing from DMG: $app.app"
     [[ -x "$app_executable" ]] || fail "app executable is missing or not executable: $app_executable"
+    assert_release_metadata "$app_bundle"
 
     echo "Smoke testing $app_executable"
     "$app_executable" --vice-mac-smoke-test --vice-mac-smoke-timeout "$SMOKE_TIMEOUT" >"$CURRENT_STDOUT_LOG" 2>"$CURRENT_STDERR_LOG" &

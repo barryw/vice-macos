@@ -68,11 +68,30 @@ short_git_sha() {
     git -C "$repo" rev-parse --short=12 "$ref" 2>/dev/null || echo "unknown"
 }
 
+short_git_sha_value() {
+    local repo="$1"
+    local value="$2"
+    local short_value
+
+    short_value="$(git -C "$repo" rev-parse --short=12 "$value" 2>/dev/null || true)"
+    if [[ -n "$short_value" ]]; then
+        echo "$short_value"
+        return
+    fi
+
+    printf '%s\n' "${value:0:12}"
+}
+
 mac_git_sha() {
     local sha
 
     if [[ -n "${VICE_MAC_GIT_SHA:-}" ]]; then
         echo "$VICE_MAC_GIT_SHA"
+        return
+    fi
+
+    if [[ -n "${CI_COMMIT_SHA:-}" ]]; then
+        short_git_sha_value "$REPO_ROOT" "$CI_COMMIT_SHA"
         return
     fi
 
@@ -87,17 +106,24 @@ mac_git_sha() {
 upstream_git_sha() {
     local merge_base
     local parents
+    local upstream_ref
 
     if [[ -n "${VICE_UPSTREAM_GIT_SHA:-}" ]]; then
         echo "$VICE_UPSTREAM_GIT_SHA"
         return
     fi
 
-    merge_base="$(git -C "$REPO_ROOT" merge-base HEAD upstream/main 2>/dev/null || true)"
-    if [[ -n "$merge_base" ]]; then
-        short_git_sha "$REPO_ROOT" "$merge_base"
-        return
-    fi
+    for upstream_ref in refs/remotes/upstream/main upstream/main FETCH_HEAD; do
+        if ! git -C "$REPO_ROOT" rev-parse --verify "$upstream_ref^{commit}" >/dev/null 2>&1; then
+            continue
+        fi
+
+        merge_base="$(git -C "$REPO_ROOT" merge-base HEAD "$upstream_ref" 2>/dev/null || true)"
+        if [[ -n "$merge_base" ]]; then
+            short_git_sha "$REPO_ROOT" "$merge_base"
+            return
+        fi
+    done
 
     parents="$(git -C "$REPO_ROOT" log --merges --first-parent --format=%P -n 1 HEAD 2>/dev/null || true)"
     set -- $parents
