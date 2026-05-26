@@ -90,6 +90,16 @@ static log_t mcp_transport_log = LOG_DEFAULT;
 /* Mutex for thread-safe access to static state (server, connections) */
 static pthread_mutex_t transport_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+/* Serialize MCP tool dispatches across libmicrohttpd worker threads.
+ * The emulator trap queue can hold multiple traps, but tool handlers are not
+ * designed to run concurrently against emulator state. Keeping one in-flight
+ * MCP dispatch prevents high-frequency clients from building a trap backlog
+ * that can time out under warp-mode polling.
+ */
+static pthread_mutex_t dispatch_mutex = PTHREAD_MUTEX_INITIALIZER;
+static int test_count_trap_dispatches = 0;
+static int test_trap_dispatch_count = 0;
+
 /* HTTP server state - owned by mcp_transport, cleaned up in shutdown */
 static struct MHD_Daemon *http_daemon = NULL;
 static int server_running = 0;  /* 1 when HTTP server is active */
@@ -329,7 +339,21 @@ static void mcp_trap_handler(uint16_t addr, void *data)
 
     (void)addr;  /* Unused - trap address not relevant for MCP */
 
+    /* If the HTTP thread timed out before this trap fired, do not execute a
+     * stale tool call later against a newer emulator state.
+     */
+    pthread_mutex_lock(&req->mutex);
+    if (req->abandoned) {
+        pthread_mutex_unlock(&req->mutex);
+        mcp_trap_request_free(req);
+        return;
+    }
+    pthread_mutex_unlock(&req->mutex);
+
     /* Execute tool on main thread - thread safe! */
+    if (test_count_trap_dispatches) {
+        test_trap_dispatch_count++;
+    }
     req->response = mcp_tools_dispatch(req->tool_name, req->params);
 
     /* Signal completion to waiting HTTP thread */
@@ -352,12 +376,20 @@ static void mcp_trap_handler(uint16_t addr, void *data)
  */
 static cJSON* mcp_dispatch_via_trap(const char *tool_name, cJSON *params)
 {
+    cJSON *serialized_response;
+
+    log_message(mcp_transport_log, "Waiting for MCP dispatch slot: %s", tool_name);
+    pthread_mutex_lock(&dispatch_mutex);
+    log_message(mcp_transport_log, "Acquired MCP dispatch slot: %s", tool_name);
+
     /* If we're inside the monitor, the main loop is blocked waiting for input.
      * In this case, we can safely dispatch directly since there's no concurrent
      * execution. This also handles the case where traps won't fire. */
     if (monitor_is_inside_monitor()) {
         log_message(mcp_transport_log, "Monitor active - using direct dispatch for: %s", tool_name);
-        return mcp_tools_dispatch(tool_name, params);
+        serialized_response = mcp_tools_dispatch(tool_name, params);
+        pthread_mutex_unlock(&dispatch_mutex);
+        return serialized_response;
     }
 
     /* If UI pause is active, the emulator main loop is paused but not in
@@ -381,6 +413,7 @@ static cJSON* mcp_dispatch_via_trap(const char *tool_name, cJSON *params)
         } else {
             response = mcp_tools_dispatch(tool_name, params);
             mainlock_release();
+            pthread_mutex_unlock(&dispatch_mutex);
             return response;
         }
     }
@@ -412,6 +445,7 @@ static cJSON* mcp_dispatch_via_trap(const char *tool_name, cJSON *params)
                         cJSON_AddNumberToObject(error, "code", -32603);
                         cJSON_AddStringToObject(error, "message", "Internal error: out of memory");
                     }
+                    pthread_mutex_unlock(&dispatch_mutex);
                     return error;
                 }
             }
@@ -453,6 +487,7 @@ static cJSON* mcp_dispatch_via_trap(const char *tool_name, cJSON *params)
                         cJSON_AddNumberToObject(error, "code", -32000);
                         cJSON_AddStringToObject(error, "message", "Timeout: emulator may be paused or unresponsive");
                     }
+                    pthread_mutex_unlock(&dispatch_mutex);
                     return error;
                 }
             } else if (wait_result != 0) {
@@ -468,6 +503,7 @@ static cJSON* mcp_dispatch_via_trap(const char *tool_name, cJSON *params)
                         cJSON_AddNumberToObject(error, "code", -32603);
                         cJSON_AddStringToObject(error, "message", "Internal error: condition wait failed");
                     }
+                    pthread_mutex_unlock(&dispatch_mutex);
                     return error;
                 }
             }
@@ -480,6 +516,7 @@ static cJSON* mcp_dispatch_via_trap(const char *tool_name, cJSON *params)
         response = req->response;
         req->response = NULL;  /* Prevent mcp_trap_request_free from deleting it */
         mcp_trap_request_free(req);
+        pthread_mutex_unlock(&dispatch_mutex);
 
         return response;
     }
@@ -934,6 +971,7 @@ int mcp_transport_init(void)
      * PTHREAD_MUTEX_INITIALIZER only works for static init; after
      * pthread_mutex_destroy() we must use pthread_mutex_init(). */
     pthread_mutex_init(&transport_mutex, NULL);
+    pthread_mutex_init(&dispatch_mutex, NULL);
 
     /* HTTP server initialization happens in mcp_transport_start() */
 
@@ -949,6 +987,7 @@ void mcp_transport_shutdown(void)
     mcp_transport_settings_clear();
 
     /* Destroy mutex */
+    pthread_mutex_destroy(&dispatch_mutex);
     pthread_mutex_destroy(&transport_mutex);
 
     log_message(mcp_transport_log, "MCP transport shut down");
@@ -1091,4 +1130,88 @@ int mcp_transport_sse_send_event(const char *event_type, const char *data)
                 "SSE event '%s' not sent: SSE streaming is not implemented",
                 event_type ? event_type : "(null)");
     return -1;
+}
+
+int mcp_transport_test_dispatch_mutex_serializes(void)
+{
+    if (pthread_mutex_trylock(&dispatch_mutex) != 0) {
+        return 0;
+    }
+
+    if (pthread_mutex_trylock(&dispatch_mutex) == 0) {
+        pthread_mutex_unlock(&dispatch_mutex);
+        pthread_mutex_unlock(&dispatch_mutex);
+        return 0;
+    }
+
+    pthread_mutex_unlock(&dispatch_mutex);
+
+    if (pthread_mutex_trylock(&dispatch_mutex) != 0) {
+        return 0;
+    }
+
+    pthread_mutex_unlock(&dispatch_mutex);
+    return 1;
+}
+
+static mcp_trap_request_t *mcp_transport_test_request_new(const char *tool_name,
+                                                          int abandoned)
+{
+    mcp_trap_request_t *req;
+
+    req = (mcp_trap_request_t *)lib_malloc(sizeof(mcp_trap_request_t));
+    req->tool_name = lib_strdup(tool_name);
+    req->params = NULL;
+    req->response = NULL;
+    req->complete = 0;
+    req->abandoned = abandoned ? 1 : 0;
+    pthread_mutex_init(&req->mutex, NULL);
+    pthread_cond_init(&req->cond, NULL);
+
+    return req;
+}
+
+int mcp_transport_test_abandoned_trap_skips_dispatch(void)
+{
+    mcp_trap_request_t *req;
+    int skipped;
+
+    test_count_trap_dispatches = 1;
+    test_trap_dispatch_count = 0;
+
+    req = mcp_transport_test_request_new("vice.ping", 1);
+    mcp_trap_handler(0, req);
+
+    skipped = (test_trap_dispatch_count == 0);
+    test_count_trap_dispatches = 0;
+    test_trap_dispatch_count = 0;
+
+    return skipped;
+}
+
+int mcp_transport_test_active_trap_dispatches_once(void)
+{
+    mcp_trap_request_t *req;
+    int complete;
+    int has_response;
+    int dispatch_count;
+
+    test_count_trap_dispatches = 1;
+    test_trap_dispatch_count = 0;
+
+    req = mcp_transport_test_request_new("vice.ping", 0);
+    mcp_trap_handler(0, req);
+
+    pthread_mutex_lock(&req->mutex);
+    complete = req->complete;
+    pthread_mutex_unlock(&req->mutex);
+
+    has_response = (req->response != NULL);
+    dispatch_count = test_trap_dispatch_count;
+
+    mcp_trap_request_free(req);
+    test_count_trap_dispatches = 0;
+    test_trap_dispatch_count = 0;
+
+    return complete && has_response && dispatch_count == 1;
 }

@@ -17,7 +17,9 @@ The MCP test suite validates the core functionality of the MCP server integratio
 
 - C compiler (gcc or clang)
 - Make
-- No VICE dependencies required (tests use stubs)
+- Configured VICE build tree with MCP enabled (`configure --enable-mcp-server`)
+- libmicrohttpd development files discoverable by `pkg-config`, or set
+  `LIBMICROHTTPD_CFLAGS` and `LIBMICROHTTPD_LIBS`
 
 ### Build Tests
 
@@ -37,15 +39,11 @@ Expected output:
 === MCP Tools Test Suite ===
 
 Running test: ping_tool_returns_valid_response ... PASS
-Running test: invalid_tool_name_returns_error ... PASS
-Running test: null_tool_name_returns_error ... PASS
-Running test: empty_tool_name_returns_error ... PASS
-Running test: tool_name_too_long_returns_error ... PASS
-Running test: valid_tool_dispatch_works ... PASS
+...
 
 === Test Results ===
-Tests run:    6
-Tests passed: 6
+Tests run:    N
+Tests passed: N
 Tests failed: 0
 
 SUCCESS: All tests passed

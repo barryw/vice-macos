@@ -217,7 +217,7 @@ cJSON* mcp_tool_tools_call(cJSON *params)
 
     /* Find and invoke the tool */
     for (i = 0; tool_registry[i].name != NULL; i++) {
-        if (strcmp(tool_registry[i].name, tool_name) == 0) {
+        if (mcp_tool_name_matches(tool_registry[i].name, tool_name)) {
             cJSON *tool_result;
             cJSON *response;
             cJSON *code_item;
@@ -331,6 +331,7 @@ cJSON* mcp_tool_tools_list(cJSON *params)
     for (i = 0; tool_registry[i].name != NULL; i++) {
         const char *name = tool_registry[i].name;
         const char *desc = tool_registry[i].description;
+        char client_name[257];
 
         tool_obj = cJSON_CreateObject();
         if (tool_obj == NULL) {
@@ -339,7 +340,14 @@ cJSON* mcp_tool_tools_list(cJSON *params)
             return mcp_error(MCP_ERROR_INTERNAL_ERROR, "Out of memory");
         }
 
-        cJSON_AddStringToObject(tool_obj, "name", name);
+        if (mcp_tool_client_name(name, client_name, sizeof(client_name)) < 0) {
+            cJSON_Delete(tool_obj);
+            cJSON_Delete(tools_array);
+            cJSON_Delete(response);
+            return mcp_error(MCP_ERROR_INTERNAL_ERROR, "Tool name too long");
+        }
+
+        cJSON_AddStringToObject(tool_obj, "name", client_name);
         cJSON_AddStringToObject(tool_obj, "description", desc);
 
         /* Build inputSchema for each tool */

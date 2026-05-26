@@ -78,4 +78,9 @@ extern void mcp_transport_stop(void);
  */
 extern int mcp_transport_sse_send_event(const char *event_type, const char *data);
 
+/* Unit-test hooks for transport edge cases that are otherwise timing-sensitive. */
+extern int mcp_transport_test_dispatch_mutex_serializes(void);
+extern int mcp_transport_test_abandoned_trap_skips_dispatch(void);
+extern int mcp_transport_test_active_trap_dispatches_once(void);
+
 #endif /* VICE_MCP_TRANSPORT_H */
