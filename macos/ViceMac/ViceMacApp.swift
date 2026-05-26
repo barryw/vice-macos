@@ -36,7 +36,7 @@ struct ViceMacApp: App {
         }
         .commands {
             CommandGroup(replacing: .appInfo) {
-                Button("About VICE Mac") {
+                Button("About mac VICE") {
                     openWindow(id: AboutWindow.id)
                 }
             }
@@ -261,7 +261,7 @@ struct ViceMacApp: App {
             }
         }
 
-        Window("About VICE Mac", id: AboutWindow.id) {
+        Window("About mac VICE", id: AboutWindow.id) {
             AboutVICEView()
                 .environmentObject(emulator)
                 .containerBackground(.clear, for: .window)
@@ -699,7 +699,7 @@ private struct AboutVICEView: View {
 
                     VStack(alignment: .leading, spacing: 16) {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text(AppMetadata.displayName)
+                            Text(AppMetadata.brandDisplayName(viceTarget: emulator.machine.shortName))
                                 .font(.system(size: 34, weight: .bold, design: .rounded))
 
                             Text("A native Mac home for the VICE engine.")
@@ -1050,10 +1050,21 @@ private struct AppBuildMetadata {
 }
 
 private enum AppMetadata {
+    static let brandName = "mac VICE"
+
     static var displayName: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
             ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String
-            ?? "VICE Mac"
+            ?? brandName
+    }
+
+    static func brandDisplayName(viceTarget: String?) -> String {
+        guard let viceTarget,
+              !viceTarget.isEmpty else {
+            return brandName
+        }
+
+        return "\(brandName) (\(viceTarget))"
     }
 
     static var viceVersionLine: String {
@@ -1068,7 +1079,7 @@ private enum AppMetadata {
     static func copyVersionSummary(machineName: String, viceTarget: String) {
         let metadata = buildMetadata
         let summary = """
-        \(displayName)
+        \(brandDisplayName(viceTarget: viceTarget))
         VICE \(viceVersion)
         Machine \(machineName) / \(viceTarget)
         VICE upstream \(metadata.viceUpstreamSHA)
