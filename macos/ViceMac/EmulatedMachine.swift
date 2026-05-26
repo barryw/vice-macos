@@ -415,6 +415,10 @@ struct EmulatedMachine: Identifiable, Equatable {
         "ViceMac.MainWindow.\(id.rawValue)"
     }
 
+    var mainWindowIdentifier: String {
+        "ViceMac.MainWindow.\(id.rawValue)"
+    }
+
     var usesVIC20MemoryExpansion: Bool {
         model.usesVIC20MemoryStartupOption
     }

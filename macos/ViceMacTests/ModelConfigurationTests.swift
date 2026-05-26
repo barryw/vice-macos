@@ -332,10 +332,14 @@ final class ModelConfigurationTests: XCTestCase {
 
     func testWindowFrameAutosaveNamesAreMachineSpecific() {
         let autosaveNames = Self.allMachines.map(\.mainWindowFrameAutosaveName)
+        let identifiers = Self.allMachines.map(\.mainWindowIdentifier)
 
         XCTAssertEqual(Set(autosaveNames).count, Self.allMachines.count)
+        XCTAssertEqual(Set(identifiers).count, Self.allMachines.count)
         XCTAssertEqual(EmulatedMachine.x64sc.mainWindowFrameAutosaveName, "ViceMac.MainWindow.x64sc")
+        XCTAssertEqual(EmulatedMachine.x64sc.mainWindowIdentifier, "ViceMac.MainWindow.x64sc")
         XCTAssertTrue(autosaveNames.allSatisfy { $0.hasPrefix("ViceMac.MainWindow.") })
+        XCTAssertTrue(identifiers.allSatisfy { $0.hasPrefix("ViceMac.MainWindow.") })
     }
 
     func testMainWindowFrameDefaultsRoundTrip() {

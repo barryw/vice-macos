@@ -880,19 +880,29 @@ enum WindowFrameRestoration {
     @MainActor
     static func saveOpenWindowFrames() {
         let machine = EmulatedMachine.current
-        let autosaveName = NSWindow.FrameAutosaveName(machine.mainWindowFrameAutosaveName)
+        var didSave = false
 
         for window in NSApp.windows
-            where window.frameAutosaveName == autosaveName {
-            saveFrame(for: window, machine: machine)
-            window.saveFrame(usingName: window.frameAutosaveName)
+            where isMainWindow(window, for: machine) {
+            didSave = saveFrame(for: window, machine: machine) || didSave
+            if !window.frameAutosaveName.isEmpty {
+                window.saveFrame(usingName: window.frameAutosaveName)
+            }
         }
 
-        UserDefaults.standard.synchronize()
+        if !didSave,
+           let fallbackWindow = NSApp.mainWindow ?? NSApp.keyWindow {
+            didSave = saveFrame(for: fallbackWindow, machine: machine)
+        }
+
+        if didSave {
+            UserDefaults.standard.synchronize()
+        }
     }
 
     @MainActor
-    static func saveFrame(for window: NSWindow, machine: EmulatedMachine) {
+    @discardableResult
+    static func saveFrame(for window: NSWindow, machine: EmulatedMachine, flush: Bool = false) -> Bool {
         guard window.isVisible,
               !window.isMiniaturized,
               !window.styleMask.contains(.fullScreen),
@@ -900,10 +910,14 @@ enum WindowFrameRestoration {
               window.frame.height.isFinite,
               window.frame.width > 0,
               window.frame.height > 0 else {
-            return
+            return false
         }
 
         EmulatorDefaults.saveMainWindowFrame(window.frame, for: machine)
+        if flush {
+            UserDefaults.standard.synchronize()
+        }
+        return true
     }
 
     @MainActor
@@ -956,6 +970,16 @@ enum WindowFrameRestoration {
             lhs.visibleFrame.intersection(frame).area < rhs.visibleFrame.intersection(frame).area
         } ?? NSScreen.main ?? screens[0]
     }
+
+    @MainActor
+    private static func isMainWindow(_ window: NSWindow, for machine: EmulatedMachine) -> Bool {
+        let autosaveName = NSWindow.FrameAutosaveName(machine.mainWindowFrameAutosaveName)
+        if window.frameAutosaveName == autosaveName {
+            return true
+        }
+
+        return window.identifier?.rawValue == machine.mainWindowIdentifier
+    }
 }
 
 private struct WindowChromeObserver: NSViewRepresentable {
@@ -989,6 +1013,8 @@ private struct WindowChromeObserver: NSViewRepresentable {
         private var previousAcceptsMouseMovedEvents: Bool?
         private var configuredFrameAutosaveName: String?
         private var deferredRestoreTask: Task<Void, Never>?
+        private var deferredSaveTask: Task<Void, Never>?
+        private var isRestoringPersistedFrame = false
         private let revealThreshold: CGFloat = 74
 
         init(observer: WindowChromeObserver) {
@@ -1044,28 +1070,28 @@ private struct WindowChromeObserver: NSViewRepresentable {
                                    object: window,
                                    queue: .main) { [weak self] _ in
                     MainActor.assumeIsolated {
-                        self?.saveCurrentFrame()
+                        self?.saveCurrentFrameSoon()
                     }
                 },
                 center.addObserver(forName: NSWindow.didResizeNotification,
                                    object: window,
                                    queue: .main) { [weak self] _ in
                     MainActor.assumeIsolated {
-                        self?.saveCurrentFrame()
+                        self?.saveCurrentFrameSoon()
                     }
                 },
                 center.addObserver(forName: NSWindow.didEndLiveResizeNotification,
                                    object: window,
                                    queue: .main) { [weak self] _ in
                     MainActor.assumeIsolated {
-                        self?.saveCurrentFrame()
+                        self?.saveCurrentFrame(flush: true)
                     }
                 },
                 center.addObserver(forName: NSWindow.willCloseNotification,
                                    object: window,
                                    queue: .main) { [weak self] _ in
                     MainActor.assumeIsolated {
-                        self?.saveCurrentFrame()
+                        self?.saveCurrentFrame(flush: true)
                     }
                 }
             ]
@@ -1081,6 +1107,10 @@ private struct WindowChromeObserver: NSViewRepresentable {
         }
 
         private func detach() {
+            saveCurrentFrame(flush: true)
+            deferredSaveTask?.cancel()
+            deferredSaveTask = nil
+
             if let mouseMonitor {
                 NSEvent.removeMonitor(mouseMonitor)
                 self.mouseMonitor = nil
@@ -1104,6 +1134,7 @@ private struct WindowChromeObserver: NSViewRepresentable {
             configuredFrameAutosaveName = nil
             deferredRestoreTask?.cancel()
             deferredRestoreTask = nil
+            isRestoringPersistedFrame = false
             window = nil
         }
 
@@ -1116,12 +1147,17 @@ private struct WindowChromeObserver: NSViewRepresentable {
 
             let autosaveName = NSWindow.FrameAutosaveName(frameAutosaveName)
             configuredFrameAutosaveName = frameAutosaveName
+            window.identifier = NSUserInterfaceItemIdentifier(observer.machine.mainWindowIdentifier)
             window.isRestorable = true
             window.setFrameAutosaveName(autosaveName)
 
             if EmulatorDefaults.loadMainWindowFrame(for: observer.machine) == nil {
                 window.setFrameUsingName(autosaveName, force: true)
+                saveCurrentFrameSoon()
+                return
             }
+
+            isRestoringPersistedFrame = true
             restorePersistedFrame()
             restorePersistedFrameAfterSwiftUILayout()
         }
@@ -1137,26 +1173,51 @@ private struct WindowChromeObserver: NSViewRepresentable {
         private func restorePersistedFrameAfterSwiftUILayout() {
             deferredRestoreTask?.cancel()
             deferredRestoreTask = Task { @MainActor [weak self] in
-                await Task.yield()
-                guard !Task.isCancelled else {
-                    return
+                for delay in [0, 150_000_000, 500_000_000, 1_000_000_000] {
+                    if delay == 0 {
+                        await Task.yield()
+                    } else {
+                        try? await Task.sleep(nanoseconds: UInt64(delay))
+                    }
+                    guard !Task.isCancelled else {
+                        return
+                    }
+                    self?.restorePersistedFrame()
                 }
-                self?.restorePersistedFrame()
 
-                try? await Task.sleep(nanoseconds: 150_000_000)
                 guard !Task.isCancelled else {
                     return
                 }
-                self?.restorePersistedFrame()
+                self?.isRestoringPersistedFrame = false
+                self?.saveCurrentFrame(flush: true)
             }
         }
 
-        private func saveCurrentFrame() {
+        private func saveCurrentFrame(flush: Bool = false) {
+            guard !isRestoringPersistedFrame else {
+                return
+            }
             guard let window else {
                 return
             }
 
-            WindowFrameRestoration.saveFrame(for: window, machine: observer.machine)
+            WindowFrameRestoration.saveFrame(for: window, machine: observer.machine, flush: flush)
+        }
+
+        private func saveCurrentFrameSoon() {
+            guard !isRestoringPersistedFrame else {
+                return
+            }
+
+            saveCurrentFrame()
+            deferredSaveTask?.cancel()
+            deferredSaveTask = Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: 350_000_000)
+                guard !Task.isCancelled else {
+                    return
+                }
+                self?.saveCurrentFrame(flush: true)
+            }
         }
 
         private func updateFullScreenState() {
