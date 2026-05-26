@@ -360,6 +360,7 @@ private struct EmulatorDisplaySurface: View {
                                   preservesAspectRatio: emulator.displayMode.preservesAspectRatio,
                                   onKeyEvent: emulator.handleKeyEvent,
                                   onFlagsChanged: emulator.handleFlagsChanged,
+                                  onPaste: { emulator.pasteFromPasteboard() },
                                   onFocusLost: emulator.releaseAllKeys)
                     .frame(width: displaySize.width,
                            height: displaySize.height)

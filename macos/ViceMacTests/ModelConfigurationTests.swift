@@ -288,6 +288,22 @@ final class ModelConfigurationTests: XCTestCase {
         XCTAssertFalse(petExtensions.contains("crt"))
     }
 
+    func testKeyboardTextChunksNormalizeClipboardText() {
+        let chunks = EmulatorSession.keyboardTextChunks(for: "10 print \"hi\"\n20 π\tthere\0")
+
+        XCTAssertEqual(chunks, ["10 print \"hi\"\n20 ? there"])
+    }
+
+    func testKeyboardTextChunksSplitBeforeBridgeLimit() {
+        let text = String(repeating: "A", count: EmulatorSession.maxKeyboardTextChunkLength + 5)
+        let chunks = EmulatorSession.keyboardTextChunks(for: text)
+
+        XCTAssertEqual(chunks.count, 2)
+        XCTAssertEqual(chunks[0].count, EmulatorSession.maxKeyboardTextChunkLength)
+        XCTAssertEqual(chunks[1].count, 5)
+        XCTAssertTrue(chunks.allSatisfy { $0.utf8.count <= EmulatorSession.maxKeyboardTextChunkLength })
+    }
+
     func testNormalizedDriveConfigurationsReplacesInvalidMachineDriveType() {
         var configuration = DriveConfiguration(unit: 8,
                                                isAttached: true,

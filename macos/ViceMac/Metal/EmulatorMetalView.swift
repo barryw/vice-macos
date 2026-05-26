@@ -7,6 +7,7 @@ struct EmulatorMetalView: NSViewRepresentable {
     let preservesAspectRatio: Bool
     let onKeyEvent: (NSEvent, Bool) -> Bool
     let onFlagsChanged: (NSEvent) -> Bool
+    let onPaste: () -> Bool
     let onFocusLost: () -> Void
 
     func makeCoordinator() -> EmulatorRenderer {
@@ -19,6 +20,7 @@ struct EmulatorMetalView: NSViewRepresentable {
         let view = EmulatorInputMetalView(frame: .zero, device: MTLCreateSystemDefaultDevice())
         view.onKeyEvent = onKeyEvent
         view.onFlagsChanged = onFlagsChanged
+        view.onPaste = onPaste
         view.onFocusLost = onFocusLost
         view.delegate = context.coordinator
         view.colorPixelFormat = .bgra8Unorm
@@ -37,6 +39,7 @@ struct EmulatorMetalView: NSViewRepresentable {
         if let inputView = nsView as? EmulatorInputMetalView {
             inputView.onKeyEvent = onKeyEvent
             inputView.onFlagsChanged = onFlagsChanged
+            inputView.onPaste = onPaste
             inputView.onFocusLost = onFocusLost
         }
     }
@@ -45,6 +48,7 @@ struct EmulatorMetalView: NSViewRepresentable {
 private final class EmulatorInputMetalView: MTKView {
     var onKeyEvent: ((NSEvent, Bool) -> Bool)?
     var onFlagsChanged: ((NSEvent) -> Bool)?
+    var onPaste: (() -> Bool)?
     var onFocusLost: (() -> Void)?
     private var keyEventMonitor: Any?
 
@@ -116,6 +120,12 @@ private final class EmulatorInputMetalView: MTKView {
             return
         }
         super.flagsChanged(with: event)
+    }
+
+    @objc func paste(_ sender: Any?) {
+        if onPaste?() != true {
+            NSSound.beep()
+        }
     }
 
     private func installKeyEventMonitor() {

@@ -942,6 +942,7 @@ final class EmulatorSession: ObservableObject {
     }
 
     nonisolated static let currentMemoryBank: Int32 = -1
+    nonisolated static let maxKeyboardTextChunkLength = 4000
 
     init() {
         let machine = EmulatedMachine.current
@@ -1459,27 +1460,105 @@ final class EmulatorSession: ObservableObject {
 
     @discardableResult
     func typeText(_ text: String) -> Bool {
-        guard ViceEngineIsRunning(),
-              !isPaused,
-              !text.isEmpty else {
-            return false
-        }
-
-        return text.withCString { pointer in
-            ViceEngineFeedKeyboardText(pointer)
-        }
+        queueKeyboardText(text)
     }
 
     @discardableResult
     func submitLine(_ line: String) -> Bool {
-        guard ViceEngineIsRunning(),
-              !isPaused else {
+        queueKeyboardText("\(line)\r")
+    }
+
+    @discardableResult
+    func pasteFromPasteboard(_ pasteboard: NSPasteboard = .general) -> Bool {
+        guard let text = pasteboard.string(forType: .string),
+              !text.isEmpty else {
+            statusText = "Clipboard has no text"
             return false
         }
 
-        return "\(line)\r".withCString { pointer in
-            ViceEngineFeedKeyboardText(pointer)
+        guard canReceiveKeyboardText else {
+            statusText = isPaused ? "Resume before pasting" : "Emulator is not running"
+            return false
         }
+
+        let didPaste = queueKeyboardText(text)
+        statusText = didPaste ? pasteStatusText(for: text) : "Unable to paste clipboard text"
+        return didPaste
+    }
+
+    @discardableResult
+    private func queueKeyboardText(_ text: String) -> Bool {
+        guard canReceiveKeyboardText else {
+            return false
+        }
+
+        let chunks = Self.keyboardTextChunks(for: text)
+        guard !chunks.isEmpty else {
+            return false
+        }
+
+        for chunk in chunks {
+            let didQueue = chunk.withCString { pointer in
+                ViceEngineFeedKeyboardText(pointer)
+            }
+            if !didQueue {
+                return false
+            }
+        }
+
+        return true
+    }
+
+    var canReceiveKeyboardText: Bool {
+        ViceEngineIsRunning() && !isPaused
+    }
+
+    nonisolated static func keyboardTextChunks(for text: String) -> [String] {
+        var chunks: [String] = []
+        var chunkScalars = String.UnicodeScalarView()
+
+        for scalar in normalizedKeyboardText(text).unicodeScalars {
+            if chunkScalars.count >= maxKeyboardTextChunkLength {
+                chunks.append(String(chunkScalars))
+                chunkScalars.removeAll(keepingCapacity: true)
+            }
+
+            chunkScalars.append(scalar)
+        }
+
+        if !chunkScalars.isEmpty {
+            chunks.append(String(chunkScalars))
+        }
+
+        return chunks
+    }
+
+    nonisolated private static func normalizedKeyboardText(_ text: String) -> String {
+        var normalized = String.UnicodeScalarView()
+
+        for scalar in text.unicodeScalars {
+            switch scalar.value {
+            case 0:
+                continue
+            case 0x09:
+                normalized.append(" ")
+            case 0x0a, 0x0d, 0x20...0x7e:
+                normalized.append(scalar)
+            default:
+                normalized.append("?")
+            }
+        }
+
+        return String(normalized)
+    }
+
+    private func pasteStatusText(for text: String) -> String {
+        let lineCount = text.split(whereSeparator: \.isNewline).count
+        if lineCount > 1 {
+            return "Pasted \(lineCount) lines"
+        }
+
+        return "Pasted clipboard text"
     }
 
     func handleDriveStatus(_ status: DriveStatusSnapshot) {

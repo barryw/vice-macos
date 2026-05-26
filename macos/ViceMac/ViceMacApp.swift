@@ -73,6 +73,14 @@ struct ViceMacApp: App {
                 .keyboardShortcut("s", modifiers: [.command, .option])
             }
 
+            CommandGroup(after: .pasteboard) {
+                Button("Paste into Emulator") {
+                    emulator.pasteFromPasteboard()
+                }
+                .keyboardShortcut("v", modifiers: [.command, .option])
+                .disabled(!emulator.canReceiveKeyboardText)
+            }
+
             CommandMenu("Machine") {
                 Button(emulator.isPaused ? "Resume" : "Pause") {
                     emulator.togglePause()
