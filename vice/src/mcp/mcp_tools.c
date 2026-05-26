@@ -26,6 +26,7 @@
 
 #include "vice.h"
 
+#include <ctype.h>
 #include <string.h>
 
 #include "mcp_tools_internal.h"
@@ -198,6 +199,52 @@ const mcp_tool_t tool_registry[] = {
 /** @brief Number of registered tools (excluding sentinel). */
 #define MCP_TOOL_COUNT (sizeof(tool_registry) / sizeof(tool_registry[0]) - 1)
 
+int mcp_tool_client_name(const char *tool_name, char *buffer, size_t buffer_size)
+{
+    size_t i;
+
+    if (tool_name == NULL || buffer == NULL || buffer_size == 0) {
+        return -1;
+    }
+
+    for (i = 0; tool_name[i] != '\0'; i++) {
+        unsigned char ch;
+
+        if (i + 1 >= buffer_size) {
+            return -1;
+        }
+
+        ch = (unsigned char)tool_name[i];
+        if (isalnum(ch) || ch == '_' || ch == '-') {
+            buffer[i] = (char)ch;
+        } else {
+            buffer[i] = '_';
+        }
+    }
+
+    buffer[i] = '\0';
+    return 0;
+}
+
+int mcp_tool_name_matches(const char *canonical_name, const char *requested_name)
+{
+    char client_name[257];
+
+    if (canonical_name == NULL || requested_name == NULL) {
+        return 0;
+    }
+
+    if (strcmp(canonical_name, requested_name) == 0) {
+        return 1;
+    }
+
+    if (mcp_tool_client_name(canonical_name, client_name, sizeof(client_name)) < 0) {
+        return 0;
+    }
+
+    return strcmp(client_name, requested_name) == 0;
+}
+
 int mcp_tools_init(void)
 {
     /* Check for double-initialization */
@@ -261,7 +308,7 @@ cJSON* mcp_tools_dispatch(const char *tool_name, cJSON *params)
 
     /* Find tool in registry */
     for (i = 0; tool_registry[i].name != NULL; i++) {
-        if (strcmp(tool_registry[i].name, tool_name) == 0) {
+        if (mcp_tool_name_matches(tool_registry[i].name, tool_name)) {
             return tool_registry[i].handler(params);
         }
     }

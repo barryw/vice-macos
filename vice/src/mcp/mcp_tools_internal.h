@@ -69,6 +69,14 @@ extern log_t mcp_tools_log;
 /** @brief Tool registry array (name, description, handler). Sentinel-terminated. */
 extern const mcp_tool_t tool_registry[];
 
+/** @brief Convert canonical MCP tool name to Claude-safe client-visible name.
+ *  Replaces separators such as '.' and '/' with '_'.
+ *  @return 0 on success, -1 if the output buffer is too small. */
+extern int mcp_tool_client_name(const char *tool_name, char *buffer, size_t buffer_size);
+
+/** @brief Return non-zero when requested name matches canonical name or client alias. */
+extern int mcp_tool_name_matches(const char *canonical_name, const char *requested_name);
+
 /* -------------------------------------------------------------------------
  * Shared helper functions (defined in mcp_tools_helpers.c)
  * ------------------------------------------------------------------------- */

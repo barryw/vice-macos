@@ -27,6 +27,11 @@
 /* MCP tool function declarations */
 extern cJSON* mcp_tool_ping(cJSON *params);
 extern cJSON* mcp_tools_dispatch(const char *tool_name, cJSON *params);
+extern int mcp_tool_client_name(const char *tool_name, char *buffer, size_t buffer_size);
+extern int mcp_tool_name_matches(const char *canonical_name, const char *requested_name);
+extern int mcp_transport_test_dispatch_mutex_serializes(void);
+extern int mcp_transport_test_abandoned_trap_skips_dispatch(void);
+extern int mcp_transport_test_active_trap_dispatches_once(void);
 
 /* MCP Base Protocol tool declarations */
 extern cJSON* mcp_tool_initialize(cJSON *params);
@@ -120,6 +125,33 @@ extern int mon_breakpoint_add_checkpoint(unsigned int start, unsigned int end,
 static int tests_run = 0;
 static int tests_passed = 0;
 static int tests_failed = 0;
+
+static int test_tool_name_is_claude_safe(const char *name)
+{
+    size_t i;
+    size_t len;
+
+    if (name == NULL) {
+        return 0;
+    }
+
+    len = strlen(name);
+    if (len == 0 || len > 64) {
+        return 0;
+    }
+
+    for (i = 0; i < len; i++) {
+        char ch = name[i];
+        if (!((ch >= 'a' && ch <= 'z') ||
+              (ch >= 'A' && ch <= 'Z') ||
+              (ch >= '0' && ch <= '9') ||
+              ch == '_' || ch == '-')) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
 
 #define TEST(name) \
     static void test_##name(void); \
@@ -1451,6 +1483,58 @@ TEST(tools_call_with_valid_tool_works)
     cJSON_Delete(response);
 }
 
+/* Test: tools/call accepts Claude-safe aliases advertised by tools/list */
+TEST(tools_call_with_client_safe_alias_works)
+{
+    cJSON *response, *params, *content, *code_item;
+
+    params = cJSON_CreateObject();
+    cJSON_AddStringToObject(params, "name", "vice_ping");
+
+    response = mcp_tools_dispatch("tools/call", params);
+    ASSERT_NOT_NULL(response);
+
+    code_item = cJSON_GetObjectItem(response, "code");
+    ASSERT_TRUE(code_item == NULL);
+
+    content = cJSON_GetObjectItem(response, "content");
+    ASSERT_NOT_NULL(content);
+    ASSERT_TRUE(cJSON_IsArray(content));
+
+    cJSON_Delete(params);
+    cJSON_Delete(response);
+}
+
+/* Test: direct dispatch accepts Claude-safe aliases */
+TEST(client_safe_alias_dispatch_works)
+{
+    cJSON *response, *status_item;
+
+    response = mcp_tools_dispatch("vice_ping", NULL);
+    ASSERT_NOT_NULL(response);
+
+    status_item = cJSON_GetObjectItem(response, "status");
+    ASSERT_NOT_NULL(status_item);
+    ASSERT_STR_EQ(status_item->valuestring, "ok");
+
+    cJSON_Delete(response);
+}
+
+/* Test: canonical names convert to expected client-safe aliases */
+TEST(tool_name_alias_conversion)
+{
+    char alias[64];
+
+    ASSERT_INT_EQ(mcp_tool_client_name("vice.memory.read", alias, sizeof(alias)), 0);
+    ASSERT_STR_EQ(alias, "vice_memory_read");
+    ASSERT_TRUE(mcp_tool_name_matches("vice.memory.read", "vice.memory.read"));
+    ASSERT_TRUE(mcp_tool_name_matches("vice.memory.read", "vice_memory_read"));
+
+    ASSERT_INT_EQ(mcp_tool_client_name("tools/list", alias, sizeof(alias)), 0);
+    ASSERT_STR_EQ(alias, "tools_list");
+    ASSERT_TRUE(mcp_tool_name_matches("tools/list", "tools_list"));
+}
+
 /* Test: tools/call with missing name returns error */
 TEST(tools_call_missing_name_returns_error)
 {
@@ -1588,6 +1672,57 @@ TEST(tools_list_schemas_are_valid)
     ASSERT_STR_EQ(type_item->valuestring, "object");
 
     cJSON_Delete(response);
+}
+
+/* Test: tools/list advertises names Claude Desktop can pass to Anthropic tool_use */
+TEST(tools_list_names_are_claude_safe)
+{
+    cJSON *response, *tools;
+    int i, found_memory_read = 0;
+
+    response = mcp_tools_dispatch("tools/list", NULL);
+    ASSERT_NOT_NULL(response);
+
+    tools = cJSON_GetObjectItem(response, "tools");
+    ASSERT_NOT_NULL(tools);
+    ASSERT_TRUE(cJSON_IsArray(tools));
+
+    for (i = 0; i < cJSON_GetArraySize(tools); i++) {
+        cJSON *tool = cJSON_GetArrayItem(tools, i);
+        cJSON *name = cJSON_GetObjectItem(tool, "name");
+        ASSERT_NOT_NULL(name);
+        ASSERT_TRUE(cJSON_IsString(name));
+        ASSERT_TRUE(test_tool_name_is_claude_safe(name->valuestring));
+
+        if (strcmp(name->valuestring, "vice_memory_read") == 0) {
+            found_memory_read = 1;
+        }
+    }
+
+    ASSERT_TRUE(found_memory_read);
+    cJSON_Delete(response);
+}
+
+/* ===================================================================
+ * MCP Transport Regression Tests
+ * =================================================================== */
+
+/* Test: MCP transport serializes dispatches from HTTP worker threads */
+TEST(transport_dispatch_mutex_serializes)
+{
+    ASSERT_TRUE(mcp_transport_test_dispatch_mutex_serializes());
+}
+
+/* Test: abandoned trap requests do not execute stale tool calls */
+TEST(transport_abandoned_trap_skips_dispatch)
+{
+    ASSERT_TRUE(mcp_transport_test_abandoned_trap_skips_dispatch());
+}
+
+/* Test: active trap requests still execute exactly once */
+TEST(transport_active_trap_dispatches_once)
+{
+    ASSERT_TRUE(mcp_transport_test_active_trap_dispatches_once());
 }
 
 /* ===================================================================
@@ -7383,7 +7518,7 @@ TEST(tools_list_includes_config_get)
         cJSON *tool = cJSON_GetArrayItem(tools_item, i);
         cJSON *name = cJSON_GetObjectItem(tool, "name");
         if (name && cJSON_IsString(name) &&
-            strcmp(name->valuestring, "vice.machine.config.get") == 0) {
+            strcmp(name->valuestring, "vice_machine_config_get") == 0) {
             found = 1;
             break;
         }
@@ -8141,6 +8276,9 @@ int main(void)
 
     /* MCP tools/call tests (Claude Code integration) */
     RUN_TEST(tools_call_with_valid_tool_works);
+    RUN_TEST(tools_call_with_client_safe_alias_works);
+    RUN_TEST(client_safe_alias_dispatch_works);
+    RUN_TEST(tool_name_alias_conversion);
     RUN_TEST(tools_call_missing_name_returns_error);
     RUN_TEST(tools_call_unknown_tool_returns_error);
     RUN_TEST(tools_call_passes_arguments);
@@ -8149,6 +8287,12 @@ int main(void)
     RUN_TEST(tools_list_returns_tools_array);
     RUN_TEST(tools_list_tools_have_required_fields);
     RUN_TEST(tools_list_schemas_are_valid);
+    RUN_TEST(tools_list_names_are_claude_safe);
+
+    /* MCP transport regression tests */
+    RUN_TEST(transport_dispatch_mutex_serializes);
+    RUN_TEST(transport_abandoned_trap_skips_dispatch);
+    RUN_TEST(transport_active_trap_dispatches_once);
 
     /* Symbol loading tests */
     RUN_TEST(symbols_load_kickasm_format);
