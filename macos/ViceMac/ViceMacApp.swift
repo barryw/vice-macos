@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -6,12 +7,20 @@ import UniformTypeIdentifiers
 struct ViceMacApp: App {
     @Environment(\.openWindow) private var openWindow
     @FocusedValue(\.diskImageManagerActions) private var diskImageManagerActions
+    @NSApplicationDelegateAdaptor(ViceMacAppDelegate.self) private var appDelegate
     @StateObject private var emulator = EmulatorSession()
     @StateObject private var aiSettings = AIAssistantSettings()
+    private let launchConfiguration = ViceMacLaunchConfiguration.current
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            Group {
+                if let smokeTestConfiguration = launchConfiguration.releaseSmokeTest {
+                    ReleaseSmokeTestView(configuration: smokeTestConfiguration)
+                } else {
+                    ContentView()
+                }
+            }
                 .environmentObject(emulator)
                 .environmentObject(aiSettings)
         }
@@ -244,6 +253,227 @@ struct ViceMacApp: App {
         } set: { preset in
             emulator.applyFilterPreset(preset)
         }
+    }
+}
+
+@MainActor
+private final class ViceMacAppDelegate: NSObject, NSApplicationDelegate {
+    private var smokeTestSession: EmulatorSession?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        guard let configuration = ViceMacLaunchConfiguration.current.releaseSmokeTest else {
+            return
+        }
+
+        NSApp.setActivationPolicy(.accessory)
+
+        let emulator = EmulatorSession()
+        smokeTestSession = emulator
+
+        Task { @MainActor [emulator] in
+            await ReleaseSmokeTestRunner.run(configuration: configuration, emulator: emulator)
+        }
+    }
+}
+
+private struct ViceMacLaunchConfiguration {
+    let releaseSmokeTest: ViceMacReleaseSmokeTestConfiguration?
+
+    static var current: ViceMacLaunchConfiguration {
+        let arguments = ProcessInfo.processInfo.arguments
+        let environment = ProcessInfo.processInfo.environment
+        let isSmokeTest = arguments.contains("--vice-mac-smoke-test")
+            || environment["VICE_MAC_RELEASE_SMOKE_TEST"] == "1"
+
+        guard isSmokeTest else {
+            return ViceMacLaunchConfiguration(releaseSmokeTest: nil)
+        }
+
+        let timeout = value(after: "--vice-mac-smoke-timeout", in: arguments)
+            .flatMap(TimeInterval.init)
+            ?? environment["VICE_MAC_SMOKE_TIMEOUT"].flatMap(TimeInterval.init)
+            ?? 35
+
+        return ViceMacLaunchConfiguration(
+            releaseSmokeTest: ViceMacReleaseSmokeTestConfiguration(timeout: max(1, timeout))
+        )
+    }
+
+    private static func value(after flag: String, in arguments: [String]) -> String? {
+        guard let index = arguments.firstIndex(of: flag),
+              arguments.indices.contains(index + 1) else {
+            return nil
+        }
+
+        return arguments[index + 1]
+    }
+}
+
+private struct ViceMacReleaseSmokeTestConfiguration {
+    let timeout: TimeInterval
+}
+
+private struct ReleaseSmokeTestView: View {
+    let configuration: ViceMacReleaseSmokeTestConfiguration
+
+    var body: some View {
+        Color.black
+            .frame(width: 320, height: 240)
+    }
+}
+
+private enum ReleaseSmokeTestRunner {
+    @MainActor
+    static func run(configuration: ViceMacReleaseSmokeTestConfiguration,
+                    emulator: EmulatorSession) async {
+        ReleaseSmokeTestProcess.print("VICE Mac release smoke test starting for \(emulator.machine.shortName)")
+        emulator.start()
+
+        let deadline = Date().addingTimeInterval(configuration.timeout)
+        var lastSequence: UInt64 = 0
+        var lastStatus = "no emulator frame received"
+
+        while Date() < deadline {
+            if let frame = emulator.frameSource.copyLatestFrame(after: lastSequence) {
+                lastSequence = frame.sequence
+                if let stats = ReleaseSmokeFrameAnalyzer.analyze(frame) {
+                    lastStatus = stats.summary
+                    if stats.passed {
+                        ReleaseSmokeTestProcess.succeed(
+                            "VICE Mac release smoke test passed for \(emulator.machine.shortName): \(stats.summary)"
+                        )
+                    }
+                } else {
+                    lastStatus = "invalid emulator frame"
+                }
+            }
+
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+
+        ReleaseSmokeTestProcess.fail(
+            "VICE Mac release smoke test failed for \(emulator.machine.shortName): \(lastStatus); status=\(emulator.statusText)"
+        )
+    }
+}
+
+private enum ReleaseSmokeTestProcess {
+    static func print(_ message: String) {
+        fputs(message + "\n", stdout)
+        fflush(stdout)
+    }
+
+    static func succeed(_ message: String) -> Never {
+        print(message)
+        Darwin._exit(0)
+    }
+
+    static func fail(_ message: String) -> Never {
+        fputs(message + "\n", stderr)
+        fflush(stderr)
+        Darwin._exit(2)
+    }
+}
+
+private struct ReleaseSmokeFrameStats {
+    let width: Int
+    let height: Int
+    let sequence: UInt64
+    let samples: Int
+    let averageLuma: Double
+    let nonDarkRatio: Double
+    let blueDominantRatio: Double
+    let colorBucketCount: Int
+
+    var passed: Bool {
+        averageLuma >= 20.0
+            && nonDarkRatio >= 0.20
+            && (blueDominantRatio >= 0.08 || colorBucketCount >= 4)
+    }
+
+    var summary: String {
+        String(
+            format: "sequence=%llu size=%dx%d avgLuma=%.1f nonDark=%.3f blue=%.3f buckets=%d samples=%d",
+            sequence,
+            width,
+            height,
+            averageLuma,
+            nonDarkRatio,
+            blueDominantRatio,
+            colorBucketCount,
+            samples
+        )
+    }
+}
+
+private enum ReleaseSmokeFrameAnalyzer {
+    static func analyze(_ frame: EmulatorVideoFrame) -> ReleaseSmokeFrameStats? {
+        guard frame.width > 0,
+              frame.height > 0,
+              frame.bytesPerRow >= frame.width * 4,
+              frame.pixels.count >= frame.bytesPerRow * frame.height else {
+            return nil
+        }
+
+        let cropX0 = max(0, Int(Double(frame.width) * 0.12))
+        let cropX1 = min(frame.width, Int(Double(frame.width) * 0.88))
+        let cropY0 = max(0, Int(Double(frame.height) * 0.12))
+        let cropY1 = min(frame.height, Int(Double(frame.height) * 0.88))
+        let cropWidth = max(1, cropX1 - cropX0)
+        let cropHeight = max(1, cropY1 - cropY0)
+        let sampleStep = max(1, min(cropWidth / 180, cropHeight / 120))
+
+        var sampleCount = 0
+        var totalLuma = 0.0
+        var nonDarkCount = 0
+        var blueDominantCount = 0
+        var colorBuckets = Set<Int>()
+
+        frame.pixels.withUnsafeBytes { pixelBytes in
+            guard let baseAddress = pixelBytes.baseAddress else {
+                return
+            }
+
+            let pixels = baseAddress.assumingMemoryBound(to: UInt8.self)
+            var y = cropY0
+            while y < cropY1 {
+                var x = cropX0
+                while x < cropX1 {
+                    let offset = y * frame.bytesPerRow + x * 4
+                    let r = Int(pixels[offset])
+                    let g = Int(pixels[offset + 1])
+                    let b = Int(pixels[offset + 2])
+                    let luma = (0.2126 * Double(r)) + (0.7152 * Double(g)) + (0.0722 * Double(b))
+
+                    sampleCount += 1
+                    totalLuma += luma
+                    if luma > 24.0 {
+                        nonDarkCount += 1
+                    }
+                    if b >= 45 && b > r + 12 && b > g + 8 {
+                        blueDominantCount += 1
+                    }
+
+                    let bucket = ((r / 32) << 6) | ((g / 32) << 3) | (b / 32)
+                    colorBuckets.insert(bucket)
+                    x += sampleStep
+                }
+                y += sampleStep
+            }
+        }
+
+        guard sampleCount > 0 else {
+            return nil
+        }
+
+        return ReleaseSmokeFrameStats(width: frame.width,
+                                      height: frame.height,
+                                      sequence: frame.sequence,
+                                      samples: sampleCount,
+                                      averageLuma: totalLuma / Double(sampleCount),
+                                      nonDarkRatio: Double(nonDarkCount) / Double(sampleCount),
+                                      blueDominantRatio: Double(blueDominantCount) / Double(sampleCount),
+                                      colorBucketCount: colorBuckets.count)
     }
 }
 

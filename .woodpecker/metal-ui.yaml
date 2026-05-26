@@ -35,6 +35,13 @@ steps:
     when:
       - event: [push, manual, tag]
 
+  - name: release-smoke
+    image: bash
+    commands:
+      - macos/scripts/smoke-test-vicemac-dmg.sh
+    when:
+      - event: [push, manual, tag]
+
   - name: github-release
     image: bash
     environment:
