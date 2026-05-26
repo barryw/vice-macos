@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import XCTest
 
@@ -335,6 +336,29 @@ final class ModelConfigurationTests: XCTestCase {
         XCTAssertEqual(Set(autosaveNames).count, Self.allMachines.count)
         XCTAssertEqual(EmulatedMachine.x64sc.mainWindowFrameAutosaveName, "ViceMac.MainWindow.x64sc")
         XCTAssertTrue(autosaveNames.allSatisfy { $0.hasPrefix("ViceMac.MainWindow.") })
+    }
+
+    func testMainWindowFrameDefaultsRoundTrip() {
+        let machine = EmulatedMachine.x64sc
+        let key = EmulatorDefaults.mainWindowFrameDefaultsKey(for: machine)
+        let previousValue = UserDefaults.standard.object(forKey: key)
+        defer {
+            if let previousValue {
+                UserDefaults.standard.set(previousValue, forKey: key)
+            } else {
+                UserDefaults.standard.removeObject(forKey: key)
+            }
+        }
+
+        UserDefaults.standard.removeObject(forKey: key)
+        XCTAssertNil(EmulatorDefaults.loadMainWindowFrame(for: machine))
+
+        let frame = CGRect(x: 40, y: 56, width: 1280, height: 860)
+        EmulatorDefaults.saveMainWindowFrame(frame, for: machine)
+        XCTAssertEqual(EmulatorDefaults.loadMainWindowFrame(for: machine), frame)
+
+        UserDefaults.standard.set("not a frame", forKey: key)
+        XCTAssertNil(EmulatorDefaults.loadMainWindowFrame(for: machine))
     }
 
     func testDisplayOutputFallsBackToDefault() {

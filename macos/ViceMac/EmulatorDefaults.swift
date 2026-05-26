@@ -1,9 +1,11 @@
+import CoreGraphics
 import Foundation
 
 enum EmulatorDefaults {
     private static let videoStandardKey = "vice.videoStandard"
     private static let emulationSpeedKey = "vice.emulationSpeed"
     private static let displayModeKey = "vice.displayMode"
+    private static let mainWindowFrameKey = "vice.mainWindowFrame"
     private static let videoFilterPresetKey = "vice.videoFilterPreset"
     private static let videoFilterSettingsKey = "vice.videoFilterSettings"
     private static let sidModelKey = "vice.sidModel"
@@ -53,6 +55,36 @@ enum EmulatorDefaults {
 
     static func saveDisplayMode(_ mode: EmulatorSession.DisplayMode, for machine: EmulatedMachine) {
         UserDefaults.standard.set(mode.rawValue, forKey: key(displayModeKey, machine: machine))
+    }
+
+    static func loadMainWindowFrame(for machine: EmulatedMachine) -> CGRect? {
+        guard let values = UserDefaults.standard.array(forKey: mainWindowFrameDefaultsKey(for: machine)) as? [Double],
+              values.count == 4 else {
+            return nil
+        }
+
+        let frame = CGRect(x: values[0], y: values[1], width: values[2], height: values[3])
+        guard frame.isValidPersistedWindowFrame else {
+            return nil
+        }
+
+        return frame
+    }
+
+    static func saveMainWindowFrame(_ frame: CGRect, for machine: EmulatedMachine) {
+        guard frame.isValidPersistedWindowFrame else {
+            return
+        }
+
+        UserDefaults.standard.set([frame.origin.x,
+                                   frame.origin.y,
+                                   frame.size.width,
+                                   frame.size.height],
+                                  forKey: mainWindowFrameDefaultsKey(for: machine))
+    }
+
+    static func mainWindowFrameDefaultsKey(for machine: EmulatedMachine) -> String {
+        key(mainWindowFrameKey, machine: machine)
     }
 
     static func loadVideoFilterPreset(for machine: EmulatedMachine) -> VideoFilterPreset {
@@ -246,5 +278,16 @@ enum EmulatorDefaults {
         }
 
         return UserDefaults.standard.string(forKey: baseKey)
+    }
+}
+
+private extension CGRect {
+    var isValidPersistedWindowFrame: Bool {
+        origin.x.isFinite
+            && origin.y.isFinite
+            && size.width.isFinite
+            && size.height.isFinite
+            && size.width > 0
+            && size.height > 0
     }
 }
