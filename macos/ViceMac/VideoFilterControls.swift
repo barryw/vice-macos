@@ -2,6 +2,13 @@ import SwiftUI
 
 struct VideoFilterPresetPicker: View {
     @EnvironmentObject private var emulator: EmulatorSession
+    let labelTitle: String?
+    let labelSystemImage: String?
+
+    init(labelTitle: String? = nil, labelSystemImage: String? = nil) {
+        self.labelTitle = labelTitle
+        self.labelSystemImage = labelSystemImage
+    }
 
     var body: some View {
         Picker(selection: presetBinding) {
@@ -10,8 +17,8 @@ struct VideoFilterPresetPicker: View {
                     .tag(preset)
             }
         } label: {
-            Label(emulator.filterSettings.preset.toolbarTitle,
-                  systemImage: emulator.filterSettings.preset.systemImage)
+            Label(labelTitle ?? emulator.filterSettings.preset.toolbarTitle,
+                  systemImage: labelSystemImage ?? emulator.filterSettings.preset.systemImage)
         }
         .pickerStyle(.menu)
     }
