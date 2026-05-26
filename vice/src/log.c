@@ -760,6 +760,12 @@ static int log_helper(log_t log, unsigned int level, const char *format,
         /* FIXME: we should force colors off here, if the standard logger goes
                   into a file (because stdout was redirected) */
         if (archdep_default_logger_is_terminal() == 0) {
+            if (nocolorpre == NULL) {
+                nocolorpre = logskipcolors(pretxt);
+            }
+            if (nocolortxt == NULL) {
+                nocolortxt = logskipcolors(logtxt);
+            }
             terminalpre = nocolorpre;
             terminaltxt = nocolortxt;
         }
