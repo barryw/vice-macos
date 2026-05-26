@@ -58,5 +58,6 @@ if [[ "${VICE_MAC_CI_FETCH_UPSTREAM:-1}" == "1" ]]; then
         git -C "$REPO_ROOT" remote add upstream https://github.com/VICE-Team/svn-mirror.git
     fi
 
-    git -C "$REPO_ROOT" fetch --tags upstream +refs/heads/main:refs/remotes/upstream/main
+    git -C "$REPO_ROOT" fetch --no-tags upstream +refs/heads/main:refs/remotes/upstream/main ||
+        git -C "$REPO_ROOT" fetch --no-tags --depth=1 upstream +refs/heads/main:refs/remotes/upstream/main
 fi
