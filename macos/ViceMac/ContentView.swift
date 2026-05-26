@@ -1613,6 +1613,8 @@ private struct DrivePopover: View {
                                             isActive: slot.isActive,
                                             hasError: drive.hasErrorStatus) {
                             openDiskPanel(for: slot.driveNumber)
+                        } onDetach: {
+                            emulator.detachDisk(from: drive.unit, driveNumber: slot.driveNumber)
                         }
                     }
                 }
@@ -1760,6 +1762,7 @@ private struct DriveSlotPopoverRow: View {
     let isActive: Bool
     let hasError: Bool
     let onAttach: () -> Void
+    let onDetach: () -> Void
 
     var body: some View {
         HStack(spacing: 10) {
@@ -1799,6 +1802,16 @@ private struct DriveSlotPopoverRow: View {
             .buttonStyle(.bordered)
             .controlSize(.small)
             .help("Attach disk to \(title.lowercased())")
+
+            Button {
+                onDetach()
+            } label: {
+                Label("Eject", systemImage: "eject")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(!slot.hasDiskImage)
+            .help("Detach disk from \(title.lowercased())")
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)

@@ -60,6 +60,7 @@ typedef enum vicemac_machine_command_type_e {
 typedef enum vicemac_drive_command_type_e {
     VICEMAC_DRIVE_COMMAND_RESET,
     VICEMAC_DRIVE_COMMAND_ATTACH_DISK,
+    VICEMAC_DRIVE_COMMAND_DETACH_DISK,
     VICEMAC_DRIVE_COMMAND_PREVIEW_SOUND
 } vicemac_drive_command_type_t;
 
@@ -806,6 +807,24 @@ int vicemac_queue_drive_attach_disk(uint32_t unit,
                               &command);
 }
 
+int vicemac_queue_drive_detach_disk(uint32_t unit, uint32_t drive)
+{
+    vicemac_drive_command_t command;
+
+    memset(&command, 0, sizeof(command));
+    command.type = VICEMAC_DRIVE_COMMAND_DETACH_DISK;
+    command.unit = unit;
+    command.drive = drive;
+
+    return vicemac_queue_push(&drive_command_queue_mutex,
+                              drive_command_queue,
+                              sizeof(drive_command_queue[0]),
+                              VICEMAC_DRIVE_COMMAND_QUEUE_CAPACITY,
+                              &drive_command_queue_read,
+                              &drive_command_queue_write,
+                              &command);
+}
+
 int vicemac_queue_drive_sound_preview(uint32_t unit)
 {
     vicemac_drive_command_t command;
@@ -1417,6 +1436,12 @@ static void vicemac_dispatch_drive_command(vicemac_drive_command_t *command)
                                               command->drive,
                                               command->path);
             }
+            break;
+        case VICEMAC_DRIVE_COMMAND_DETACH_DISK:
+            if (command->drive >= NUM_DRIVES) {
+                return;
+            }
+            file_system_detach_disk(command->unit, command->drive);
             break;
         case VICEMAC_DRIVE_COMMAND_PREVIEW_SOUND:
             drive_sound_head(18, 1, (int)(command->unit - DRIVE_UNIT_MIN));

@@ -166,6 +166,25 @@ struct ViceMacApp: App {
                                                     autorun: true)
                         }
 
+                        if configuration.driveType.slotCount > 1 {
+                            Menu("Detach Disk") {
+                                ForEach(configuration.driveType.driveNumbers, id: \.self) { driveNumber in
+                                    Button("Drive \(configuration.unit):\(driveNumber)") {
+                                        emulator.detachDisk(from: configuration.unit,
+                                                            driveNumber: driveNumber)
+                                    }
+                                    .disabled(!emulator.hasDiskAttached(to: configuration.unit,
+                                                                        driveNumber: driveNumber))
+                                }
+                            }
+                        } else {
+                            Button("Detach Disk") {
+                                emulator.detachDisk(from: configuration.unit)
+                            }
+                            .disabled(!emulator.hasDiskAttached(to: configuration.unit,
+                                                                driveNumber: 0))
+                        }
+
                         Divider()
 
                         Picker("Access", selection: driveAccessModeBinding(for: configuration.unit)) {

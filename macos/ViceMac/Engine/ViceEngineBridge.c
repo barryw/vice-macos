@@ -34,6 +34,7 @@ typedef int (*ViceQueueDriveAttachDiskFunction)(uint32_t unit,
                                                 uint32_t drive,
                                                 const char *path,
                                                 int autorun);
+typedef int (*ViceQueueDriveDetachDiskFunction)(uint32_t unit, uint32_t drive);
 typedef int (*ViceQueueDriveSoundPreviewFunction)(uint32_t unit);
 typedef int (*ViceQueueMediaAutostartFunction)(const char *path, int autorun);
 typedef int (*ViceQueueCartridgeAttachFunction)(const char *path);
@@ -70,6 +71,7 @@ typedef struct ViceEngineSymbols {
     ViceQueueWarpModeFunction queueWarpMode;
     ViceQueueDriveResetFunction queueDriveReset;
     ViceQueueDriveAttachDiskFunction queueDriveAttachDisk;
+    ViceQueueDriveDetachDiskFunction queueDriveDetachDisk;
     ViceQueueDriveSoundPreviewFunction queueDriveSoundPreview;
     ViceQueueMediaAutostartFunction queueMediaAutostart;
     ViceQueueCartridgeAttachFunction queueCartridgeAttach;
@@ -235,6 +237,7 @@ static int loadRuntimeSymbols(void *handle, ViceEngineSymbols *symbols)
     LOAD_RUNTIME_SYMBOL(queueWarpMode, "vicemac_queue_warp_mode");
     LOAD_RUNTIME_SYMBOL(queueDriveReset, "vicemac_queue_drive_reset");
     LOAD_RUNTIME_SYMBOL(queueDriveAttachDisk, "vicemac_queue_drive_attach_disk");
+    LOAD_RUNTIME_SYMBOL(queueDriveDetachDisk, "vicemac_queue_drive_detach_disk");
     LOAD_RUNTIME_SYMBOL(queueDriveSoundPreview, "vicemac_queue_drive_sound_preview");
     LOAD_RUNTIME_SYMBOL(queueMediaAutostart, "vicemac_queue_media_autostart");
     LOAD_RUNTIME_SYMBOL(queueCartridgeAttach, "vicemac_queue_cartridge_attach");
@@ -489,6 +492,15 @@ bool ViceEngineAttachDisk(uint32_t unit, uint32_t drive, const char *path, bool 
     }
 
     return runtimeSymbols.queueDriveAttachDisk(unit, drive, path, autorun ? 1 : 0) != 0;
+}
+
+bool ViceEngineDetachDisk(uint32_t unit, uint32_t drive)
+{
+    if (!atomic_load(&engineRunning) || runtimeSymbols.queueDriveDetachDisk == NULL) {
+        return false;
+    }
+
+    return runtimeSymbols.queueDriveDetachDisk(unit, drive) != 0;
 }
 
 bool ViceEnginePreviewDriveSound(uint32_t unit)

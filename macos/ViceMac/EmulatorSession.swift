@@ -1044,6 +1044,18 @@ final class EmulatorSession: ObservableObject {
         }
     }
 
+    func diskImagePath(for unit: Int, driveNumber: Int) -> String? {
+        visibleDriveActivities
+            .first { $0.unit == unit }?
+            .slots
+            .first { $0.driveNumber == driveNumber }?
+            .imagePath
+    }
+
+    func hasDiskAttached(to unit: Int, driveNumber: Int) -> Bool {
+        diskImagePath(for: unit, driveNumber: driveNumber)?.isEmpty == false
+    }
+
     private func defaultDriveSlots(for driveType: DriveType) -> [DriveSlotActivity] {
         driveType.driveNumbers.map { driveNumber in
             DriveSlotActivity(driveNumber: driveNumber,
@@ -1700,6 +1712,38 @@ final class EmulatorSession: ObservableObject {
     }
 
     @discardableResult
+    func detachDisk(from unit: Int, driveNumber: Int = 0) -> Bool {
+        guard unit >= 8 && unit <= 11 else {
+            return false
+        }
+
+        guard let configuration = driveConfigurations.first(where: { $0.unit == unit }),
+              configuration.isAttached else {
+            statusText = "Drive \(unit) is disabled"
+            return false
+        }
+
+        guard configuration.driveType.driveNumbers.contains(driveNumber) else {
+            statusText = "Drive \(unit):\(driveNumber) is not available on \(configuration.driveType.title)"
+            return false
+        }
+
+        guard hasDiskAttached(to: unit, driveNumber: driveNumber) else {
+            statusText = "No disk attached to \(driveAddress(unit: unit, driveNumber: driveNumber))"
+            return false
+        }
+
+        let didDetach = ViceEngineDetachDisk(UInt32(unit), UInt32(driveNumber))
+        if didDetach {
+            statusText = "Disk detached from \(driveAddress(unit: unit, driveNumber: driveNumber))"
+        } else {
+            statusText = "Unable to detach disk from \(driveAddress(unit: unit, driveNumber: driveNumber))"
+        }
+
+        return didDetach
+    }
+
+    @discardableResult
     func autostartMedia(url: URL, autorun: Bool) -> Bool {
         let didStart = url.path.withCString { path in
             ViceEngineAutostartMedia(path, autorun)
@@ -1715,6 +1759,15 @@ final class EmulatorSession: ObservableObject {
         }
 
         return didStart
+    }
+
+    private func driveAddress(unit: Int, driveNumber: Int) -> String {
+        guard let configuration = driveConfigurations.first(where: { $0.unit == unit }),
+              configuration.driveType.slotCount > 1 else {
+            return "drive \(unit)"
+        }
+
+        return "drive \(unit):\(driveNumber)"
     }
 
     func setROMImage(_ image: MachineROMSlot, path: String?) {
@@ -1753,7 +1806,11 @@ final class EmulatorSession: ObservableObject {
             return
         }
 
-        _ = ViceEngineDetachCartridge()
+        if ViceEngineDetachCartridge() {
+            statusText = "Cartridge detached"
+        } else {
+            statusText = "Unable to detach cartridge"
+        }
     }
 
     @discardableResult
