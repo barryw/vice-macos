@@ -63,6 +63,7 @@ void ViceEngineSetDriveStatusCallback(ViceEngineDriveStatusCallback callback,
 void ViceEngineSetCartridgeStatusCallback(ViceEngineCartridgeStatusCallback callback,
                                           void *context);
 const char *ViceEngineGetVersion(void);
+const char *ViceEngineGetLastError(void);
 bool ViceEngineStartMachine(const char *machineID,
                             const char *dynamicLibraryPath,
                             int32_t argc,

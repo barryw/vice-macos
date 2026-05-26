@@ -3,6 +3,12 @@ import Combine
 import Foundation
 import GameController
 
+struct EmulatorStartupError: Identifiable, Equatable {
+    let id = UUID()
+    let title: String
+    let message: String
+}
+
 enum MachineResetKind {
     case soft
     case hard
@@ -763,6 +769,7 @@ final class EmulatorSession: ObservableObject {
         }
     }
     @Published var statusText: String
+    @Published var startupError: EmulatorStartupError?
 
     let frameSource: EmulatorFrameSource
     private var didStartEngine = false
@@ -1199,11 +1206,15 @@ final class EmulatorSession: ObservableObject {
         guard !didStartEngine else {
             return
         }
+        startupError = nil
 
         guard let executablePath = Bundle.main.executableURL?.path,
               let dataDirectory = Bundle.main.resourceURL?.appendingPathComponent("VICEData").path,
               let runtimeDirectory = Bundle.main.privateFrameworksURL?.path else {
-            statusText = "Missing runtime paths"
+            reportStartupFailure(
+                status: "Missing runtime paths",
+                detail: "The app bundle is missing its executable, resources, or Frameworks path."
+            )
             return
         }
         let dynamicLibraryPath = URL(fileURLWithPath: runtimeDirectory)
@@ -1243,7 +1254,10 @@ final class EmulatorSession: ObservableObject {
         }
         guard let started = startResult else {
             didStartEngine = false
-            statusText = "Unable to prepare startup arguments"
+            reportStartupFailure(
+                status: "Unable to prepare startup arguments",
+                detail: "VICE Mac could not build the emulator startup arguments."
+            )
             return
         }
 
@@ -1259,8 +1273,26 @@ final class EmulatorSession: ObservableObject {
         } else if isRunning {
             statusText = "\(machine.shortName) already running"
         } else {
-            statusText = "Unable to start \(machine.shortName)"
+            reportStartupFailure(
+                status: "Unable to start \(machine.shortName)",
+                detail: lastEngineErrorMessage() ?? "The emulator engine did not start."
+            )
         }
+    }
+
+    private func reportStartupFailure(status: String, detail: String) {
+        statusText = status
+        startupError = EmulatorStartupError(title: "Unable to Start \(machine.shortName)",
+                                            message: detail)
+    }
+
+    private func lastEngineErrorMessage() -> String? {
+        guard let error = ViceEngineGetLastError() else {
+            return nil
+        }
+
+        let message = String(cString: error).trimmingCharacters(in: .whitespacesAndNewlines)
+        return message.isEmpty ? nil : message
     }
 
     func reset(kind: MachineResetKind = .soft) {

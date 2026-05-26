@@ -351,9 +351,23 @@ private enum ReleaseSmokeTestRunner {
             try? await Task.sleep(nanoseconds: 100_000_000)
         }
 
+        let startupErrorMessage = emulator.startupError?.message ?? lastEngineErrorMessage()
+        let startupError = startupErrorMessage.map {
+            "; error=\($0.replacingOccurrences(of: "\n", with: " "))"
+        } ?? ""
+
         ReleaseSmokeTestProcess.fail(
-            "VICE Mac release smoke test failed for \(emulator.machine.shortName): \(lastStatus); status=\(emulator.statusText)"
+            "VICE Mac release smoke test failed for \(emulator.machine.shortName): \(lastStatus); status=\(emulator.statusText)\(startupError)"
         )
+    }
+
+    private static func lastEngineErrorMessage() -> String? {
+        guard let error = ViceEngineGetLastError() else {
+            return nil
+        }
+
+        let message = String(cString: error).trimmingCharacters(in: .whitespacesAndNewlines)
+        return message.isEmpty ? nil : message
     }
 }
 

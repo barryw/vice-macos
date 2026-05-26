@@ -2,6 +2,7 @@
 
 #include <dlfcn.h>
 #include <pthread.h>
+#include <stdarg.h>
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -89,6 +90,7 @@ static void *runtimeHandle = NULL;
 static char *runtimePath = NULL;
 static ViceEngineSymbols runtimeSymbols;
 static pthread_mutex_t runtimeMutex = PTHREAD_MUTEX_INITIALIZER;
+static char lastError[4096];
 
 static ViceEngineVideoFrameCallback videoFrameCallback = NULL;
 static void *videoFrameCallbackContext = NULL;
@@ -165,13 +167,49 @@ static void cartridgeStatusTrampoline(const vicemac_cartridge_status_t *status, 
     cartridgeStatusCallback(&bridgedStatus, context);
 }
 
+static void clearLastError(void)
+{
+    lastError[0] = '\0';
+}
+
+static void setAndPrintLastError(const char *format, ...)
+{
+    char message[sizeof(lastError)];
+    va_list arguments;
+
+    va_start(arguments, format);
+    vsnprintf(message, sizeof(message), format, arguments);
+    va_end(arguments);
+
+    pthread_mutex_lock(&runtimeMutex);
+    snprintf(lastError, sizeof(lastError), "%s", message);
+    pthread_mutex_unlock(&runtimeMutex);
+
+    if (message[0] != '\0') {
+        fprintf(stderr, "%s\n", message);
+    }
+}
+
+static void setAndPrintLastErrorLocked(const char *format, ...)
+{
+    va_list arguments;
+
+    va_start(arguments, format);
+    vsnprintf(lastError, sizeof(lastError), format, arguments);
+    va_end(arguments);
+
+    if (lastError[0] != '\0') {
+        fprintf(stderr, "%s\n", lastError);
+    }
+}
+
 static int loadRuntimeSymbols(void *handle, ViceEngineSymbols *symbols)
 {
 #define LOAD_RUNTIME_SYMBOL(field, symbolName) \
     do { \
         symbols->field = (typeof(symbols->field))dlsym(handle, symbolName); \
         if (symbols->field == NULL) { \
-            fprintf(stderr, "VICE Mac: missing runtime symbol %s\n", symbolName); \
+            setAndPrintLastErrorLocked("VICE Mac: missing runtime symbol %s", symbolName); \
             return 0; \
         } \
     } while (0)
@@ -227,6 +265,7 @@ static int ensureRuntimeLoaded(const char *dynamicLibraryPath)
     ViceEngineSymbols symbols;
 
     if (dynamicLibraryPath == NULL || dynamicLibraryPath[0] == '\0') {
+        setAndPrintLastError("VICE Mac: dynamic library path is missing");
         return 0;
     }
 
@@ -234,15 +273,20 @@ static int ensureRuntimeLoaded(const char *dynamicLibraryPath)
 
     if (runtimeHandle != NULL) {
         int matches = runtimePath != NULL && strcmp(runtimePath, dynamicLibraryPath) == 0;
+        if (!matches) {
+            setAndPrintLastErrorLocked("VICE Mac: runtime already loaded from %s; cannot load %s",
+                                       runtimePath == NULL ? "<unknown>" : runtimePath,
+                                       dynamicLibraryPath);
+        }
         pthread_mutex_unlock(&runtimeMutex);
         return matches;
     }
 
     handle = dlopen(dynamicLibraryPath, RTLD_NOW | RTLD_LOCAL);
     if (handle == NULL) {
-        fprintf(stderr, "VICE Mac: unable to load %s: %s\n",
-                dynamicLibraryPath,
-                dlerror());
+        setAndPrintLastErrorLocked("VICE Mac: unable to load %s: %s",
+                                   dynamicLibraryPath,
+                                   dlerror());
         pthread_mutex_unlock(&runtimeMutex);
         return 0;
     }
@@ -255,6 +299,7 @@ static int ensureRuntimeLoaded(const char *dynamicLibraryPath)
 
     runtimePath = strdup(dynamicLibraryPath);
     if (runtimePath == NULL) {
+        setAndPrintLastErrorLocked("VICE Mac: unable to store runtime path");
         dlclose(handle);
         pthread_mutex_unlock(&runtimeMutex);
         return 0;
@@ -315,6 +360,19 @@ const char *ViceEngineGetVersion(void)
     pthread_mutex_unlock(&runtimeMutex);
 
     return version;
+}
+
+const char *ViceEngineGetLastError(void)
+{
+    const char *error = NULL;
+
+    pthread_mutex_lock(&runtimeMutex);
+    if (lastError[0] != '\0') {
+        error = lastError;
+    }
+    pthread_mutex_unlock(&runtimeMutex);
+
+    return error;
 }
 
 bool ViceEngineIsRunning(void)
@@ -580,21 +638,28 @@ bool ViceEngineStartMachine(const char *machineID,
     ViceEngineStartArguments *arguments;
     bool expected = false;
 
+    pthread_mutex_lock(&runtimeMutex);
+    clearLastError();
+    pthread_mutex_unlock(&runtimeMutex);
+
     if (!ensureRuntimeLoaded(dynamicLibraryPath)) {
         return false;
     }
 
     if (!atomic_compare_exchange_strong(&engineRunning, &expected, true)) {
+        setAndPrintLastError("VICE Mac: emulator engine is already running");
         return false;
     }
 
     arguments = copyStartArguments(machineID, argc, argv);
     if (arguments == NULL) {
+        setAndPrintLastError("VICE Mac: unable to copy startup arguments");
         atomic_store(&engineRunning, false);
         return false;
     }
 
     if (pthread_create(&engineThread, NULL, engineThreadMain, arguments) != 0) {
+        setAndPrintLastError("VICE Mac: unable to create emulator thread");
         freeStartArguments(arguments);
         atomic_store(&engineRunning, false);
         return false;

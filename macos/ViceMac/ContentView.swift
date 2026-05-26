@@ -93,6 +93,11 @@ struct ContentView: View {
         .onOpenURL { url in
             emulator.openMedia(url: url)
         }
+        .alert(item: $emulator.startupError) { error in
+            Alert(title: Text(error.title),
+                  message: Text(error.message),
+                  dismissButton: .default(Text("OK")))
+        }
     }
 }
 
