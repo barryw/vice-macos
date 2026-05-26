@@ -946,6 +946,7 @@ enum ViceMacKeyMapper {
         static let rightShift: UInt16 = 60
         static let capsLock: UInt16 = 57
         static let leftControl: UInt16 = 59
+        static let rightControl: UInt16 = 62
         static let keypadDecimal: UInt16 = 65
         static let keypadMultiply: UInt16 = 67
         static let keypadPlus: UInt16 = 69
@@ -1092,9 +1093,7 @@ enum ViceMacKeyMapper {
             return special
         }
 
-        guard let scalar = event.characters?.unicodeScalars.first,
-              scalar.value >= 0x20,
-              scalar.value <= 0x7e else {
+        guard let scalar = printableScalar(for: event) else {
             return nil
         }
 
@@ -1111,9 +1110,7 @@ enum ViceMacKeyMapper {
             return special
         }
 
-        guard let scalar = event.characters?.unicodeScalars.first,
-              scalar.value >= 0x20,
-              scalar.value <= 0x7e else {
+        guard let scalar = printableScalar(for: event) else {
             return nil
         }
 
@@ -1160,7 +1157,7 @@ enum ViceMacKeyMapper {
             return EmulatorModifierKey(symbol: Key.shiftRight,
                                        modifiers: Modifier.rightShift,
                                        isToggle: false)
-        case MacKeyCode.leftControl:
+        case MacKeyCode.leftControl, MacKeyCode.rightControl:
             return EmulatorModifierKey(symbol: Key.controlLeft,
                                        modifiers: Modifier.leftControl,
                                        isToggle: false)
@@ -1365,6 +1362,24 @@ enum ViceMacKeyMapper {
         default:
             return nil
         }
+    }
+
+    private static func printableScalar(for event: NSEvent) -> UnicodeScalar? {
+        if let scalar = event.characters?.unicodeScalars.first,
+           scalar.value >= 0x20,
+           scalar.value <= 0x7e {
+            return scalar
+        }
+
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        guard flags.contains(.control),
+              let scalar = event.charactersIgnoringModifiers?.unicodeScalars.first,
+              scalar.value >= 0x20,
+              scalar.value <= 0x7e else {
+            return nil
+        }
+
+        return scalar
     }
 }
 

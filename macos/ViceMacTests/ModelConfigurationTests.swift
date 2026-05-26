@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import Foundation
 import XCTest
@@ -459,6 +460,38 @@ final class ModelConfigurationTests: XCTestCase {
             .rendered(customTitle: "Test map")
 
         XCTAssertTrue(rendered.contains("!LSHIFT 2 3"))
+    }
+
+    func testControlKeyChordUsesPrintableBaseSymbol() throws {
+        let event = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown,
+                                                   location: .zero,
+                                                   modifierFlags: .control,
+                                                   timestamp: 0,
+                                                   windowNumber: 0,
+                                                   context: nil,
+                                                   characters: "\u{1}",
+                                                   charactersIgnoringModifiers: "a",
+                                                   isARepeat: false,
+                                                   keyCode: 0))
+
+        XCTAssertEqual(ViceMacKeyMapper.symbol(for: event), 97)
+        XCTAssertEqual(ViceMacKeyMapper.keySymbolName(for: event), "a")
+    }
+
+    func testShiftedPrintableSymbolDoesNotFallBackToUnshiftedKey() throws {
+        let event = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown,
+                                                   location: .zero,
+                                                   modifierFlags: .shift,
+                                                   timestamp: 0,
+                                                   windowNumber: 0,
+                                                   context: nil,
+                                                   characters: "A",
+                                                   charactersIgnoringModifiers: "a",
+                                                   isARepeat: false,
+                                                   keyCode: 0))
+
+        XCTAssertEqual(ViceMacKeyMapper.symbol(for: event), 65)
+        XCTAssertEqual(ViceMacKeyMapper.keySymbolName(for: event), "A")
     }
 
     func testAllMachinesResolveBundledMacKeymaps() throws {
