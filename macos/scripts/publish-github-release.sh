@@ -67,6 +67,18 @@ release_target_args() {
     fi
 }
 
+fetch_release_note_refs() {
+    git -C "$REPO_ROOT" fetch --tags origin >/dev/null 2>&1 ||
+        git -C "$REPO_ROOT" fetch --tags >/dev/null 2>&1 ||
+        true
+
+    if ! git -C "$REPO_ROOT" remote get-url upstream >/dev/null 2>&1; then
+        git -C "$REPO_ROOT" remote add upstream https://github.com/VICE-Team/svn-mirror.git >/dev/null 2>&1 || true
+    fi
+
+    git -C "$REPO_ROOT" fetch --no-tags upstream +refs/heads/main:refs/remotes/upstream/main >/dev/null 2>&1 || true
+}
+
 xml_escape() {
     sed \
         -e 's/&/\&amp;/g' \
@@ -178,6 +190,8 @@ write_release_notes() {
     local tag="$1"
     local notes_file="$2"
     local release_label="${tag#vice-mac-}"
+    local release_ref
+    local release_commit
     local previous_tag
     local notes_dir
     local rev_args
@@ -187,13 +201,15 @@ write_release_notes() {
     local category_file
     local commit_count=0
 
-    previous_tag="$(git -C "$REPO_ROOT" tag -l 'vice-mac-*' --sort=-creatordate | grep -v "^$tag$" | head -1 || true)"
+    release_ref="$(release_note_ref "$tag")"
+    release_commit="$(git -C "$REPO_ROOT" rev-parse "$release_ref^{commit}")"
+    previous_tag="$(git -C "$REPO_ROOT" describe --tags --match 'vice-mac-*' --abbrev=0 "$release_commit^" 2>/dev/null || true)"
     notes_dir="$(mktemp -d "${TMPDIR:-/tmp}/vicemac-notes.XXXXXX")"
 
     if [[ -n "$previous_tag" ]]; then
-        rev_args=("$previous_tag..HEAD")
+        rev_args=("$previous_tag..$release_ref")
     else
-        rev_args=("HEAD")
+        rev_args=("$release_ref")
     fi
 
     while IFS= read -r commit; do
@@ -214,6 +230,22 @@ write_release_notes() {
 
     write_release_notes_html "$release_label" "$notes_dir" > "$notes_file"
     rm -rf "$notes_dir"
+}
+
+release_note_ref() {
+    local tag="$1"
+
+    if git -C "$REPO_ROOT" rev-parse --verify "$tag^{commit}" >/dev/null 2>&1; then
+        echo "$tag"
+        return
+    fi
+
+    if [[ -n "${CI_COMMIT_SHA:-}" ]]; then
+        echo "$CI_COMMIT_SHA"
+        return
+    fi
+
+    echo "HEAD"
 }
 
 release_note_category() {
@@ -240,14 +272,40 @@ release_note_category() {
 
 release_note_source_badge() {
     local commit="$1"
-    local path
 
-    while IFS= read -r path; do
-        if [[ "$path" == vice/* ]]; then
-            printf ' <span title="Upstream VICE change" style="display:inline-block;margin-left:6px;padding:1px 5px;border-radius:5px;background:#263f77;color:#dce8ff;font-size:10px;font-weight:800;letter-spacing:0;vertical-align:1px;">VICE</span>'
+    if release_note_is_upstream_commit "$commit"; then
+        printf ' <span title="Upstream VICE change" style="display:inline-block;margin-left:6px;padding:1px 5px;border-radius:5px;background:#263f77;color:#dce8ff;font-size:10px;font-weight:800;letter-spacing:0;vertical-align:1px;">VICE</span>'
+    fi
+}
+
+release_note_is_upstream_commit() {
+    local commit="$1"
+    local upstream_ref
+
+    upstream_ref="$(release_note_upstream_ref)"
+    if [[ -z "$upstream_ref" ]]; then
+        return 1
+    fi
+
+    git -C "$REPO_ROOT" merge-base --is-ancestor "$commit" "$upstream_ref" >/dev/null 2>&1
+}
+
+release_note_upstream_ref() {
+    local upstream_ref
+
+    if [[ -n "${VICE_MAC_UPSTREAM_REF:-}" ]]; then
+        if git -C "$REPO_ROOT" rev-parse --verify "$VICE_MAC_UPSTREAM_REF^{commit}" >/dev/null 2>&1; then
+            echo "$VICE_MAC_UPSTREAM_REF"
+        fi
+        return
+    fi
+
+    for upstream_ref in refs/remotes/upstream/main upstream/main; do
+        if git -C "$REPO_ROOT" rev-parse --verify "$upstream_ref^{commit}" >/dev/null 2>&1; then
+            echo "$upstream_ref"
             return
         fi
-    done < <(git -C "$REPO_ROOT" diff-tree --no-commit-id --name-only -r "$commit")
+    done
 }
 
 write_release_notes_html() {
@@ -371,7 +429,7 @@ EOF
 require_tool gh "Install GitHub CLI with: brew install gh"
 require_tool plutil "plutil ships with macOS."
 
-git -C "$REPO_ROOT" fetch --tags origin >/dev/null 2>&1 || git -C "$REPO_ROOT" fetch --tags >/dev/null 2>&1 || true
+fetch_release_note_refs
 
 if [[ ! -d "$DIST_DIR" ]]; then
     echo "Release artifacts are missing at $DIST_DIR." >&2
