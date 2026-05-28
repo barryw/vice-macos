@@ -57,7 +57,7 @@ libarch_a_SOURCES = \
 	ui.c \
 	video.c \
 	vicemacbridge.c \
-	../headless/vsidui.c \
+	vsidui.c \
 	vsyncarch.c \
 	../headless/c64scui.c \
 	../headless/mousedrv.c \

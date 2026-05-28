@@ -185,6 +185,20 @@ void ds1307_destroy(rtc_ds1307_t *context, int save)
     lib_free(context);
 }
 
+void ds1307_sync_system_time(rtc_ds1307_t *context)
+{
+    if (context == NULL) {
+        return;
+    }
+
+    context->clock_halt = 0;
+    context->clock_halt_latch = 0;
+    context->offset = 0;
+    context->old_offset = 0;
+    context->clock_regs[DS1307_REG_SECONDS_CH] &= 0x7f;
+    memcpy(context->old_clock_regs, context->clock_regs, DS1307_REG_SIZE);
+}
+
 /* ---------------------------------------------------------------------------------------------------- */
 
 static void ds1307_i2c_start(rtc_ds1307_t *context)

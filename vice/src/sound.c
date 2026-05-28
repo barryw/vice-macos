@@ -55,6 +55,9 @@
 #include "types.h"
 #include "uiapi.h"
 #include "util.h"
+#ifdef USE_MACOSUI
+#include "vicemacbridge.h"
+#endif
 #include "vsync.h"
 #include "math.h"
 #include "ui.h"
@@ -1447,6 +1450,15 @@ static int sound_run_sound(void)
              memset(bufferptr, 0, nr * snddata.sound_output_channels * sizeof(int16_t));
          }
      }
+
+#ifdef USE_MACOSUI
+    if (nr > 0 && snddata.sound_output_channels > 0) {
+        vicemac_publish_audio_samples(bufferptr,
+                                      (uint32_t)nr,
+                                      (uint32_t)snddata.sound_output_channels,
+                                      (uint32_t)sample_rate);
+    }
+#endif
 
     snddata.bufptr += nr;
     snddata.lastclk = maincpu_clk;

@@ -237,6 +237,62 @@ struct CommodoreDiskRebuildAnalysis: Equatable {
     }
 }
 
+enum GEOSInputDeviceKind: Equatable {
+    case joystick
+    case mouse1351
+    case mouse1351Accelerated
+
+    var title: String {
+        switch self {
+        case .joystick:
+            return "Joystick"
+        case .mouse1351:
+            return "1351 Mouse"
+        case .mouse1351Accelerated:
+            return "1351 Mouse (fast)"
+        }
+    }
+
+    var isMouse1351: Bool {
+        switch self {
+        case .mouse1351, .mouse1351Accelerated:
+            return true
+        case .joystick:
+            return false
+        }
+    }
+}
+
+struct GEOSInputDriver: Identifiable, Equatable {
+    var directoryEntry: CommodoreDiskDirectoryEntry
+    var device: GEOSInputDeviceKind
+    var isDefault: Bool
+
+    var id: String { directoryEntry.id }
+    var name: String { directoryEntry.name }
+}
+
+struct GEOSDiskStatus: Equatable {
+    var inputDrivers: [GEOSInputDriver]
+
+    var defaultInputDriver: GEOSInputDriver? {
+        inputDrivers.first
+    }
+
+    var preferred1351Driver: GEOSInputDriver? {
+        inputDrivers.first { $0.device == .mouse1351 }
+            ?? inputDrivers.first { $0.device == .mouse1351Accelerated }
+    }
+
+    var is1351Default: Bool {
+        defaultInputDriver?.device.isMouse1351 == true
+    }
+
+    var canMake1351Default: Bool {
+        preferred1351Driver != nil && !is1351Default
+    }
+}
+
 enum CommodoreDiskImageFormat: String, CaseIterable, Identifiable {
     case d64
     case d67
@@ -698,6 +754,34 @@ struct CommodoreDiskImage: Identifiable, Equatable {
         return output
     }
 
+    var geosStatus: GEOSDiskStatus? {
+        guard let entries = try? directoryEntries(),
+              Self.looksLikeGEOSSystemDisk(entries) else {
+            return nil
+        }
+
+        let detectedDrivers = entries.compactMap { entry -> GEOSInputDriver? in
+            guard let device = Self.geosInputDevice(for: entry.name) else {
+                return nil
+            }
+
+            return GEOSInputDriver(directoryEntry: entry,
+                                   device: device,
+                                   isDefault: false)
+        }
+
+        guard !detectedDrivers.isEmpty else {
+            return GEOSDiskStatus(inputDrivers: [])
+        }
+
+        let drivers = detectedDrivers.enumerated().map { index, driver in
+            GEOSInputDriver(directoryEntry: driver.directoryEntry,
+                            device: driver.device,
+                            isDefault: index == 0)
+        }
+        return GEOSDiskStatus(inputDrivers: drivers)
+    }
+
     mutating func copyFile(_ entry: CommodoreDiskDirectoryEntry,
                            from source: CommodoreDiskImage) throws {
         let payload = try source.fileData(for: entry)
@@ -718,6 +802,24 @@ struct CommodoreDiskImage: Identifiable, Equatable {
                       payload: payload)
     }
 
+    mutating func installGEOSPackage(_ package: GEOSCVTFile) throws {
+        guard geometry.supportsFileWrites else {
+            throw CommodoreDiskImageError.writeNotSupported(format.title)
+        }
+        guard geosStatus != nil else {
+            throw CommodoreDiskImageError.invalidImage("This does not look like a GEOS system disk.")
+        }
+
+        let rawName = try validatedRawFilename(package.diskName)
+        let decodedName = CommodorePETSCII.decodeFilename(rawName)
+        let destinationNames = try directoryEntries().map { $0.name.uppercased() }
+        guard !destinationNames.contains(decodedName.uppercased()) else {
+            throw CommodoreDiskImageError.fileExists(decodedName)
+        }
+
+        try writeGEOSPackage(package, rawName: rawName)
+    }
+
     mutating func renameFile(_ entry: CommodoreDiskDirectoryEntry, to name: String) throws {
         let rawName = try validatedRawFilename(name)
         let decodedName = CommodorePETSCII.decodeFilename(rawName)
@@ -734,6 +836,27 @@ struct CommodoreDiskImage: Identifiable, Equatable {
             sector[base + 5 + index] = rawName[index]
         }
         try writeSector(sector, at: entry.directoryAddress)
+    }
+
+    mutating func makeGEOS1351Default() throws {
+        guard let status = geosStatus else {
+            throw CommodoreDiskImageError.invalidImage("This does not look like a GEOS system disk.")
+        }
+
+        guard let currentDefault = status.defaultInputDriver else {
+            throw CommodoreDiskImageError.invalidImage("No GEOS input driver was found on this disk.")
+        }
+
+        guard let mouseDriver = status.preferred1351Driver else {
+            throw CommodoreDiskImageError.invalidImage("No GEOS 1351 mouse driver was found on this disk.")
+        }
+
+        guard currentDefault.id != mouseDriver.id else {
+            return
+        }
+
+        try swapDirectoryEntryBodies(currentDefault.directoryEntry,
+                                     mouseDriver.directoryEntry)
     }
 
     mutating func deleteFile(_ entry: CommodoreDiskDirectoryEntry) throws {
@@ -993,6 +1116,55 @@ struct CommodoreDiskImage: Identifiable, Equatable {
         }
     }
 
+    private mutating func writeGEOSPackage(_ package: GEOSCVTFile,
+                                           rawName: [UInt8]) throws {
+        let dataSectorCount = max(1, Int(ceil(Double(package.programPayload.count) / Double(Self.bytesPerSector - 2))))
+        let allocated = try allocateFreeSectors(count: dataSectorCount + 1, strategy: .firstAvailable)
+        let headerAddress = allocated[0]
+        let dataAddresses = Array(allocated.dropFirst())
+
+        do {
+            var headerSector = Data(repeating: 0, count: Self.bytesPerSector)
+            headerSector[1] = 255
+            headerSector.replaceSubrange(2..<Self.bytesPerSector, with: package.fileInfoRecord)
+            try writeSector(headerSector, at: headerAddress)
+
+            for index in dataAddresses.indices {
+                var sector = Data(repeating: 0, count: Self.bytesPerSector)
+                let chunkStart = index * (Self.bytesPerSector - 2)
+                let chunkEnd = min(chunkStart + Self.bytesPerSector - 2, package.programPayload.count)
+                let chunk = package.programPayload.subdata(in: chunkStart..<chunkEnd)
+
+                if index == dataAddresses.indices.last {
+                    sector[0] = 0
+                    sector[1] = UInt8(chunk.count + 1)
+                } else {
+                    sector[0] = UInt8(dataAddresses[index + 1].track)
+                    sector[1] = UInt8(dataAddresses[index + 1].sector)
+                }
+
+                sector.replaceSubrange(2..<(2 + chunk.count), with: chunk)
+                try writeSector(sector, at: dataAddresses[index])
+            }
+
+            var directoryRecord = package.directoryRecord
+            directoryRecord[1] = UInt8(dataAddresses[0].track)
+            directoryRecord[2] = UInt8(dataAddresses[0].sector)
+            directoryRecord[19] = UInt8(headerAddress.track)
+            directoryRecord[20] = UInt8(headerAddress.sector)
+            let blocks = dataAddresses.count + 1
+            directoryRecord[28] = UInt8(blocks & 0xff)
+            directoryRecord[29] = UInt8((blocks >> 8) & 0xff)
+            try writeGEOSDirectoryEntry(record: directoryRecord,
+                                        fallbackName: rawName)
+        } catch {
+            for address in allocated {
+                try? markSectorInBAM(address, free: true)
+            }
+            throw error
+        }
+    }
+
     private func validatedRawFilename(_ name: String) throws -> [UInt8] {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
@@ -1012,6 +1184,68 @@ struct CommodoreDiskImage: Identifiable, Equatable {
         }
 
         return sector
+    }
+
+    private mutating func swapDirectoryEntryBodies(_ first: CommodoreDiskDirectoryEntry,
+                                                   _ second: CommodoreDiskDirectoryEntry) throws {
+        var firstSector = try directorySector(for: first)
+        let firstRange = Self.directoryEntryBodyRange(slotIndex: first.slotIndex)
+        let secondRange = Self.directoryEntryBodyRange(slotIndex: second.slotIndex)
+        let firstBody = firstSector.subdata(in: firstRange)
+
+        if first.directoryAddress == second.directoryAddress {
+            let secondBody = firstSector.subdata(in: secondRange)
+            firstSector.replaceSubrange(firstRange, with: secondBody)
+            firstSector.replaceSubrange(secondRange, with: firstBody)
+
+            try writeSector(firstSector, at: first.directoryAddress)
+        } else {
+            var secondSector = try directorySector(for: second)
+            let secondBody = secondSector.subdata(in: secondRange)
+            firstSector.replaceSubrange(firstRange, with: secondBody)
+            secondSector.replaceSubrange(secondRange, with: firstBody)
+
+            try writeSector(firstSector, at: first.directoryAddress)
+            try writeSector(secondSector, at: second.directoryAddress)
+        }
+    }
+
+    private static func directoryEntryBodyRange(slotIndex: Int) -> Range<Int> {
+        let base = slotIndex * 32
+        return (base + 2)..<(base + 32)
+    }
+
+    private static func looksLikeGEOSSystemDisk(_ entries: [CommodoreDiskDirectoryEntry]) -> Bool {
+        let names = Set(entries.map { normalizedGEOSName($0.name) })
+        let hasBoot = names.contains("GEOS")
+            || names.contains("GEOS128")
+            || names.contains("GEOBOOT")
+            || names.contains("GEOBOOT128")
+        let hasDesktop = names.contains("DESK TOP")
+            || names.contains("DESKTOP")
+            || names.contains("128 DESKTOP")
+
+        return hasBoot && hasDesktop
+    }
+
+    private static func geosInputDevice(for name: String) -> GEOSInputDeviceKind? {
+        let normalized = normalizedGEOSName(name)
+
+        if normalized.contains("1351") {
+            return normalized.contains("(A)") ? .mouse1351Accelerated : .mouse1351
+        }
+
+        if normalized.contains("JOYSTICK") {
+            return .joystick
+        }
+
+        return nil
+    }
+
+    private static func normalizedGEOSName(_ name: String) -> String {
+        name.uppercased()
+            .replacingOccurrences(of: "  ", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static func blankImageData(format: CommodoreDiskImageFormat,
@@ -2018,6 +2252,64 @@ struct CommodoreDiskImage: Identifiable, Equatable {
                             firstSector: firstSector,
                             blocks: blocks)
         try writeSector(newDirectorySector, at: newDirectoryAddress)
+    }
+
+    private mutating func writeGEOSDirectoryEntry(record: Data,
+                                                 fallbackName rawName: [UInt8]) throws {
+        guard record.count == GEOSCVTFile.recordSize else {
+            throw CommodoreDiskImageError.invalidImage("A GEOS directory record must contain exactly 254 bytes.")
+        }
+
+        let directory = try directorySectors()
+
+        for (address, bytes) in directory {
+            var sector = bytes
+            for slot in 0..<8 {
+                let base = slot * 32
+                if sector[base + 2] == 0 {
+                    writeGEOSDirectoryEntry(to: &sector,
+                                            slot: slot,
+                                            record: record,
+                                            fallbackName: rawName)
+                    try writeSector(sector, at: address)
+                    return
+                }
+            }
+        }
+
+        guard let last = directory.last else {
+            throw CommodoreDiskImageError.noDirectorySlot
+        }
+
+        let newDirectoryAddress = try allocateDirectorySector(after: last.address)
+
+        var previous = last.bytes
+        previous[0] = UInt8(newDirectoryAddress.track)
+        previous[1] = UInt8(newDirectoryAddress.sector)
+        try writeSector(previous, at: last.address)
+
+        var newDirectorySector = Data(repeating: 0, count: Self.bytesPerSector)
+        newDirectorySector[1] = 255
+        writeGEOSDirectoryEntry(to: &newDirectorySector,
+                                slot: 0,
+                                record: record,
+                                fallbackName: rawName)
+        try writeSector(newDirectorySector, at: newDirectoryAddress)
+    }
+
+    private func writeGEOSDirectoryEntry(to sector: inout Data,
+                                         slot: Int,
+                                         record: Data,
+                                         fallbackName rawName: [UInt8]) {
+        let base = slot * 32
+        for index in 0..<30 {
+            sector[base + 2 + index] = record[index]
+        }
+
+        let paddedName = CommodorePETSCII.paddedFilename(rawName)
+        for index in 0..<16 {
+            sector[base + 5 + index] = paddedName[index]
+        }
     }
 
     private func writeDirectoryEntry(to sector: inout Data,

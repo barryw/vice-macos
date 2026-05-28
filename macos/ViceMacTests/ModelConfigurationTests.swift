@@ -248,6 +248,26 @@ final class ModelConfigurationTests: XCTestCase {
         XCTAssertFalse(EmulatedMachine.xv364.capabilities.supportsVideoStandardSelection)
     }
 
+    func testSystemTimeSyncStartupArgumentsUseDS1307RTC() {
+        let machine = EmulatedMachine.x128
+        let arguments = machine.startupArguments(configuration: startupConfiguration(for: machine,
+                                                                                     syncSystemTime: true))
+
+        XCTAssertTrue(arguments.contains("+userportrtcds1307save"))
+        XCTAssertEqual(arguments.value(after: "-userportdevice"), "ds1307")
+    }
+
+    func testSystemTimeSyncCapabilityMatchesVICEUserportRTCRegistration() {
+        XCTAssertTrue(EmulatedMachine.x64sc.capabilities.supportsSystemTimeSync)
+        XCTAssertTrue(EmulatedMachine.x128.capabilities.supportsSystemTimeSync)
+        XCTAssertTrue(EmulatedMachine.xvic.capabilities.supportsSystemTimeSync)
+        XCTAssertTrue(EmulatedMachine.xpet.capabilities.supportsSystemTimeSync)
+        XCTAssertFalse(EmulatedMachine.xplus4.capabilities.supportsSystemTimeSync)
+        XCTAssertFalse(EmulatedMachine.xc16.capabilities.supportsSystemTimeSync)
+        XCTAssertFalse(EmulatedMachine.xc232.capabilities.supportsSystemTimeSync)
+        XCTAssertFalse(EmulatedMachine.xv364.capabilities.supportsSystemTimeSync)
+    }
+
     func testVideoFilterPresetsIncludeMonitorAndPhosphorModes() {
         XCTAssertTrue(VideoFilterPreset.allCases.contains(.commodore1084))
         XCTAssertTrue(VideoFilterPreset.allCases.contains(.greenPhosphor))
@@ -750,6 +770,91 @@ final class ModelConfigurationTests: XCTestCase {
         XCTAssertEqual(response.rawContent.count, 2)
     }
 
+    func testGEOSProgramValidatorAcceptsLinkedPRGPayload() {
+        let prg = Data([0x00, 0x04, 0xa9, 0x00, 0x4c, 0x00, 0xc2])
+
+        let validation = GEOSProgramValidator.validatePRG(prg, entryAddressText: "$0402")
+
+        XCTAssertTrue(validation.canPackage)
+        XCTAssertEqual(validation.loadAddress, 0x0400)
+        XCTAssertEqual(validation.endAddress, 0x0404)
+        XCTAssertEqual(validation.entryAddress, 0x0402)
+        XCTAssertEqual(validation.payloadByteCount, 5)
+    }
+
+    func testGEOSProgramValidatorRejectsBrokenPRGInputs() {
+        let tooShort = GEOSProgramValidator.validatePRG(Data([0x00]))
+        XCTAssertFalse(tooShort.canPackage)
+        XCTAssertTrue(tooShort.issues.contains { $0.title == "Missing load address" })
+
+        var highPayload = Data([0x00, 0x7f])
+        highPayload.append(Data(repeating: 0xea, count: 0x0101))
+        let overlapsGEOS = GEOSProgramValidator.validatePRG(highPayload)
+        XCTAssertFalse(overlapsGEOS.canPackage)
+        XCTAssertTrue(overlapsGEOS.issues.contains { $0.title == "Payload overlaps GEOS workspace" })
+
+        let entryOutside = GEOSProgramValidator.validatePRG(Data([0x00, 0x04, 0xea]), entryAddressText: "$0800")
+        XCTAssertFalse(entryOutside.canPackage)
+        XCTAssertTrue(entryOutside.issues.contains { $0.title == "Entry outside payload" })
+    }
+
+    func testGEOSProgramMetadataGeneratesConstrainedGRC() {
+        var metadata = GEOSProgramMetadata()
+        metadata.kind = .autoExec
+        metadata.dosName = "MACVICE RTC"
+        metadata.className = "MacVICE RTC"
+        metadata.version = "V1.0"
+        metadata.dosType = .usr
+        metadata.mode = .any
+
+        XCTAssertTrue(metadata.canGenerate)
+        XCTAssertEqual(metadata.generatedGRC, """
+        HEADER AUTO_EXEC "MACVICE RTC" "MacVICE RTC" "V1.0" {
+        dostype USR
+        mode any
+        structure SEQ
+        author "mac VICE"
+        info "Synchronizes GEOS with the VICE DS1307 real-time clock."
+        }
+
+        """)
+
+        metadata.dosName = "THIS NAME IS FAR TOO LONG"
+        XCTAssertFalse(metadata.canGenerate)
+        XCTAssertTrue(metadata.validationIssues.contains { $0.title == "DOS name is too long" })
+    }
+
+    func testGEOSPackageBuilderCreatesCVTRecords() throws {
+        var metadata = GEOSProgramMetadata()
+        metadata.kind = .autoExec
+        metadata.dosName = "MACVICE RTC"
+        metadata.className = "MacVICE RTC"
+        metadata.version = "V1.0"
+        metadata.dosType = .usr
+        metadata.mode = .any
+
+        let prg = Data([0x00, 0x04, 0xa9, 0x00, 0x4c, 0x2c, 0xc2])
+        let package = try GEOSPackageBuilder.buildCVT(prgData: prg,
+                                                       entryAddressText: "$0402",
+                                                       metadata: metadata,
+                                                       timestamp: GEOSFileTimestamp(year: 26, month: 5, day: 27, hour: 15, minute: 42))
+
+        XCTAssertEqual(package.directoryRecord.count, GEOSCVTFile.recordSize)
+        XCTAssertEqual(package.fileInfoRecord.count, GEOSCVTFile.recordSize)
+        XCTAssertEqual(package.programPayload, prg.dropFirst(2))
+        XCTAssertEqual(package.directoryRecord[0], 0x83)
+        XCTAssertEqual(package.directoryRecord[22], 14)
+        XCTAssertEqual(package.directoryRecord[23], 26)
+        XCTAssertEqual(String(bytes: package.directoryRecord[30..<(30 + GEOSCVTFile.magic.count)], encoding: .ascii), GEOSCVTFile.magic)
+        XCTAssertEqual(package.fileInfoRecord[66], 0x83)
+        XCTAssertEqual(package.fileInfoRecord[67], 14)
+        XCTAssertEqual(package.fileInfoRecord[68], 0)
+        XCTAssertEqual(Int(package.fileInfoRecord[69]) | (Int(package.fileInfoRecord[70]) << 8), 0x0400)
+        XCTAssertEqual(Int(package.fileInfoRecord[71]) | (Int(package.fileInfoRecord[72]) << 8), 0x0404)
+        XCTAssertEqual(Int(package.fileInfoRecord[73]) | (Int(package.fileInfoRecord[74]) << 8), 0x0402)
+        XCTAssertEqual(package.data.count, GEOSCVTFile.recordSize * 3)
+    }
+
     func testCommodoreDiskImageReadsD64DirectoryAndFileData() throws {
         let payload = Data([0x01, 0x08, 0x0b, 0x08, 0x0a, 0x00, 0x99, 0x22, 0x48, 0x49, 0x22, 0x00])
         let url = try makeD64Image(name: "HELLO", payload: payload)
@@ -953,6 +1058,68 @@ final class ModelConfigurationTests: XCTestCase {
         XCTAssertTrue(image.isModified)
     }
 
+    func testCommodoreDiskImageMakesGEOS1351DefaultInputDriver() throws {
+        var image = try makeGEOS128SystemDiskImage()
+
+        let initialStatus = try XCTUnwrap(image.geosStatus)
+        XCTAssertEqual(initialStatus.defaultInputDriver?.name, "128 JOYSTICK")
+        XCTAssertEqual(initialStatus.preferred1351Driver?.name, "128 COMM 1351")
+        XCTAssertTrue(initialStatus.canMake1351Default)
+
+        try image.makeGEOS1351Default()
+
+        let updatedStatus = try XCTUnwrap(image.geosStatus)
+        XCTAssertEqual(updatedStatus.defaultInputDriver?.name, "128 COMM 1351")
+        XCTAssertEqual(updatedStatus.inputDrivers.map(\.name), [
+            "128 COMM 1351",
+            "128 JOYSTICK",
+            "128 COMM 1351(A)"
+        ])
+        XCTAssertTrue(updatedStatus.is1351Default)
+        XCTAssertTrue(image.isModified)
+    }
+
+    func testCommodoreDiskImageInstallsGEOSPackage() throws {
+        var image = try makeGEOS128SystemDiskImage()
+        var metadata = GEOSProgramMetadata()
+        metadata.kind = .autoExec
+        metadata.dosName = "MACVICE RTC"
+        metadata.className = "MacVICE RTC"
+        metadata.version = "V1.0"
+        metadata.dosType = .usr
+        metadata.mode = .any
+
+        let prg = Data([0x00, 0x04, 0xa9, 0x00, 0x4c, 0x2c, 0xc2])
+        let package = try GEOSPackageBuilder.buildCVT(prgData: prg,
+                                                       entryAddressText: "$0402",
+                                                       metadata: metadata,
+                                                       timestamp: GEOSFileTimestamp(year: 26, month: 5, day: 27, hour: 15, minute: 42))
+
+        try image.installGEOSPackage(package)
+
+        let entry = try XCTUnwrap(try image.directoryEntries().first { $0.name == "MACVICE RTC" })
+        XCTAssertEqual(entry.type, .usr)
+        XCTAssertTrue(entry.isClosed)
+        XCTAssertEqual(entry.blocks, 2)
+        XCTAssertEqual(try image.fileData(for: entry), prg.dropFirst(2))
+
+        let directorySector = try image.readSector(entry.directoryAddress)
+        let base = entry.slotIndex * 32
+        let headerAddress = CommodoreDiskAddress(track: Int(directorySector[base + 21]),
+                                                 sector: Int(directorySector[base + 22]))
+        XCTAssertNotEqual(headerAddress.track, 0)
+        XCTAssertEqual(directorySector[base + 23], 0)
+        XCTAssertEqual(directorySector[base + 24], 14)
+
+        let header = try image.readSector(headerAddress)
+        XCTAssertEqual(header[2], 3)
+        XCTAssertEqual(header[3], 21)
+        XCTAssertEqual(header[68], 0x83)
+        XCTAssertEqual(header[69], 14)
+        XCTAssertEqual(header[70], 0)
+        XCTAssertTrue(image.isModified)
+    }
+
     func testCommodoreHexDumpRoundTripsSectorText() throws {
         let bytes = Data((0..<256).map { UInt8($0 & 0xff) })
         let text = CommodoreHexDump.text(for: bytes)
@@ -965,7 +1132,8 @@ final class ModelConfigurationTests: XCTestCase {
                                       machineModel: MachineModel? = nil,
                                       videoStandard: EmulatorSession.VideoStandard = .ntsc,
                                       ramExpansion: RAMExpansion = .none,
-                                      driveConfigurations: [DriveConfiguration]? = nil) -> MachineStartupConfiguration {
+                                      driveConfigurations: [DriveConfiguration]? = nil,
+                                      syncSystemTime: Bool = false) -> MachineStartupConfiguration {
         MachineStartupConfiguration(executablePath: "/tmp/vice",
                                     dataDirectory: "/tmp/data",
                                     machineModel: machineModel,
@@ -977,7 +1145,8 @@ final class ModelConfigurationTests: XCTestCase {
                                     displayOutput: displayOutput ?? machine.defaultDisplayOutput,
                                     romImages: .standard,
                                     ramExpansion: ramExpansion,
-                                    driveConfigurations: driveConfigurations ?? machine.defaultDriveConfigurations())
+                                    driveConfigurations: driveConfigurations ?? machine.defaultDriveConfigurations(),
+                                    syncSystemTime: syncSystemTime)
     }
 
     private static let allMachines: [EmulatedMachine] = [
@@ -1047,6 +1216,32 @@ final class ModelConfigurationTests: XCTestCase {
         return url
     }
 
+    private func makeGEOS128SystemDiskImage() throws -> CommodoreDiskImage {
+        let url = temporaryURL(pathExtension: "d64")
+        var image = try CommodoreDiskImage(blankImageAt: url,
+                                           format: .d64,
+                                           diskName: "GEOS128",
+                                           diskID: "G2")
+
+        var firstDirectory = try image.readSector(CommodoreDiskAddress(track: 18, sector: 1))
+        firstDirectory[0] = 18
+        firstDirectory[1] = 9
+        writeDirectoryEntry("GEOS128", slot: 0, type: 0x82, start: CommodoreDiskAddress(track: 17, sector: 10), blocks: 2, in: &firstDirectory)
+        writeDirectoryEntry("GEOBOOT128", slot: 1, type: 0x82, start: CommodoreDiskAddress(track: 17, sector: 11), blocks: 152, in: &firstDirectory)
+        writeDirectoryEntry("128 DESKTOP", slot: 2, type: 0x83, start: CommodoreDiskAddress(track: 23, sector: 10), blocks: 137, in: &firstDirectory)
+        writeDirectoryEntry("128 JOYSTICK", slot: 3, type: 0x83, start: CommodoreDiskAddress(track: 5, sector: 15), blocks: 3, in: &firstDirectory)
+        try image.writeSector(firstDirectory, at: CommodoreDiskAddress(track: 18, sector: 1))
+
+        var secondDirectory = Data(repeating: 0, count: CommodoreDiskImage.bytesPerSector)
+        secondDirectory[0] = 0
+        secondDirectory[1] = 255
+        writeDirectoryEntry("128 COMM 1351", slot: 0, type: 0x83, start: CommodoreDiskAddress(track: 5, sector: 12), blocks: 3, in: &secondDirectory)
+        writeDirectoryEntry("128 COMM 1351(A)", slot: 1, type: 0x83, start: CommodoreDiskAddress(track: 1, sector: 16), blocks: 3, in: &secondDirectory)
+        try image.writeSector(secondDirectory, at: CommodoreDiskAddress(track: 18, sector: 9))
+
+        return image
+    }
+
     private func temporaryURL(pathExtension: String) -> URL {
         URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent(UUID().uuidString)
@@ -1083,6 +1278,26 @@ final class ModelConfigurationTests: XCTestCase {
         for (index, dataIndex) in range.enumerated() {
             data[dataIndex] = index < bytes.count ? bytes[index] : 0xa0
         }
+    }
+
+    private func writeDirectoryEntry(_ name: String,
+                                     slot: Int,
+                                     type: UInt8,
+                                     start: CommodoreDiskAddress,
+                                     blocks: Int,
+                                     in sector: inout Data) {
+        let base = slot * 32
+        sector[base + 2] = type
+        sector[base + 3] = UInt8(start.track)
+        sector[base + 4] = UInt8(start.sector)
+
+        let nameBytes = CommodorePETSCII.encodeFilename(name)
+        for index in 0..<16 {
+            sector[base + 5 + index] = nameBytes[index]
+        }
+
+        sector[base + 30] = UInt8(blocks & 0xff)
+        sector[base + 31] = UInt8((blocks >> 8) & 0xff)
     }
 
     private func clearBAMBit(track: Int, sector: Int, in bam: inout Data) {

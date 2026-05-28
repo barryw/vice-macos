@@ -1,4 +1,5 @@
 {
+  "originHash" : "27e6b403fa1f668b76182c505e40b5aa46d82f3b5536ee7844cf7ab082e404aa",
   "pins" : [
     {
       "identity" : "sparkle",
@@ -8,7 +9,16 @@
         "revision" : "066e75a8b3e99962685d6a90cdd5293ebffd9261",
         "version" : "2.9.1"
       }
+    },
+    {
+      "identity" : "waveform",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/AudioKit/Waveform",
+      "state" : {
+        "revision" : "79103e766434eb32aff9f0b169a469fce0af9ebd",
+        "version" : "1.0.2"
+      }
     }
   ],
-  "version" : 2
+  "version" : 3
 }

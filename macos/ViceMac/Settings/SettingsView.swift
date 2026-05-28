@@ -1932,6 +1932,10 @@ private struct MachineSettingsPane: View {
                     }
                 }
 
+                if emulator.machine.capabilities.supportsSystemTimeSync {
+                    Toggle("Sync system time with machine", isOn: $emulator.syncSystemTime)
+                }
+
                 Toggle("Paused", isOn: $emulator.isPaused)
             }
 
@@ -2151,6 +2155,12 @@ private struct ControlSettingsPane: View {
                             } label: {
                                 Label("Joystick", systemImage: ControlDeviceKind.joystick.systemImage)
                             }
+
+                            Button {
+                                beginAddingDevice(kind: .mouse1351)
+                            } label: {
+                                Label("Mouse (1351)", systemImage: ControlDeviceKind.mouse1351.systemImage)
+                            }
                         } label: {
                             Image(systemName: "plus")
                                 .frame(width: 18, height: 18)
@@ -2322,7 +2332,7 @@ private struct ControlDeviceEditorSheet: View {
     var body: some View {
         SettingsSheetLayout(title: title,
                             width: 520,
-                            minHeight: device.kind == .joystick ? 560 : 460) {
+                            minHeight: sheetMinHeight) {
             Form {
                 Section("Device") {
                     LabeledContent("Name") {
@@ -2336,13 +2346,17 @@ private struct ControlDeviceEditorSheet: View {
                     }
                 }
 
-                Section("Mapping") {
-                    switch device.kind {
-                    case .keyboard:
-                        KeyboardJoystickMappingEditor(mapping: $device.keyboard)
-                    case .joystick:
-                        GameControllerJoystickMappingEditor(mapping: $device.joystick)
-                            .environmentObject(emulator)
+                if device.kind != .mouse1351 {
+                    Section("Mapping") {
+                        switch device.kind {
+                        case .keyboard:
+                            KeyboardJoystickMappingEditor(mapping: $device.keyboard)
+                        case .joystick:
+                            GameControllerJoystickMappingEditor(mapping: $device.joystick)
+                                .environmentObject(emulator)
+                        case .mouse1351:
+                            EmptyView()
+                        }
                     }
                 }
             }
@@ -2364,6 +2378,17 @@ private struct ControlDeviceEditorSheet: View {
 
     private var canSave: Bool {
         !device.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var sheetMinHeight: CGFloat {
+        switch device.kind {
+        case .keyboard:
+            return 460
+        case .joystick:
+            return 560
+        case .mouse1351:
+            return 260
+        }
     }
 }
 

@@ -34,6 +34,7 @@ typedef struct rtc_ds1307_s rtc_ds1307_t;
 
 rtc_ds1307_t *ds1307_init(char *device);
 void ds1307_destroy(rtc_ds1307_t *context, int save);
+void ds1307_sync_system_time(rtc_ds1307_t *context);
 
 void ds1307_set_clk_line(rtc_ds1307_t *context, uint8_t data);
 void ds1307_set_data_line(rtc_ds1307_t *context, uint8_t data);

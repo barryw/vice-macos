@@ -21,15 +21,22 @@
 #include "cartridge.h"
 #include "crt.h"
 #include "drive.h"
-#include "drive-sound.h"
 #include "joystick.h"
 #include "kbdbuf.h"
 #include "keyboard.h"
+#include "lib.h"
 #include "machine.h"
 #include "monitor.h"
+#include "monitor/mon_breakpoint.h"
+#include "monitor/mon_disassemble.h"
+#include "monitor/mon_register.h"
 #include "monitor/montypes.h"
+#include "mouse.h"
+#include "mousedrv.h"
 #include "resources.h"
 #include "ui.h"
+#include "userport/userport.h"
+#include "userport/userport_rtc_ds1307.h"
 #include "version.h"
 #include "vicemacbridge.h"
 #include "vsync.h"
@@ -45,17 +52,22 @@
 #define VICEMAC_RESOURCE_NAME_CAPACITY 64
 #define VICEMAC_MACHINE_MODEL_RESOURCE "__vicemacMachineModel"
 #define VICEMAC_JOYSTICK_QUEUE_CAPACITY 256
+#define VICEMAC_MOUSE_QUEUE_CAPACITY 1024
 #define VICEMAC_MACHINE_COMMAND_QUEUE_CAPACITY 64
 #define VICEMAC_DRIVE_COMMAND_QUEUE_CAPACITY 64
 #define VICEMAC_MEDIA_COMMAND_QUEUE_CAPACITY 32
 #define VICEMAC_CARTRIDGE_COMMAND_QUEUE_CAPACITY 16
 #define VICEMAC_MEMORY_REQUEST_QUEUE_CAPACITY 64
 #define VICEMAC_SNAPSHOT_REQUEST_QUEUE_CAPACITY 8
+#define VICEMAC_DEBUGGER_REQUEST_QUEUE_CAPACITY 64
 #define VICEMAC_PATH_CAPACITY 4096
 #define VICEMAC_CURRENT_MEMORY_BANK -1
 
+typedef void (*vicemac_drive_sound_head_fn)(int track, int step, int unit);
+
 typedef enum vicemac_machine_command_type_e {
     VICEMAC_MACHINE_COMMAND_PAUSE,
+    VICEMAC_MACHINE_COMMAND_SYSTEM_TIME_SYNC,
     VICEMAC_MACHINE_COMMAND_RESET,
     VICEMAC_MACHINE_COMMAND_WARP,
     VICEMAC_MACHINE_COMMAND_QUIT
@@ -87,6 +99,20 @@ typedef enum vicemac_snapshot_request_type_e {
     VICEMAC_SNAPSHOT_REQUEST_LOAD
 } vicemac_snapshot_request_type_t;
 
+typedef enum vicemac_debugger_request_type_e {
+    VICEMAC_DEBUGGER_REQUEST_SNAPSHOT,
+    VICEMAC_DEBUGGER_REQUEST_DISASSEMBLE,
+    VICEMAC_DEBUGGER_REQUEST_LIST_CHECKPOINTS,
+    VICEMAC_DEBUGGER_REQUEST_SET_CHECKPOINT,
+    VICEMAC_DEBUGGER_REQUEST_DELETE_CHECKPOINT,
+    VICEMAC_DEBUGGER_REQUEST_SET_CHECKPOINT_ENABLED,
+    VICEMAC_DEBUGGER_REQUEST_SET_REGISTER,
+    VICEMAC_DEBUGGER_REQUEST_SET_CPU,
+    VICEMAC_DEBUGGER_REQUEST_STEP,
+    VICEMAC_DEBUGGER_REQUEST_RETURN,
+    VICEMAC_DEBUGGER_REQUEST_CONTINUE
+} vicemac_debugger_request_type_t;
+
 typedef struct vicemac_input_event_s {
     int clear;
     signed long key;
@@ -112,6 +138,20 @@ typedef struct vicemac_joystick_event_s {
     uint32_t port;
     uint32_t value;
 } vicemac_joystick_event_t;
+
+typedef enum vicemac_mouse_event_type_e {
+    VICEMAC_MOUSE_EVENT_MOVE,
+    VICEMAC_MOUSE_EVENT_BUTTON,
+    VICEMAC_MOUSE_EVENT_RESET
+} vicemac_mouse_event_type_t;
+
+typedef struct vicemac_mouse_event_s {
+    vicemac_mouse_event_type_t type;
+    float delta_x;
+    float delta_y;
+    uint32_t button;
+    int pressed;
+} vicemac_mouse_event_t;
 
 typedef struct vicemac_machine_command_s {
     vicemac_machine_command_type_t type;
@@ -162,13 +202,54 @@ typedef struct vicemac_snapshot_request_s {
     pthread_cond_t condition;
 } vicemac_snapshot_request_t;
 
+typedef struct vicemac_debugger_request_s {
+    vicemac_debugger_request_type_t type;
+    uint32_t memspace;
+    int32_t bank;
+    uint32_t address;
+    uint32_t end_address;
+    uint32_t count;
+    uint32_t operations;
+    uint32_t checkpoint_id;
+    uint32_t register_id;
+    uint32_t cpu_type;
+    uint32_t value;
+    int enabled;
+    int stops;
+    int temporary;
+    int step_over;
+    vicemac_debugger_snapshot_t *snapshot;
+    vicemac_debugger_disassembly_line_t *disassembly_lines;
+    vicemac_debugger_checkpoint_t *checkpoints;
+    uint32_t capacity;
+    uint32_t *output_count;
+    uint32_t *output_id;
+    int completed;
+    int success;
+    pthread_mutex_t mutex;
+    pthread_cond_t condition;
+} vicemac_debugger_request_t;
+
 static vicemac_video_frame_callback_t video_frame_callback = 0;
 static void *video_frame_context = 0;
 static vicemac_drive_status_callback_t drive_status_callback = 0;
 static void *drive_status_context = 0;
 static vicemac_cartridge_status_callback_t cartridge_status_callback = 0;
 static void *cartridge_status_context = 0;
+static vicemac_vsid_state_callback_t vsid_state_callback = 0;
+static void *vsid_state_context = 0;
+static vicemac_audio_samples_callback_t audio_samples_callback = 0;
+static void *audio_samples_context = 0;
+static vicemac_sid_voice_samples_callback_t sid_voice_samples_callback = 0;
+static void *sid_voice_samples_context = 0;
 static uint64_t video_frame_sequence = 0;
+static uint64_t audio_samples_sequence = 0;
+static uint64_t sid_voice_samples_sequence = 0;
+#define VICEMAC_AUDIO_VISUALIZER_FPS 30U
+#define VICEMAC_SID_VOICE_VISUALIZER_FPS 20U
+#define VICEMAC_SID_VOICE_VISUALIZER_MAX_CHIPS 8U
+static uint32_t audio_samples_pending_frames = 0;
+static uint32_t sid_voice_samples_pending_frames[VICEMAC_SID_VOICE_VISUALIZER_MAX_CHIPS];
 static pthread_mutex_t input_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 static vicemac_input_event_t input_queue[VICEMAC_INPUT_QUEUE_CAPACITY];
 static unsigned int input_queue_read = 0;
@@ -189,6 +270,10 @@ static pthread_mutex_t joystick_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 static vicemac_joystick_event_t joystick_queue[VICEMAC_JOYSTICK_QUEUE_CAPACITY];
 static unsigned int joystick_queue_read = 0;
 static unsigned int joystick_queue_write = 0;
+static pthread_mutex_t mouse_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
+static vicemac_mouse_event_t mouse_queue[VICEMAC_MOUSE_QUEUE_CAPACITY];
+static unsigned int mouse_queue_read = 0;
+static unsigned int mouse_queue_write = 0;
 static pthread_mutex_t machine_command_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 static vicemac_machine_command_t machine_command_queue[VICEMAC_MACHINE_COMMAND_QUEUE_CAPACITY];
 static unsigned int machine_command_queue_read = 0;
@@ -213,6 +298,10 @@ static pthread_mutex_t snapshot_request_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 static vicemac_snapshot_request_t *snapshot_request_queue[VICEMAC_SNAPSHOT_REQUEST_QUEUE_CAPACITY];
 static unsigned int snapshot_request_queue_read = 0;
 static unsigned int snapshot_request_queue_write = 0;
+static pthread_mutex_t debugger_request_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
+static vicemac_debugger_request_t *debugger_request_queue[VICEMAC_DEBUGGER_REQUEST_QUEUE_CAPACITY];
+static unsigned int debugger_request_queue_read = 0;
+static unsigned int debugger_request_queue_write = 0;
 
 static unsigned int vicemac_queue_next(unsigned int index, unsigned int capacity)
 {
@@ -371,6 +460,44 @@ static int vicemac_snapshot_queue_pop(vicemac_snapshot_request_t **request)
     return has_request;
 }
 
+static int vicemac_debugger_queue_push(vicemac_debugger_request_t *request)
+{
+    unsigned int next_write;
+
+    pthread_mutex_lock(&debugger_request_queue_mutex);
+
+    next_write = vicemac_queue_next(debugger_request_queue_write,
+                                    VICEMAC_DEBUGGER_REQUEST_QUEUE_CAPACITY);
+    if (next_write == debugger_request_queue_read) {
+        pthread_mutex_unlock(&debugger_request_queue_mutex);
+        return 0;
+    }
+
+    debugger_request_queue[debugger_request_queue_write] = request;
+    debugger_request_queue_write = next_write;
+
+    pthread_mutex_unlock(&debugger_request_queue_mutex);
+    return 1;
+}
+
+static int vicemac_debugger_queue_pop(vicemac_debugger_request_t **request)
+{
+    int has_request = 0;
+
+    pthread_mutex_lock(&debugger_request_queue_mutex);
+
+    if (debugger_request_queue_read != debugger_request_queue_write) {
+        *request = debugger_request_queue[debugger_request_queue_read];
+        debugger_request_queue[debugger_request_queue_read] = 0;
+        debugger_request_queue_read = vicemac_queue_next(debugger_request_queue_read,
+                                                         VICEMAC_DEBUGGER_REQUEST_QUEUE_CAPACITY);
+        has_request = 1;
+    }
+
+    pthread_mutex_unlock(&debugger_request_queue_mutex);
+    return has_request;
+}
+
 static void vicemac_complete_memory_request(vicemac_memory_request_t *request, int success)
 {
     pthread_mutex_lock(&request->mutex);
@@ -387,6 +514,31 @@ static void vicemac_complete_snapshot_request(vicemac_snapshot_request_t *reques
     request->completed = 1;
     pthread_cond_signal(&request->condition);
     pthread_mutex_unlock(&request->mutex);
+}
+
+static void vicemac_complete_debugger_request(vicemac_debugger_request_t *request, int success)
+{
+    pthread_mutex_lock(&request->mutex);
+    request->success = success;
+    request->completed = 1;
+    pthread_cond_signal(&request->condition);
+    pthread_mutex_unlock(&request->mutex);
+}
+
+static void vicemac_preview_drive_sound(int unit)
+{
+    static vicemac_drive_sound_head_fn drive_sound_head_fn = 0;
+    static int did_resolve = 0;
+
+    if (!did_resolve) {
+        drive_sound_head_fn = (vicemac_drive_sound_head_fn)dlsym(RTLD_DEFAULT,
+                                                                 "drive_sound_head");
+        did_resolve = 1;
+    }
+
+    if (drive_sound_head_fn != 0) {
+        drive_sound_head_fn(18, 1, unit);
+    }
 }
 
 void vicemac_set_video_frame_callback(vicemac_video_frame_callback_t callback,
@@ -410,9 +562,152 @@ void vicemac_set_cartridge_status_callback(vicemac_cartridge_status_callback_t c
     cartridge_status_context = context;
 }
 
+void vicemac_set_vsid_state_callback(vicemac_vsid_state_callback_t callback,
+                                     void *context)
+{
+    vsid_state_callback = callback;
+    vsid_state_context = context;
+}
+
+void vicemac_set_audio_samples_callback(vicemac_audio_samples_callback_t callback,
+                                        void *context)
+{
+    audio_samples_callback = callback;
+    audio_samples_context = context;
+    audio_samples_pending_frames = 0;
+    audio_samples_sequence = 0;
+}
+
+void vicemac_set_sid_voice_samples_callback(vicemac_sid_voice_samples_callback_t callback,
+                                            void *context)
+{
+    sid_voice_samples_callback = callback;
+    sid_voice_samples_context = context;
+    memset(sid_voice_samples_pending_frames, 0, sizeof(sid_voice_samples_pending_frames));
+    sid_voice_samples_sequence = 0;
+}
+
 int vicemac_has_video_frame_callback(void)
 {
     return video_frame_callback != 0;
+}
+
+void vicemac_publish_vsid_state(const vicemac_vsid_state_t *state)
+{
+    if (vsid_state_callback != 0 && state != 0) {
+        vsid_state_callback(state, vsid_state_context);
+    }
+}
+
+static int vicemac_should_publish_visualizer_samples(uint32_t *pending_frames,
+                                                     uint32_t frame_count,
+                                                     uint32_t sample_rate,
+                                                     uint32_t frames_per_second)
+{
+    uint64_t accumulated_frames;
+    uint32_t frame_interval;
+
+    if (pending_frames == 0 || frame_count == 0) {
+        return 0;
+    }
+
+    if (sample_rate == 0 || frames_per_second == 0) {
+        return 1;
+    }
+
+    frame_interval = sample_rate / frames_per_second;
+    if (frame_interval == 0) {
+        frame_interval = 1;
+    }
+
+    accumulated_frames = (uint64_t)*pending_frames + frame_count;
+    if (accumulated_frames < frame_interval) {
+        *pending_frames = (uint32_t)accumulated_frames;
+        return 0;
+    }
+
+    *pending_frames = (uint32_t)(accumulated_frames % frame_interval);
+    return 1;
+}
+
+int vicemac_should_capture_sid_voice_samples(uint32_t chip_index,
+                                             uint32_t frame_count,
+                                             uint32_t sample_rate)
+{
+    if (sid_voice_samples_callback == 0 || frame_count == 0) {
+        return 0;
+    }
+
+    if (chip_index >= VICEMAC_SID_VOICE_VISUALIZER_MAX_CHIPS) {
+        chip_index = VICEMAC_SID_VOICE_VISUALIZER_MAX_CHIPS - 1;
+    }
+
+    return vicemac_should_publish_visualizer_samples(&sid_voice_samples_pending_frames[chip_index],
+                                                     frame_count,
+                                                     sample_rate,
+                                                     VICEMAC_SID_VOICE_VISUALIZER_FPS);
+}
+
+void vicemac_publish_audio_samples(const int16_t *samples,
+                                   uint32_t frame_count,
+                                   uint32_t channel_count,
+                                   uint32_t sample_rate)
+{
+    vicemac_audio_samples_t packet;
+
+    if (audio_samples_callback == 0 || samples == 0 || frame_count == 0 || channel_count == 0) {
+        return;
+    }
+
+    if (!vicemac_should_publish_visualizer_samples(&audio_samples_pending_frames,
+                                                   frame_count,
+                                                   sample_rate,
+                                                   VICEMAC_AUDIO_VISUALIZER_FPS)) {
+        return;
+    }
+
+    packet.samples = samples;
+    packet.frame_count = frame_count;
+    packet.channel_count = channel_count;
+    packet.sample_rate = sample_rate;
+    packet.sequence = ++audio_samples_sequence;
+
+    audio_samples_callback(&packet, audio_samples_context);
+}
+
+void vicemac_publish_sid_voice_samples(const int16_t *samples,
+                                       uint32_t frame_count,
+                                       uint32_t voice_count,
+                                       uint32_t chip_index,
+                                       uint32_t sample_rate,
+                                       uint32_t clock_rate,
+                                       const uint16_t *frequency,
+                                       const uint8_t *control)
+{
+    vicemac_sid_voice_samples_t packet;
+    uint32_t voice;
+
+    if (sid_voice_samples_callback == 0 || samples == 0 || frame_count == 0 || voice_count == 0) {
+        return;
+    }
+
+    if (voice_count > VICEMAC_SID_VOICE_COUNT) {
+        voice_count = VICEMAC_SID_VOICE_COUNT;
+    }
+
+    packet.samples = samples;
+    packet.frame_count = frame_count;
+    packet.voice_count = voice_count;
+    packet.chip_index = chip_index;
+    packet.sample_rate = sample_rate;
+    packet.clock_rate = clock_rate;
+    for (voice = 0; voice < VICEMAC_SID_VOICE_COUNT; voice++) {
+        packet.frequency[voice] = frequency != 0 && voice < voice_count ? frequency[voice] : 0;
+        packet.control[voice] = control != 0 && voice < voice_count ? control[voice] : 0;
+    }
+    packet.sequence = ++sid_voice_samples_sequence;
+
+    sid_voice_samples_callback(&packet, sid_voice_samples_context);
 }
 
 void vicemac_publish_video_frame(uint32_t width,
@@ -723,6 +1018,66 @@ int vicemac_queue_joystick_value(uint32_t port, uint32_t value)
                               &event);
 }
 
+int vicemac_queue_mouse_move(float delta_x, float delta_y)
+{
+    vicemac_mouse_event_t event;
+
+    if (delta_x == 0.0f && delta_y == 0.0f) {
+        return 1;
+    }
+
+    memset(&event, 0, sizeof(event));
+    event.type = VICEMAC_MOUSE_EVENT_MOVE;
+    event.delta_x = delta_x;
+    event.delta_y = delta_y;
+
+    return vicemac_queue_push(&mouse_queue_mutex,
+                              mouse_queue,
+                              sizeof(mouse_queue[0]),
+                              VICEMAC_MOUSE_QUEUE_CAPACITY,
+                              &mouse_queue_read,
+                              &mouse_queue_write,
+                              &event);
+}
+
+int vicemac_queue_mouse_button(uint32_t button, int pressed)
+{
+    vicemac_mouse_event_t event;
+
+    if (button > 4) {
+        return 0;
+    }
+
+    memset(&event, 0, sizeof(event));
+    event.type = VICEMAC_MOUSE_EVENT_BUTTON;
+    event.button = button;
+    event.pressed = pressed ? 1 : 0;
+
+    return vicemac_queue_push(&mouse_queue_mutex,
+                              mouse_queue,
+                              sizeof(mouse_queue[0]),
+                              VICEMAC_MOUSE_QUEUE_CAPACITY,
+                              &mouse_queue_read,
+                              &mouse_queue_write,
+                              &event);
+}
+
+int vicemac_queue_mouse_reset(void)
+{
+    vicemac_mouse_event_t event;
+
+    memset(&event, 0, sizeof(event));
+    event.type = VICEMAC_MOUSE_EVENT_RESET;
+
+    return vicemac_queue_push(&mouse_queue_mutex,
+                              mouse_queue,
+                              sizeof(mouse_queue[0]),
+                              VICEMAC_MOUSE_QUEUE_CAPACITY,
+                              &mouse_queue_read,
+                              &mouse_queue_write,
+                              &event);
+}
+
 static int vicemac_queue_machine_command(vicemac_machine_command_type_t type, int value)
 {
     vicemac_machine_command_t command;
@@ -743,6 +1098,12 @@ int vicemac_queue_pause(int paused)
 {
     return vicemac_queue_machine_command(VICEMAC_MACHINE_COMMAND_PAUSE,
                                          paused ? 1 : 0);
+}
+
+int vicemac_queue_system_time_sync(int enabled)
+{
+    return vicemac_queue_machine_command(VICEMAC_MACHINE_COMMAND_SYSTEM_TIME_SYNC,
+                                         enabled ? 1 : 0);
 }
 
 int vicemac_queue_machine_model(const char *model)
@@ -1056,6 +1417,202 @@ int vicemac_poke_memory(uint32_t memspace,
                                           length);
 }
 
+static int vicemac_perform_debugger_request(vicemac_debugger_request_t *request)
+{
+    int success;
+
+    if (request == 0) {
+        return 0;
+    }
+
+    if (pthread_mutex_init(&request->mutex, 0) != 0) {
+        return 0;
+    }
+    if (pthread_cond_init(&request->condition, 0) != 0) {
+        pthread_mutex_destroy(&request->mutex);
+        return 0;
+    }
+
+    if (!vicemac_debugger_queue_push(request)) {
+        pthread_cond_destroy(&request->condition);
+        pthread_mutex_destroy(&request->mutex);
+        return 0;
+    }
+
+    pthread_mutex_lock(&request->mutex);
+    while (!request->completed) {
+        pthread_cond_wait(&request->condition, &request->mutex);
+    }
+    success = request->success;
+    pthread_mutex_unlock(&request->mutex);
+
+    pthread_cond_destroy(&request->condition);
+    pthread_mutex_destroy(&request->mutex);
+    return success;
+}
+
+int vicemac_debugger_snapshot(uint32_t memspace,
+                              vicemac_debugger_snapshot_t *snapshot)
+{
+    vicemac_debugger_request_t request;
+
+    if (snapshot == 0) {
+        return 0;
+    }
+
+    memset(&request, 0, sizeof(request));
+    request.type = VICEMAC_DEBUGGER_REQUEST_SNAPSHOT;
+    request.memspace = memspace;
+    request.snapshot = snapshot;
+    return vicemac_perform_debugger_request(&request);
+}
+
+int vicemac_debugger_disassemble(uint32_t memspace,
+                                 int32_t bank,
+                                 uint32_t address,
+                                 vicemac_debugger_disassembly_line_t *lines,
+                                 uint32_t capacity,
+                                 uint32_t *count)
+{
+    vicemac_debugger_request_t request;
+
+    if (lines == 0 || count == 0 || capacity == 0 || address > UINT16_MAX) {
+        return 0;
+    }
+
+    memset(&request, 0, sizeof(request));
+    request.type = VICEMAC_DEBUGGER_REQUEST_DISASSEMBLE;
+    request.memspace = memspace;
+    request.bank = bank;
+    request.address = address;
+    request.disassembly_lines = lines;
+    request.capacity = capacity;
+    request.output_count = count;
+    return vicemac_perform_debugger_request(&request);
+}
+
+int vicemac_debugger_list_checkpoints(vicemac_debugger_checkpoint_t *checkpoints,
+                                      uint32_t capacity,
+                                      uint32_t *count)
+{
+    vicemac_debugger_request_t request;
+
+    if (checkpoints == 0 || count == 0 || capacity == 0) {
+        return 0;
+    }
+
+    memset(&request, 0, sizeof(request));
+    request.type = VICEMAC_DEBUGGER_REQUEST_LIST_CHECKPOINTS;
+    request.checkpoints = checkpoints;
+    request.capacity = capacity;
+    request.output_count = count;
+    return vicemac_perform_debugger_request(&request);
+}
+
+int vicemac_debugger_set_checkpoint(uint32_t memspace,
+                                    uint32_t start_address,
+                                    uint32_t end_address,
+                                    uint32_t operations,
+                                    int stops,
+                                    int enabled,
+                                    int temporary,
+                                    uint32_t *checkpoint_id)
+{
+    vicemac_debugger_request_t request;
+
+    if (checkpoint_id == 0 || start_address > UINT16_MAX || end_address > UINT16_MAX
+        || start_address > end_address || (operations & (e_load | e_store | e_exec)) == 0) {
+        return 0;
+    }
+
+    memset(&request, 0, sizeof(request));
+    request.type = VICEMAC_DEBUGGER_REQUEST_SET_CHECKPOINT;
+    request.memspace = memspace;
+    request.address = start_address;
+    request.end_address = end_address;
+    request.operations = operations;
+    request.stops = stops ? 1 : 0;
+    request.enabled = enabled ? 1 : 0;
+    request.temporary = temporary ? 1 : 0;
+    request.output_id = checkpoint_id;
+    return vicemac_perform_debugger_request(&request);
+}
+
+int vicemac_debugger_delete_checkpoint(uint32_t checkpoint_id)
+{
+    vicemac_debugger_request_t request;
+
+    memset(&request, 0, sizeof(request));
+    request.type = VICEMAC_DEBUGGER_REQUEST_DELETE_CHECKPOINT;
+    request.checkpoint_id = checkpoint_id;
+    return vicemac_perform_debugger_request(&request);
+}
+
+int vicemac_debugger_set_checkpoint_enabled(uint32_t checkpoint_id, int enabled)
+{
+    vicemac_debugger_request_t request;
+
+    memset(&request, 0, sizeof(request));
+    request.type = VICEMAC_DEBUGGER_REQUEST_SET_CHECKPOINT_ENABLED;
+    request.checkpoint_id = checkpoint_id;
+    request.enabled = enabled ? 1 : 0;
+    return vicemac_perform_debugger_request(&request);
+}
+
+int vicemac_debugger_set_register(uint32_t memspace,
+                                  uint32_t register_id,
+                                  uint32_t value)
+{
+    vicemac_debugger_request_t request;
+
+    memset(&request, 0, sizeof(request));
+    request.type = VICEMAC_DEBUGGER_REQUEST_SET_REGISTER;
+    request.memspace = memspace;
+    request.register_id = register_id;
+    request.value = value;
+    return vicemac_perform_debugger_request(&request);
+}
+
+int vicemac_debugger_set_cpu(uint32_t memspace, uint32_t cpu_type)
+{
+    vicemac_debugger_request_t request;
+
+    memset(&request, 0, sizeof(request));
+    request.type = VICEMAC_DEBUGGER_REQUEST_SET_CPU;
+    request.memspace = memspace;
+    request.cpu_type = cpu_type;
+    return vicemac_perform_debugger_request(&request);
+}
+
+int vicemac_debugger_step(uint32_t count, int step_over)
+{
+    vicemac_debugger_request_t request;
+
+    memset(&request, 0, sizeof(request));
+    request.type = VICEMAC_DEBUGGER_REQUEST_STEP;
+    request.count = count == 0 ? 1 : count;
+    request.step_over = step_over ? 1 : 0;
+    return vicemac_perform_debugger_request(&request);
+}
+
+int vicemac_debugger_return(void)
+{
+    vicemac_debugger_request_t request;
+
+    memset(&request, 0, sizeof(request));
+    request.type = VICEMAC_DEBUGGER_REQUEST_RETURN;
+    return vicemac_perform_debugger_request(&request);
+}
+
+int vicemac_debugger_continue(void)
+{
+    vicemac_debugger_request_t request;
+
+    memset(&request, 0, sizeof(request));
+    request.type = VICEMAC_DEBUGGER_REQUEST_CONTINUE;
+    return vicemac_perform_debugger_request(&request);
+}
+
 static int vicemac_pop_key_event(vicemac_input_event_t *event)
 {
     return vicemac_queue_pop(&input_queue_mutex,
@@ -1149,6 +1706,17 @@ static int vicemac_pop_joystick_event(vicemac_joystick_event_t *event)
                              event);
 }
 
+static int vicemac_pop_mouse_event(vicemac_mouse_event_t *event)
+{
+    return vicemac_queue_pop(&mouse_queue_mutex,
+                             mouse_queue,
+                             sizeof(mouse_queue[0]),
+                             VICEMAC_MOUSE_QUEUE_CAPACITY,
+                             &mouse_queue_read,
+                             &mouse_queue_write,
+                             event);
+}
+
 static int vicemac_pop_machine_command(vicemac_machine_command_t *command)
 {
     return vicemac_queue_pop(&machine_command_queue_mutex,
@@ -1220,6 +1788,356 @@ static int vicemac_memory_request_bank(MEMSPACE memspace, int32_t requested_bank
 
     *bank = (int)requested_bank;
     return 1;
+}
+
+static int vicemac_debugger_valid_memspace(MEMSPACE memspace)
+{
+    return memspace > e_default_space
+        && memspace < e_invalid_space
+        && mon_interfaces[memspace] != 0
+        && monitor_cpu_for_memspace[memspace] != 0;
+}
+
+static int vicemac_debugger_fill_snapshot(vicemac_debugger_request_t *request)
+{
+    vicemac_debugger_snapshot_t *snapshot;
+    monitor_cpu_type_t *monitor_cpu;
+    mon_reg_list_t *registers;
+    mon_reg_list_t *current_register;
+    supported_cpu_type_list_t *supported_cpu;
+    MEMSPACE memspace;
+    int bank;
+    uint32_t register_count = 0;
+    uint32_t cpu_count = 0;
+
+    if (request == 0 || request->snapshot == 0) {
+        return 0;
+    }
+
+    snapshot = request->snapshot;
+    memset(snapshot, 0, sizeof(*snapshot));
+
+    memspace = vicemac_normalized_memspace(request->memspace);
+    if (!vicemac_debugger_valid_memspace(memspace)
+        || !vicemac_memory_request_bank(memspace, VICEMAC_CURRENT_MEMORY_BANK, &bank)) {
+        return 0;
+    }
+
+    monitor_cpu = monitor_cpu_for_memspace[memspace];
+    snapshot->valid = 1;
+    snapshot->memspace = (uint32_t)memspace;
+    snapshot->cpu_type = (uint32_t)monitor_cpu->cpu_type;
+    snapshot->bank = bank;
+    snapshot->cycle = mon_interfaces[memspace]->clk != 0 ? (uint64_t)*mon_interfaces[memspace]->clk : 0;
+    snapshot->program_counter = monitor_cpu->mon_register_get_val != 0
+        ? monitor_cpu->mon_register_get_val((int)memspace, e_PC)
+        : 0;
+
+    supported_cpu = monitor_cpu_type_supported[memspace];
+    while (supported_cpu != 0 && cpu_count < VICEMAC_DEBUGGER_MAX_CPUS) {
+        if (supported_cpu->monitor_cpu_type_p != 0) {
+            snapshot->supported_cpu_types[cpu_count] =
+                (uint32_t)supported_cpu->monitor_cpu_type_p->cpu_type;
+            cpu_count++;
+        }
+        supported_cpu = supported_cpu->next;
+    }
+    snapshot->supported_cpu_count = cpu_count;
+
+    registers = mon_register_list_get((int)memspace);
+    if (registers == 0) {
+        return 1;
+    }
+
+    current_register = registers;
+    while (current_register->name != 0 && register_count < VICEMAC_DEBUGGER_MAX_REGISTERS) {
+        vicemac_debugger_register_t *target = &snapshot->registers[register_count];
+        target->id = current_register->id;
+        target->bit_width = current_register->size;
+        target->flags = current_register->flags;
+        target->extra = current_register->extra;
+        target->value = current_register->val;
+        vicemac_copy_cstring(target->name, sizeof(target->name), current_register->name);
+        register_count++;
+        current_register++;
+    }
+
+    snapshot->register_count = register_count;
+    lib_free(registers);
+    return 1;
+}
+
+static int vicemac_debugger_disassemble_request(vicemac_debugger_request_t *request)
+{
+    monitor_interface_t *interface;
+    MEMSPACE memspace;
+    uint32_t line_index;
+    uint16_t current_address;
+    int bank;
+
+    if (request == 0 || request->disassembly_lines == 0
+        || request->output_count == 0 || request->capacity == 0
+        || request->address > UINT16_MAX) {
+        return 0;
+    }
+
+    memspace = vicemac_normalized_memspace(request->memspace);
+    if (!vicemac_debugger_valid_memspace(memspace)
+        || !vicemac_memory_request_bank(memspace, request->bank, &bank)) {
+        return 0;
+    }
+
+    interface = mon_interfaces[memspace];
+    if (interface->mem_bank_peek == 0) {
+        return 0;
+    }
+
+    current_address = (uint16_t)request->address;
+    *request->output_count = 0;
+
+    for (line_index = 0; line_index < request->capacity; line_index++) {
+        vicemac_debugger_disassembly_line_t *line = &request->disassembly_lines[line_index];
+        const char *text;
+        unsigned int line_size = 1;
+
+        memset(line, 0, sizeof(*line));
+        line->address = current_address;
+        line->bytes[0] = interface->mem_bank_peek(bank, current_address, interface->context);
+        line->bytes[1] = interface->mem_bank_peek(bank, (uint16_t)(current_address + 1U), interface->context);
+        line->bytes[2] = interface->mem_bank_peek(bank, (uint16_t)(current_address + 2U), interface->context);
+        line->bytes[3] = interface->mem_bank_peek(bank, (uint16_t)(current_address + 3U), interface->context);
+
+        text = mon_disassemble_to_string_ex(memspace,
+                                            current_address,
+                                            line->bytes[0],
+                                            line->bytes[1],
+                                            line->bytes[2],
+                                            line->bytes[3],
+                                            1,
+                                            &line_size);
+        if (line_size == 0 || line_size > sizeof(line->bytes)) {
+            line_size = 1;
+        }
+        line->size = line_size;
+        vicemac_copy_cstring(line->text, sizeof(line->text), text);
+
+        current_address = (uint16_t)(current_address + line_size);
+        *request->output_count = line_index + 1U;
+    }
+
+    return 1;
+}
+
+static void vicemac_debugger_fill_checkpoint(vicemac_debugger_checkpoint_t *target,
+                                             const mon_checkpoint_t *source)
+{
+    target->id = (uint32_t)source->checknum;
+    target->memspace = (uint32_t)addr_memspace(source->start_addr);
+    target->start_address = addr_location(source->start_addr) & UINT16_MAX;
+    target->end_address = addr_location(source->end_addr) & UINT16_MAX;
+    target->operations = (source->check_load ? e_load : 0)
+        | (source->check_store ? e_store : 0)
+        | (source->check_exec ? e_exec : 0);
+    target->enabled = source->enabled ? 1U : 0U;
+    target->stops = source->stop ? 1U : 0U;
+    target->temporary = source->temporary ? 1U : 0U;
+    target->hit_count = source->hit_count < 0 ? 0U : (uint32_t)source->hit_count;
+    target->ignore_count = source->ignore_count < 0 ? 0U : (uint32_t)source->ignore_count;
+}
+
+static int vicemac_debugger_list_checkpoints_request(vicemac_debugger_request_t *request)
+{
+    mon_checkpoint_t **checkpoint_list;
+    unsigned int checkpoint_count = 0;
+    uint32_t index;
+    uint32_t visible_count;
+
+    if (request == 0 || request->checkpoints == 0
+        || request->output_count == 0 || request->capacity == 0) {
+        return 0;
+    }
+
+    checkpoint_list = mon_breakpoint_checkpoint_list_get(&checkpoint_count);
+    if (checkpoint_list == 0) {
+        *request->output_count = 0;
+        return 1;
+    }
+
+    visible_count = checkpoint_count < request->capacity ? checkpoint_count : request->capacity;
+    for (index = 0; index < visible_count; index++) {
+        if (checkpoint_list[index] != 0) {
+            vicemac_debugger_fill_checkpoint(&request->checkpoints[index], checkpoint_list[index]);
+        }
+    }
+
+    *request->output_count = visible_count;
+    lib_free(checkpoint_list);
+    return 1;
+}
+
+static int vicemac_debugger_set_checkpoint_request(vicemac_debugger_request_t *request)
+{
+    MEMSPACE memspace;
+    MEMORY_OP operations;
+    int checknum;
+
+    if (request == 0 || request->output_id == 0
+        || request->address > UINT16_MAX || request->end_address > UINT16_MAX
+        || request->address > request->end_address) {
+        return 0;
+    }
+
+    memspace = vicemac_normalized_memspace(request->memspace);
+    if (!vicemac_debugger_valid_memspace(memspace)) {
+        return 0;
+    }
+
+    operations = (MEMORY_OP)(request->operations & (e_load | e_store | e_exec));
+    if (operations == 0) {
+        return 0;
+    }
+
+    checknum = mon_breakpoint_add_checkpoint(new_addr(memspace, request->address),
+                                             new_addr(memspace, request->end_address),
+                                             request->stops != 0,
+                                             operations,
+                                             request->temporary != 0,
+                                             FALSE);
+    if (checknum <= 0) {
+        return 0;
+    }
+
+    if (!request->enabled) {
+        mon_breakpoint_switch_checkpoint(e_OFF, checknum);
+    }
+
+    *request->output_id = (uint32_t)checknum;
+    return 1;
+}
+
+static int vicemac_debugger_delete_checkpoint_request(vicemac_debugger_request_t *request)
+{
+    if (request == 0 || mon_breakpoint_find_checkpoint((int)request->checkpoint_id) == 0) {
+        return 0;
+    }
+
+    mon_breakpoint_delete_checkpoint((int)request->checkpoint_id);
+    return 1;
+}
+
+static int vicemac_debugger_set_checkpoint_enabled_request(vicemac_debugger_request_t *request)
+{
+    if (request == 0 || mon_breakpoint_find_checkpoint((int)request->checkpoint_id) == 0) {
+        return 0;
+    }
+
+    mon_breakpoint_switch_checkpoint(request->enabled ? e_ON : e_OFF,
+                                     (int)request->checkpoint_id);
+    return 1;
+}
+
+static int vicemac_debugger_set_register_request(vicemac_debugger_request_t *request)
+{
+    monitor_cpu_type_t *monitor_cpu;
+    MEMSPACE memspace;
+
+    if (request == 0) {
+        return 0;
+    }
+
+    memspace = vicemac_normalized_memspace(request->memspace);
+    if (!vicemac_debugger_valid_memspace(memspace)
+        || !mon_register_valid((int)memspace, (int)request->register_id)) {
+        return 0;
+    }
+
+    monitor_cpu = monitor_cpu_for_memspace[memspace];
+    if (monitor_cpu->mon_register_set_val == 0) {
+        return 0;
+    }
+
+    monitor_cpu->mon_register_set_val((int)memspace,
+                                      (int)request->register_id,
+                                      (uint16_t)request->value);
+    return 1;
+}
+
+static int vicemac_debugger_set_cpu_request(vicemac_debugger_request_t *request)
+{
+    supported_cpu_type_list_t *supported_cpu;
+    MEMSPACE memspace;
+
+    if (request == 0) {
+        return 0;
+    }
+
+    memspace = vicemac_normalized_memspace(request->memspace);
+    if (!vicemac_debugger_valid_memspace(memspace)) {
+        return 0;
+    }
+
+    supported_cpu = monitor_cpu_type_supported[memspace];
+    while (supported_cpu != 0) {
+        if (supported_cpu->monitor_cpu_type_p != 0
+            && (uint32_t)supported_cpu->monitor_cpu_type_p->cpu_type == request->cpu_type) {
+            monitor_cpu_for_memspace[memspace] = supported_cpu->monitor_cpu_type_p;
+            return 1;
+        }
+        supported_cpu = supported_cpu->next;
+    }
+
+    return 0;
+}
+
+static int vicemac_dispatch_debugger_request(vicemac_debugger_request_t *request)
+{
+    if (request == 0) {
+        return 0;
+    }
+
+    switch (request->type) {
+        case VICEMAC_DEBUGGER_REQUEST_SNAPSHOT:
+            return vicemac_debugger_fill_snapshot(request);
+        case VICEMAC_DEBUGGER_REQUEST_DISASSEMBLE:
+            return vicemac_debugger_disassemble_request(request);
+        case VICEMAC_DEBUGGER_REQUEST_LIST_CHECKPOINTS:
+            return vicemac_debugger_list_checkpoints_request(request);
+        case VICEMAC_DEBUGGER_REQUEST_SET_CHECKPOINT:
+            return vicemac_debugger_set_checkpoint_request(request);
+        case VICEMAC_DEBUGGER_REQUEST_DELETE_CHECKPOINT:
+            return vicemac_debugger_delete_checkpoint_request(request);
+        case VICEMAC_DEBUGGER_REQUEST_SET_CHECKPOINT_ENABLED:
+            return vicemac_debugger_set_checkpoint_enabled_request(request);
+        case VICEMAC_DEBUGGER_REQUEST_SET_REGISTER:
+            return vicemac_debugger_set_register_request(request);
+        case VICEMAC_DEBUGGER_REQUEST_SET_CPU:
+            return vicemac_debugger_set_cpu_request(request);
+        case VICEMAC_DEBUGGER_REQUEST_STEP:
+            if (request->step_over) {
+                mon_instructions_next((int)request->count);
+            } else {
+                mon_instructions_step((int)request->count);
+            }
+            return 1;
+        case VICEMAC_DEBUGGER_REQUEST_RETURN:
+            mon_instruction_return();
+            return 1;
+        case VICEMAC_DEBUGGER_REQUEST_CONTINUE:
+            mon_go();
+            return 1;
+    }
+
+    return 0;
+}
+
+static void vicemac_dispatch_queued_debugger_requests(void)
+{
+    vicemac_debugger_request_t *request;
+
+    while (vicemac_debugger_queue_pop(&request)) {
+        vicemac_complete_debugger_request(request,
+                                          vicemac_dispatch_debugger_request(request));
+    }
 }
 
 static int vicemac_dispatch_memory_request(vicemac_memory_request_t *request)
@@ -1465,6 +2383,25 @@ static void vicemac_dispatch_queued_joystick_events(void)
     }
 }
 
+static void vicemac_dispatch_queued_mouse_events(void)
+{
+    vicemac_mouse_event_t event;
+
+    while (vicemac_pop_mouse_event(&event)) {
+        switch (event.type) {
+            case VICEMAC_MOUSE_EVENT_MOVE:
+                mouse_move(event.delta_x, event.delta_y);
+                break;
+            case VICEMAC_MOUSE_EVENT_BUTTON:
+                mouse_button((int)event.button, event.pressed);
+                break;
+            case VICEMAC_MOUSE_EVENT_RESET:
+                mouse_reset();
+                break;
+        }
+    }
+}
+
 static void vicemac_dispatch_machine_command(vicemac_machine_command_t *command)
 {
     switch (command->type) {
@@ -1473,6 +2410,16 @@ static void vicemac_dispatch_machine_command(vicemac_machine_command_t *command)
                 ui_pause_enable();
             } else {
                 ui_pause_disable();
+            }
+            break;
+        case VICEMAC_MACHINE_COMMAND_SYSTEM_TIME_SYNC:
+            if (command->value) {
+                (void)resources_set_int("UserportRTCDS1307Save", 0);
+                if (resources_set_int("UserportDevice", USERPORT_DEVICE_RTC_DS1307) >= 0) {
+                    userport_rtc_ds1307_sync_system_time();
+                }
+            } else if (userport_get_device() == USERPORT_DEVICE_RTC_DS1307) {
+                (void)resources_set_int("UserportDevice", USERPORT_DEVICE_NONE);
             }
             break;
         case VICEMAC_MACHINE_COMMAND_RESET:
@@ -1537,7 +2484,7 @@ static void vicemac_dispatch_drive_command(vicemac_drive_command_t *command)
             file_system_detach_disk(command->unit, command->drive);
             break;
         case VICEMAC_DRIVE_COMMAND_PREVIEW_SOUND:
-            drive_sound_head(18, 1, (int)(command->unit - DRIVE_UNIT_MIN));
+            vicemac_preview_drive_sound((int)(command->unit - DRIVE_UNIT_MIN));
             break;
     }
 }
@@ -1555,10 +2502,16 @@ static void vicemac_dispatch_media_command(vicemac_media_command_t *command)
 {
     switch (command->type) {
         case VICEMAC_MEDIA_COMMAND_AUTOSTART:
-            (void)autostart_autodetect(command->path,
-                                       0,
-                                       0,
-                                       command->autorun ? AUTOSTART_MODE_RUN : AUTOSTART_MODE_LOAD);
+            if (machine_class == VICE_MACHINE_VSID) {
+                if (machine_autodetect_psid(command->path) == 0) {
+                    machine_trigger_reset(MACHINE_RESET_MODE_RESET_CPU);
+                }
+            } else {
+                (void)autostart_autodetect(command->path,
+                                           0,
+                                           0,
+                                           command->autorun ? AUTOSTART_MODE_RUN : AUTOSTART_MODE_LOAD);
+            }
             break;
     }
 }
@@ -1598,6 +2551,7 @@ static void vicemac_dispatch_queued_cartridge_commands(void)
 void vicemac_dispatch_queued_events(void)
 {
     vicemac_dispatch_queued_memory_requests();
+    vicemac_dispatch_queued_debugger_requests();
     vicemac_dispatch_queued_resources();
     vicemac_dispatch_queued_machine_commands();
     vicemac_dispatch_queued_snapshot_requests();
@@ -1605,5 +2559,6 @@ void vicemac_dispatch_queued_events(void)
     vicemac_dispatch_queued_drive_commands();
     vicemac_dispatch_queued_media_commands();
     vicemac_dispatch_queued_joystick_events();
+    vicemac_dispatch_queued_mouse_events();
     vicemac_dispatch_queued_input();
 }

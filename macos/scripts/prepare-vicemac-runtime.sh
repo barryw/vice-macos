@@ -146,6 +146,29 @@ write_plist_string() {
 
 write_build_metadata() {
     local info_plist
+    local metadata_plist
+    local mac_sha
+    local upstream_sha
+
+    mac_sha="$(mac_git_sha)"
+    upstream_sha="$(upstream_git_sha)"
+
+    if [[ -n "${TARGET_BUILD_DIR:-}" && -n "${UNLOCALIZED_RESOURCES_FOLDER_PATH:-}" ]]; then
+        metadata_plist="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/VICEBuildMetadata.plist"
+        mkdir -p "$(dirname "$metadata_plist")"
+        cat > "$metadata_plist" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>VICEMacGitSHA</key>
+    <string>$mac_sha</string>
+    <key>VICEUpstreamGitSHA</key>
+    <string>$upstream_sha</string>
+</dict>
+</plist>
+EOF
+    fi
 
     if [[ -z "${TARGET_BUILD_DIR:-}" || -z "${INFOPLIST_PATH:-}" ]]; then
         return
@@ -153,17 +176,21 @@ write_build_metadata() {
 
     info_plist="$TARGET_BUILD_DIR/$INFOPLIST_PATH"
     if [[ ! -f "$info_plist" ]]; then
-        echo "Built app Info.plist is missing at $info_plist" >&2
-        exit 1
+        echo "Built app Info.plist is not available yet; wrote VICEBuildMetadata.plist instead." >&2
+        return
     fi
 
-    write_plist_string "$info_plist" "VICEMacGitSHA" "$(mac_git_sha)"
-    write_plist_string "$info_plist" "VICEUpstreamGitSHA" "$(upstream_git_sha)"
+    write_plist_string "$info_plist" "VICEMacGitSHA" "$mac_sha"
+    write_plist_string "$info_plist" "VICEUpstreamGitSHA" "$upstream_sha"
 }
 
 if [[ -f "$BUILD_DIR/src/Makefile" ]]; then
     configured_target="$(grep -m 1 -Eo -- '-mmacosx-version-min=[0-9.]+' "$BUILD_DIR/src/Makefile" | sed 's/.*=//' || true)"
-    if [[ "$configured_target" != "$ENGINE_DEPLOYMENT_TARGET" ||
+    configured_source="$(sed -n 's/^top_srcdir = //p' "$BUILD_DIR/src/Makefile" | head -n 1)"
+    if [[ "$configured_source" != "$VICE_SRC" ]]; then
+        rm -rf "$BUILD_DIR"
+        mkdir -p "$BUILD_DIR"
+    elif [[ "$configured_target" != "$ENGINE_DEPLOYMENT_TARGET" ||
           "$VICE_SRC/configure" -nt "$BUILD_DIR/Makefile" ||
           "$VICE_SRC/src/Makefile.in" -nt "$BUILD_DIR/src/Makefile" ||
           "$VICE_SRC/src/arch/Makefile.in" -nt "$BUILD_DIR/src/arch/Makefile" ||
@@ -204,8 +231,15 @@ done
 make -C "$BUILD_DIR/src" gcr.o V=1
 make -C "$BUILD_DIR/src/drive" V=1
 make -C "$BUILD_DIR/src/vdrive" V=1
+make -C "$BUILD_DIR/src/userport" V=1
+make -C "$BUILD_DIR/src/core/rtc" V=1
 make -C "$BUILD_DIR/src/arch/macos" V=1
 make -C "$BUILD_DIR/src/lib/linenoise-ng" V=1
+make -C "$BUILD_DIR/src/lib/md5" V=1
+if [[ ! -f "$BUILD_DIR/src/monitor/mon_parse.h" ]]; then
+    rm -f "$BUILD_DIR/src/monitor/mon_parse.c"
+fi
+make -C "$BUILD_DIR/src/monitor" mon_parse.c mon_lex.c V=1
 
 codesign_dylib() {
     local dylib="$1"
@@ -351,6 +385,9 @@ build_machine_runtime_libraries() {
         x64sc)
             make -C "$BUILD_DIR/src/c64" V=1
             ;;
+        vsid)
+            make -C "$BUILD_DIR/src/c64" V=1
+            ;;
         x128)
             make -C "$BUILD_DIR/src/c64" V=1
             make -C "$BUILD_DIR/src/c128" V=1
@@ -375,7 +412,10 @@ for machine_target in "${MACHINE_TARGETS[@]}"; do
     build_machine_runtime_libraries "$machine_target"
 
     rm -f "$BUILD_DIR/src/$machine_target"
-    make -C "$BUILD_DIR/src" "$machine_target" V=1 > "$link_log" 2>&1
+    if ! make -C "$BUILD_DIR/src" "$machine_target" V=1 > "$link_log" 2>&1; then
+        tail -n 120 "$link_log" >&2
+        exit 1
+    fi
 
     link_command="$(grep " -o $machine_target " "$link_log" | tail -n 1 || true)"
     if [[ -z "$link_command" ]]; then

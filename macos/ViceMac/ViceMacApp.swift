@@ -11,6 +11,9 @@ struct ViceMacApp: App {
     @NSApplicationDelegateAdaptor(ViceMacAppDelegate.self) private var appDelegate
     @StateObject private var emulator = EmulatorSession()
     @StateObject private var aiSettings = AIAssistantSettings()
+    #if VICE_MAC_APP_VSID
+    @StateObject private var vsid = VSIDSession()
+    #endif
     private let launchConfiguration: ViceMacLaunchConfiguration
     private let updaterController: SPUStandardUpdaterController
 
@@ -23,6 +26,65 @@ struct ViceMacApp: App {
     }
 
     var body: some Scene {
+        #if VICE_MAC_APP_VSID
+        WindowGroup {
+            VSIDPlayerView()
+                .environmentObject(vsid)
+                .containerBackground(.clear, for: .window)
+        }
+        .defaultSize(width: 1_040, height: 680)
+        .commands {
+            CommandGroup(replacing: .appInfo) {
+                Button("About mac VICE VSID") {
+                    NSApp.orderFrontStandardAboutPanel(options: [
+                        .applicationName: "mac VICE VSID",
+                        .applicationVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "",
+                        .version: Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? ""
+                    ])
+                }
+            }
+
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates...") {
+                    updaterController.checkForUpdates(nil)
+                }
+                .disabled(!updaterController.updater.canCheckForUpdates)
+            }
+
+            CommandGroup(replacing: .newItem) {
+                Button("Open SID...") {
+                    vsid.openSIDPanel()
+                }
+                .keyboardShortcut("o", modifiers: [.command])
+            }
+
+            CommandMenu("Playback") {
+                Button(vsid.isPlaying ? "Pause" : "Play") {
+                    vsid.isPlaying ? vsid.pause() : vsid.playOrResume()
+                }
+                .keyboardShortcut(.space, modifiers: [])
+
+                Button("Stop") {
+                    vsid.stop()
+                }
+                .keyboardShortcut(".", modifiers: [.command])
+
+                Divider()
+
+                Button("Previous Tune") {
+                    vsid.selectPreviousTune()
+                }
+                .keyboardShortcut(.leftArrow, modifiers: [.command])
+                .disabled(!vsid.canSelectPreviousTune)
+
+                Button("Next Tune") {
+                    vsid.selectNextTune()
+                }
+                .keyboardShortcut(.rightArrow, modifiers: [.command])
+                .disabled(!vsid.canSelectNextTune)
+            }
+        }
+        #else
         WindowGroup {
             Group {
                 if let smokeTestConfiguration = launchConfiguration.releaseSmokeTest {
@@ -141,7 +203,7 @@ struct ViceMacApp: App {
                 if let diskImageManagerActions {
                     Divider()
 
-                    Button("Import PRG...") {
+                    Button("Import File...") {
                         diskImageManagerActions.importProgram()
                     }
                     .disabled(!diskImageManagerActions.canImportProgram)
@@ -231,6 +293,25 @@ struct ViceMacApp: App {
                 }
             }
 
+            CommandMenu("Debug") {
+                Button("Debugger...") {
+                    openWindow(id: DebuggerWindow.id)
+                }
+                .keyboardShortcut("y", modifiers: [.command, .shift])
+
+                Divider()
+
+                Button(emulator.isPaused ? "Resume" : "Pause") {
+                    emulator.togglePause()
+                }
+
+                Button("Step") {
+                    _ = ViceEngineDebuggerStep(1, false)
+                }
+                .keyboardShortcut("s", modifiers: [.command, .shift])
+                .disabled(!ViceEngineIsRunning())
+            }
+
             CommandMenu("Display") {
                 Picker("Size", selection: $emulator.displayMode) {
                     ForEach(EmulatorSession.DisplayMode.allCases) { mode in
@@ -276,11 +357,19 @@ struct ViceMacApp: App {
         .defaultSize(width: DiskImageManagerWindow.size.width,
                      height: DiskImageManagerWindow.size.height)
 
+        Window("Debugger", id: DebuggerWindow.id) {
+            DebuggerView()
+                .environmentObject(emulator)
+        }
+        .defaultSize(width: DebuggerWindow.size.width,
+                     height: DebuggerWindow.size.height)
+
         Settings {
             SettingsView()
                 .environmentObject(emulator)
                 .environmentObject(aiSettings)
         }
+        #endif
     }
 
     private func driveAccessModeBinding(for unit: Int) -> Binding<DriveAccessMode> {
@@ -568,6 +657,11 @@ private enum AboutWindow {
 private enum DiskImageManagerWindow {
     static let id = "disk-image-manager"
     static let size = CGSize(width: 1_180, height: 780)
+}
+
+private enum DebuggerWindow {
+    static let id = "debugger"
+    static let size = CGSize(width: 1_320, height: 860)
 }
 
 @MainActor
@@ -1072,8 +1166,8 @@ private enum AppMetadata {
     }
 
     static var buildMetadata: AppBuildMetadata {
-        AppBuildMetadata(macSHA: bundleString(for: "VICEMacGitSHA"),
-                         viceUpstreamSHA: bundleString(for: "VICEUpstreamGitSHA"))
+        AppBuildMetadata(macSHA: buildMetadataString(for: "VICEMacGitSHA"),
+                         viceUpstreamSHA: buildMetadataString(for: "VICEUpstreamGitSHA"))
     }
 
     static func copyVersionSummary(machineName: String, viceTarget: String) {
@@ -1113,6 +1207,27 @@ private enum AppMetadata {
         }
 
         return value
+    }
+
+    private static func buildMetadataString(for key: String) -> String {
+        if let value = bundledBuildMetadata[key] as? String,
+           !value.isEmpty {
+            return value
+        }
+
+        return bundleString(for: key)
+    }
+
+    private static var bundledBuildMetadata: [String: Any] {
+        guard let url = Bundle.main.url(forResource: "VICEBuildMetadata", withExtension: "plist"),
+              let data = try? Data(contentsOf: url),
+              let dictionary = try? PropertyListSerialization.propertyList(from: data,
+                                                                           options: [],
+                                                                           format: nil) as? [String: Any] else {
+            return [:]
+        }
+
+        return dictionary
     }
 }
 

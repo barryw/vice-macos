@@ -789,6 +789,16 @@ final class EmulatorSession: ObservableObject {
             applyKeyboardMapping()
         }
     }
+    @Published var syncSystemTime: Bool {
+        didSet {
+            guard syncSystemTime != oldValue else {
+                return
+            }
+
+            EmulatorDefaults.saveSyncSystemTime(syncSystemTime, for: machine)
+            applySystemTimeSync()
+        }
+    }
     @Published private var driveActivities: [Int: DriveActivity] = [:]
     @Published var cartridgeStatus = CartridgeStatus.detached
     @Published private(set) var gameControllerNames: [String] = []
@@ -810,6 +820,7 @@ final class EmulatorSession: ObservableObject {
     private var pressedKeys: [UInt16: PressedEmulatorKey] = [:]
     private var keyboardJoystickPressedKeys: [UUID: Set<UInt16>] = [:]
     private var lastJoystickValues: [UUID: UInt16] = [:]
+    private var pressedMouseButtons = Set<UInt32>()
     private var gameControllerObservers: [NSObjectProtocol] = []
 
     nonisolated static func normalizedDriveConfigurations(_ configurations: [DriveConfiguration],
@@ -1010,6 +1021,7 @@ final class EmulatorSession: ObservableObject {
         controlPorts = EmulatorDefaults.loadControlPorts(for: machine)
         driveConfigurations = EmulatorDefaults.loadDriveConfigurations(for: machine)
         keyboardMapping = EmulatorDefaults.loadKeyboardMapping(for: machine)
+        syncSystemTime = EmulatorDefaults.loadSyncSystemTime(for: machine)
         statusText = "Starting \(machine.shortName)"
         frameSource = EmulatorFrameSource.displaySource(for: machine)
         setupGameControllerMonitoring()
@@ -1065,6 +1077,14 @@ final class EmulatorSession: ObservableObject {
         activeMachineModel.displayName ?? machine.displayName
     }
 
+    var machineModelStatusTitle: String? {
+        guard activeMachineModel.supportsRuntimeModelSelection else {
+            return nil
+        }
+
+        return activeMachineModel.statusChipTitle
+    }
+
     var availableControlPorts: [ControlPort] {
         machine.capabilities.controlPorts
     }
@@ -1078,6 +1098,10 @@ final class EmulatorSession: ObservableObject {
 
     var hasMultipleControlPorts: Bool {
         availableControlPorts.count > 1
+    }
+
+    var isMacMouseInputActive: Bool {
+        isMouse1351Assigned
     }
 
     var visibleDriveActivities: [DriveActivity] {
@@ -1205,6 +1229,8 @@ final class EmulatorSession: ObservableObject {
             }
 
             return hasGameControllers ? .connected : .unavailable("No controller connected")
+        case .mouse1351:
+            return .connected
         }
     }
 
@@ -1249,6 +1275,8 @@ final class EmulatorSession: ObservableObject {
             return ControlDeviceConfiguration.keyboard(name: uniqueControlDeviceName(baseName: "Keyboard"))
         case .joystick:
             return ControlDeviceConfiguration.joystick(name: uniqueControlDeviceName(baseName: "Joystick"))
+        case .mouse1351:
+            return ControlDeviceConfiguration.mouse1351(name: uniqueControlDeviceName(baseName: "Mac Mouse 1351"))
         }
     }
 
@@ -1393,7 +1421,8 @@ final class EmulatorSession: ObservableObject {
                                                                displayOutput: displayOutput,
                                                                romImages: romImages,
                                                                ramExpansion: ramExpansion,
-                                                               driveConfigurations: driveConfigurations)
+                                                               driveConfigurations: driveConfigurations,
+                                                               syncSystemTime: syncSystemTime)
         let startupArguments = machine.startupArguments(configuration: startupConfiguration)
         let startResult = machine.id.rawValue.withCString { machineIDPointer in
             dynamicLibraryPath.withCString { dynamicLibraryPathPointer in
@@ -1535,10 +1564,49 @@ final class EmulatorSession: ObservableObject {
         return true
     }
 
+    @discardableResult
+    func handleMouseMoved(deltaX: CGFloat, deltaY: CGFloat) -> Bool {
+        guard isMouse1351Assigned,
+              ViceEngineIsRunning() else {
+            return false
+        }
+
+        return ViceEngineMoveMouse(Float(deltaX), Float(deltaY))
+    }
+
+    @discardableResult
+    func handleMouseButton(_ button: UInt32, pressed: Bool) -> Bool {
+        guard isMouse1351Assigned,
+              ViceEngineIsRunning() else {
+            return false
+        }
+
+        if pressed {
+            pressedMouseButtons.insert(button)
+        } else {
+            pressedMouseButtons.remove(button)
+        }
+        updateMouseControlPortValues()
+
+        return ViceEngineSetMouseButton(button, pressed)
+    }
+
+    func handleMouseCaptureChanged(_ captured: Bool) {
+        guard ViceEngineIsRunning() else {
+            return
+        }
+
+        if !captured {
+            releaseMouseButtons()
+            _ = ViceEngineResetMouse()
+        }
+    }
+
     func releaseAllKeys() {
         pressedKeys.removeAll()
         keyboardJoystickPressedKeys.removeAll()
         ViceEngineReleaseAllKeys()
+        releaseMouseButtons()
 
         for device in assignedControlDevices(kind: .keyboard) {
             lastJoystickValues[device.id] = 0
@@ -2043,6 +2111,18 @@ final class EmulatorSession: ObservableObject {
         applyRAMExpansion(updateStatus: false)
         applyKeyboardMapping(updateStatus: false)
         applyControlPorts()
+        applySystemTimeSync(updateStatus: false)
+    }
+
+    private func applySystemTimeSync(updateStatus: Bool = true) {
+        guard ViceEngineIsRunning(),
+              machine.capabilities.supportsSystemTimeSync else {
+            return
+        }
+
+        if ViceEngineSetSystemTimeSyncEnabled(syncSystemTime), updateStatus {
+            statusText = syncSystemTime ? "System time synced" : "System time sync off"
+        }
     }
 
     private func applyPauseState(updateStatus: Bool = true) {
@@ -2232,6 +2312,8 @@ final class EmulatorSession: ObservableObject {
             return
         }
 
+        var hasMouse1351 = false
+
         for port in availableControlPorts {
             guard let controlDevice = controlPorts.assignedDevice(for: port) else {
                 setVICEIntResource(port.resourceName, value: ViceJoyPortDevice.none)
@@ -2240,7 +2322,18 @@ final class EmulatorSession: ObservableObject {
             }
 
             setVICEIntResource(port.resourceName, value: controlDevice.kind.viceJoyPortDevice)
-            publishJoystickValue(currentJoystickValue(for: controlDevice), to: port)
+            if controlDevice.kind == .mouse1351 {
+                hasMouse1351 = true
+                controlPortValues[port] = mouseButtonJoystickValue
+            } else {
+                publishJoystickValue(currentJoystickValue(for: controlDevice), to: port)
+            }
+        }
+
+        setVICEIntResource("Mouse", value: hasMouse1351 ? 1 : 0)
+        if !hasMouse1351 {
+            releaseMouseButtons()
+            _ = ViceEngineResetMouse()
         }
     }
 
@@ -2559,7 +2652,47 @@ final class EmulatorSession: ObservableObject {
             return keyboardJoystickValue(for: device)
         case .joystick:
             return gameControllerValue(for: device)
+        case .mouse1351:
+            return 0
         }
+    }
+
+    private var isMouse1351Assigned: Bool {
+        availableControlPorts.contains { port in
+            controlPorts.assignedDevice(for: port)?.kind == .mouse1351
+        }
+    }
+
+    private var mouseButtonJoystickValue: UInt16 {
+        var value: UInt16 = 0
+
+        if pressedMouseButtons.contains(0) {
+            value |= JoystickBits.fire
+        }
+        if pressedMouseButtons.contains(2) {
+            value |= JoystickBits.up
+        }
+
+        return value
+    }
+
+    private func updateMouseControlPortValues() {
+        for port in availableControlPorts where controlPorts.assignedDevice(for: port)?.kind == .mouse1351 {
+            controlPortValues[port] = mouseButtonJoystickValue
+        }
+    }
+
+    private func releaseMouseButtons() {
+        guard !pressedMouseButtons.isEmpty else {
+            return
+        }
+
+        let buttons = pressedMouseButtons
+        pressedMouseButtons.removeAll()
+        for button in buttons {
+            _ = ViceEngineSetMouseButton(button, false)
+        }
+        updateMouseControlPortValues()
     }
 
     private func assignedControlDevices(kind: ControlDeviceKind) -> [ControlDeviceConfiguration] {
@@ -2646,7 +2779,7 @@ private enum ViceDQBBMode {
     static let c64: Int32 = 1
 }
 
-private extension Array where Element == String {
+extension Array where Element == String {
     func withCStringArray<Result>(
         _ body: (Int32, UnsafePointer<UnsafePointer<CChar>?>?) -> Result
     ) -> Result? {

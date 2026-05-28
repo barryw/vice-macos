@@ -34,5 +34,6 @@ extern int userport_rtc_ds1307_enable;
 int userport_rtc_ds1307_resources_init(void);
 int userport_rtc_ds1307_cmdline_options_init(void);
 void userport_rtc_ds1307_resources_shutdown(void);
+void userport_rtc_ds1307_sync_system_time(void);
 
 #endif

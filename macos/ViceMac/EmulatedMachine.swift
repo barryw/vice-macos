@@ -59,6 +59,19 @@ enum MachineModel: Equatable {
         }
     }
 
+    var statusChipTitle: String? {
+        switch self {
+        case let .x64sc(model):
+            return model.statusChipTitle
+        case let .x128(model):
+            return model.statusChipTitle
+        case let .xpet(model):
+            return model.statusChipTitle
+        case .xvic, .ted:
+            return nil
+        }
+    }
+
     var defaultSIDModel: EmulatorSession.SIDModel? {
         switch self {
         case let .x64sc(model):
@@ -172,6 +185,19 @@ enum C64MachineModel: String, Codable, Equatable, CaseIterable, Identifiable {
         }
     }
 
+    var statusChipTitle: String {
+        switch self {
+        case .c64:
+            return "C64"
+        case .c64c:
+            return "C64C"
+        case .earlyC64:
+            return "Early C64"
+        case .sx64:
+            return "SX-64"
+        }
+    }
+
     var defaultSIDModel: EmulatorSession.SIDModel {
         switch self {
         case .c64c:
@@ -234,6 +260,17 @@ enum C128MachineModel: String, Codable, Equatable, CaseIterable, Identifiable {
             return "Commodore 128D"
         case .c128dcr:
             return "Commodore 128DCR"
+        }
+    }
+
+    var statusChipTitle: String {
+        switch self {
+        case .c128:
+            return "C128"
+        case .c128d:
+            return "C128D"
+        case .c128dcr:
+            return "C128DCR"
         }
     }
 
@@ -320,6 +357,10 @@ enum PETMachineModel: String, Codable, Equatable, CaseIterable, Identifiable {
         case .superPET:
             return "SuperPET"
         }
+    }
+
+    var statusChipTitle: String {
+        displayName
     }
 
     var viceModelName: String {
@@ -544,6 +585,7 @@ struct MachineCapabilities: Equatable {
     let supportsSIDModelSelection: Bool
     let supportsCartridges: Bool
     let supportsRAMExpansion: Bool
+    var supportsSystemTimeSync = false
     let controlPorts: [ControlPort]
     let driveUnits: [Int]
     let driveTypes: [DriveType]
@@ -563,6 +605,7 @@ struct MachineStartupConfiguration {
     let romImages: ROMImageConfiguration
     let ramExpansion: RAMExpansion
     let driveConfigurations: [DriveConfiguration]
+    let syncSystemTime: Bool
 }
 
 struct ViceIntResourceAssignment: Equatable {
@@ -649,6 +692,14 @@ struct EmulatedMachine: Identifiable, Equatable {
             arguments += [
                 "-sidmodel",
                 "\(configuration.sidModel.rawValue)"
+            ]
+        }
+
+        if capabilities.supportsSystemTimeSync && configuration.syncSystemTime {
+            arguments += [
+                "+userportrtcds1307save",
+                "-userportdevice",
+                "ds1307"
             ]
         }
 
@@ -951,6 +1002,7 @@ extension EmulatedMachine {
                                               supportsSIDModelSelection: true,
                                               supportsCartridges: true,
                                               supportsRAMExpansion: true,
+                                              supportsSystemTimeSync: true,
                                               controlPorts: [.one, .two],
                                               driveUnits: [8, 9, 10, 11],
                                               driveTypes: DriveType.iecOptions,
@@ -989,6 +1041,7 @@ extension EmulatedMachine {
                                               supportsSIDModelSelection: true,
                                               supportsCartridges: true,
                                               supportsRAMExpansion: true,
+                                              supportsSystemTimeSync: true,
                                               controlPorts: [.one, .two],
                                               driveUnits: [8, 9, 10, 11],
                                               driveTypes: DriveType.c128Options,
@@ -1031,6 +1084,7 @@ extension EmulatedMachine {
                                               supportsSIDModelSelection: false,
                                               supportsCartridges: true,
                                               supportsRAMExpansion: true,
+                                              supportsSystemTimeSync: true,
                                               controlPorts: [.one],
                                               driveUnits: [8, 9, 10, 11],
                                               driveTypes: DriveType.iecOptions,
@@ -1090,6 +1144,7 @@ extension EmulatedMachine {
                                               supportsSIDModelSelection: false,
                                               supportsCartridges: false,
                                               supportsRAMExpansion: false,
+                                              supportsSystemTimeSync: true,
                                               controlPorts: [],
                                               driveUnits: [8, 9, 10, 11],
                                               driveTypes: DriveType.petOptions,

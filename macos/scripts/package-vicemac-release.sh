@@ -29,6 +29,7 @@ SCHEMES=(
     "VICE Mac C232"
     "VICE Mac V364"
     "VICE Mac C128"
+    "VICE Mac VSID"
 )
 
 RELEASE_APPS=(
@@ -40,6 +41,7 @@ RELEASE_APPS=(
     xc232
     xv364
     x128
+    vsid
 )
 
 vice_version() {

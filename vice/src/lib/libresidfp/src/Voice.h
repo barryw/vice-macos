@@ -46,6 +46,8 @@ private:
     /// The DAC LUT for analog envelope output
     float* envDAC; //-V730_NOINIT this is initialized in the SID constructor
 
+    float lastOutput = 0.f;
+
 public:
     /**
      * Amplitude modulated waveform output.
@@ -69,8 +71,11 @@ public:
 
         // DAC imperfections are emulated by using the digital output
         // as an index into a DAC lookup table.
-        return wavDAC[wav] * envDAC[env];
+        lastOutput = wavDAC[wav] * envDAC[env];
+        return lastOutput;
     }
+
+    float cachedOutput() const { return lastOutput; }
 
     /**
      * Set the analog DAC emulation for waveform generator.

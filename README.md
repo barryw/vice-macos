@@ -74,7 +74,29 @@ VICE Mac includes a native disk image manager for Commodore block images:
 - Inspect directories, sectors, BAM allocation, and image geometry.
 - Import PRG files, export files, rename files, and delete files.
 - Clone optimized rebuilt images when the original image layout allows it.
+- Package linked GEOS PRGs as GRC/CVT files and install them directly onto GEOS
+  system disks.
+- Patch GEOS input-driver ordering so a 1351 mouse can become the default
+  driver without hand-editing disk sectors.
 - Save modified images explicitly, so destructive edits stay under user control.
+
+### GEOS And Tiny Commodore Utilities
+
+This branch also carries a small `commodore-utils/` workspace for useful
+machine-side tools that make the native Mac experience smoother. The first one
+is `commodore-utils/geos-rtc`: a tiny GEOS auto-exec driver for C64 and C128
+GEOS that reads VICE's DS1307 userport RTC and sets GEOS date/time during boot.
+
+The disk image manager can validate the linked PRG, generate matching GEOS
+metadata, export a CVT package, or install the auto-exec directly onto a GEOS
+disk. With "Sync system time with machine" enabled, GEOS boots with the Mac's
+current clock instead of the old default GEOS date.
+
+Build the utility payloads with:
+
+```sh
+make -C commodore-utils/geos-rtc
+```
 
 ### Controls, Sound, And Runtime State
 

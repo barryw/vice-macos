@@ -20,6 +20,7 @@ enum EmulatorDefaults {
     private static let controlPortsKey = "vice.controlPorts"
     private static let driveConfigurationsKey = "vice.driveConfigurations"
     private static let keyboardMappingKey = "vice.keyboardMapping"
+    private static let syncSystemTimeKey = "vice.syncSystemTime"
 
     static func loadVideoStandard(for machine: EmulatedMachine) -> EmulatorSession.VideoStandard {
         guard let rawValue = UserDefaults.standard.string(forKey: key(videoStandardKey, machine: machine))
@@ -315,6 +316,27 @@ enum EmulatorDefaults {
         }
 
         UserDefaults.standard.set(data, forKey: key(keyboardMappingKey, machine: machine))
+    }
+
+    static func loadSyncSystemTime(for machine: EmulatedMachine) -> Bool {
+        guard machine.capabilities.supportsSystemTimeSync else {
+            return false
+        }
+
+        let defaultsKey = key(syncSystemTimeKey, machine: machine)
+        guard UserDefaults.standard.object(forKey: defaultsKey) != nil else {
+            return false
+        }
+
+        return UserDefaults.standard.bool(forKey: defaultsKey)
+    }
+
+    static func saveSyncSystemTime(_ enabled: Bool, for machine: EmulatedMachine) {
+        guard machine.capabilities.supportsSystemTimeSync else {
+            return
+        }
+
+        UserDefaults.standard.set(enabled, forKey: key(syncSystemTimeKey, machine: machine))
     }
 
     private static func key(_ baseKey: String, machine: EmulatedMachine) -> String {

@@ -12,8 +12,9 @@ struct ControlPortConfiguration: Codable, Equatable {
         let keyboardArrows = ControlDeviceConfiguration.keyboard(name: "Keyboard Arrows",
                                                                  mapping: .arrowsAndSpace)
         let gameController = ControlDeviceConfiguration.joystick(name: "Game Controller")
+        let macMouse = ControlDeviceConfiguration.mouse1351(name: "Mac Mouse 1351")
 
-        return ControlPortConfiguration(devices: [keyboardWASD, keyboardArrows, gameController],
+        return ControlPortConfiguration(devices: [keyboardWASD, keyboardArrows, gameController, macMouse],
                                         port1DeviceID: nil,
                                         port2DeviceID: gameController.id)
     }()
@@ -115,6 +116,14 @@ struct ControlDeviceConfiguration: Identifiable, Codable, Equatable {
                                    joystick: mapping)
     }
 
+    static func mouse1351(name: String) -> ControlDeviceConfiguration {
+        ControlDeviceConfiguration(id: UUID(),
+                                   name: name,
+                                   kind: .mouse1351,
+                                   keyboard: .wasdAndSpace,
+                                   joystick: .standard)
+    }
+
     func normalized() -> ControlDeviceConfiguration {
         var device = self
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -127,6 +136,7 @@ struct ControlDeviceConfiguration: Identifiable, Codable, Equatable {
 enum ControlDeviceKind: String, CaseIterable, Codable, Identifiable {
     case keyboard
     case joystick
+    case mouse1351
 
     var id: String { rawValue }
 
@@ -136,6 +146,8 @@ enum ControlDeviceKind: String, CaseIterable, Codable, Identifiable {
             return "Keyboard"
         case .joystick:
             return "Joystick"
+        case .mouse1351:
+            return "Mouse (1351)"
         }
     }
 
@@ -145,6 +157,8 @@ enum ControlDeviceKind: String, CaseIterable, Codable, Identifiable {
             return "Keyboard"
         case .joystick:
             return "Joystick"
+        case .mouse1351:
+            return "Mac Mouse 1351"
         }
     }
 
@@ -154,6 +168,8 @@ enum ControlDeviceKind: String, CaseIterable, Codable, Identifiable {
             return "keyboard"
         case .joystick:
             return "gamecontroller"
+        case .mouse1351:
+            return "computermouse"
         }
     }
 
@@ -161,6 +177,8 @@ enum ControlDeviceKind: String, CaseIterable, Codable, Identifiable {
         switch self {
         case .keyboard, .joystick:
             return ViceJoyPortDevice.joystick
+        case .mouse1351:
+            return ViceJoyPortDevice.mouse1351
         }
     }
 }
@@ -551,6 +569,7 @@ enum JoystickBits {
 enum ViceJoyPortDevice {
     static let none: Int32 = 0
     static let joystick: Int32 = 1
+    static let mouse1351: Int32 = 3
 }
 
 private enum MacJoystickKeyCode {

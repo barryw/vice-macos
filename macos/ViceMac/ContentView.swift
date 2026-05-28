@@ -297,8 +297,10 @@ private struct EmulatorStatusBar: View {
     var body: some View {
         HStack(spacing: 14) {
             Label(emulator.machine.shortName, systemImage: "cpu")
-            if emulator.machine.family == .pet {
-                StatusPill(text: emulator.machineDisplayName)
+                .lineLimit(1)
+            if let modelTitle = emulator.machineModelStatusTitle {
+                StatusPill(text: modelTitle)
+                    .help(emulator.machineDisplayName)
             }
             if emulator.machine.capabilities.supportsVideoStandardSelection {
                 StatusPill(text: emulator.videoStandard.rawValue)
@@ -348,8 +350,12 @@ private struct EmulatorDisplaySurface: View {
                 EmulatorMetalView(frameSource: emulator.frameSource,
                                   filterSettings: emulator.filterSettings,
                                   preservesAspectRatio: emulator.displayMode.preservesAspectRatio,
+                                  isMouseInputActive: emulator.isMacMouseInputActive,
                                   onKeyEvent: emulator.handleKeyEvent,
                                   onFlagsChanged: emulator.handleFlagsChanged,
+                                  onMouseMoved: emulator.handleMouseMoved,
+                                  onMouseButton: emulator.handleMouseButton,
+                                  onMouseCaptureChanged: emulator.handleMouseCaptureChanged,
                                   onPaste: { emulator.pasteFromPasteboard() },
                                   onFocusLost: emulator.releaseAllKeys)
                     .frame(width: displaySize.width,
@@ -1476,6 +1482,7 @@ private struct StatusPill: View {
         Text(text)
             .font(.caption)
             .foregroundStyle(.secondary)
+            .lineLimit(1)
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
             .background(.quaternary, in: Capsule())

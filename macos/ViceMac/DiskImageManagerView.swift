@@ -51,7 +51,7 @@ final class DiskImageManagerModel: ObservableObject {
     struct RenameDraft: Identifiable {
         let id = UUID()
         var pane: Pane
-        var entryID: CommodoreDiskDirectoryEntry.ID
+        var entryID: DiskImageDirectoryEntry.ID
         var fileName: String
     }
 
@@ -62,6 +62,41 @@ final class DiskImageManagerModel: ObservableObject {
         var format: CommodoreDiskImageFormat
         var analysis: CommodoreDiskRebuildAnalysis
         var sectors: [CommodoreDiskSector]
+    }
+
+    struct GEOSPackageDraft: Identifiable {
+        let id = UUID()
+        var pane: Pane
+        var prgURL: URL?
+        var prgData: Data?
+        var entryAddress = ""
+        var metadata = GEOSProgramMetadata()
+
+        var prgValidation: GEOSProgramValidation {
+            GEOSProgramValidator.validatePRG(prgData, entryAddressText: entryAddress)
+        }
+
+        var allIssues: [GEOSPackageIssue] {
+            prgValidation.issues + metadata.validationIssues
+        }
+
+        var canBuildPackage: Bool {
+            prgValidation.canPackage && metadata.canGenerate
+        }
+
+        var canExportGRC: Bool {
+            canBuildPackage
+        }
+
+        var prgDisplayName: String {
+            prgURL?.lastPathComponent ?? "No PRG selected"
+        }
+
+        func buildPackage() throws -> GEOSCVTFile {
+            try GEOSPackageBuilder.buildCVT(prgData: prgData,
+                                            entryAddressText: entryAddress,
+                                            metadata: metadata)
+        }
     }
 
     enum Pane: Hashable {
@@ -78,19 +113,20 @@ final class DiskImageManagerModel: ObservableObject {
     }
 
     struct PaneState {
-        var image: CommodoreDiskImage?
-        var entries: [CommodoreDiskDirectoryEntry] = []
-        var fileByteCounts: [CommodoreDiskDirectoryEntry.ID: Int] = [:]
+        var image: DiskImageDocument?
+        var entries: [DiskImageDirectoryEntry] = []
+        var fileByteCounts: [DiskImageDirectoryEntry.ID: Int] = [:]
         var sectors: [CommodoreDiskSector] = []
         var rebuildAnalysis: CommodoreDiskRebuildAnalysis?
-        var selectedEntryID: CommodoreDiskDirectoryEntry.ID?
+        var geosStatus: GEOSDiskStatus?
+        var selectedEntryID: DiskImageDirectoryEntry.ID?
         var selectedAddress: CommodoreDiskAddress?
         var sectorEditorText = ""
         var searchText = ""
         var message: String?
         var errorMessage: String?
 
-        var selectedEntry: CommodoreDiskDirectoryEntry? {
+        var selectedEntry: DiskImageDirectoryEntry? {
             entries.first { $0.id == selectedEntryID }
         }
 
@@ -109,6 +145,7 @@ final class DiskImageManagerModel: ObservableObject {
     @Published var newImageDraft: NewImageDraft?
     @Published var renameDraft: RenameDraft?
     @Published var cloneReviewDraft: CloneReviewDraft?
+    @Published var geosPackageDraft: GEOSPackageDraft?
 
     var canCopyLeftToRight: Bool {
         canCopy(from: .left, to: .right)
@@ -121,7 +158,7 @@ final class DiskImageManagerModel: ObservableObject {
     func openImage(in pane: Pane) {
         let panel = NSOpenPanel()
         panel.title = "Open Disk Image"
-        panel.message = "Choose a Commodore block disk image."
+        panel.message = "Choose a Commodore or CP/M disk image."
         panel.prompt = "Open"
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
@@ -144,7 +181,7 @@ final class DiskImageManagerModel: ObservableObject {
     }
 
     func openImage(url: URL, in pane: Pane) throws {
-        let image = try CommodoreDiskImage(url: url)
+        let image = try DiskImageService.openImage(url: url)
         setState(for: pane) { state in
             state.image = image
             state.message = "Opened \(image.displayName)"
@@ -177,10 +214,10 @@ final class DiskImageManagerModel: ObservableObject {
         }
 
         do {
-            let image = try CommodoreDiskImage(blankImageAt: url,
-                                               format: draft.format,
-                                               diskName: draft.diskName,
-                                               diskID: draft.diskID)
+            let image = try DiskImageService.createBlankImage(at: url,
+                                                              format: draft.format,
+                                                              diskName: draft.diskName,
+                                                              diskID: draft.diskID)
             setState(for: draft.pane) { state in
                 state.image = image
                 state.message = "Created \(image.displayName)"
@@ -223,18 +260,22 @@ final class DiskImageManagerModel: ObservableObject {
     }
 
     func importProgram(into pane: Pane, undoManager: UndoManager? = nil) {
-        guard state(for: pane).image != nil else {
+        guard let activeImage = state(for: pane).image else {
             return
         }
 
         let panel = NSOpenPanel()
-        panel.title = "Import Program"
-        panel.message = "Choose a PRG file to add to the disk image."
+        panel.title = "Import File"
+        panel.message = activeImage.filesystemKind == .cpm
+            ? "Choose a host file to add to the CP/M disk image."
+            : "Choose a PRG file to add to the disk image."
         panel.prompt = "Import"
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = Self.programContentTypes
+        if activeImage.filesystemKind == .cbmDOS {
+            panel.allowedContentTypes = Self.programContentTypes
+        }
 
         NSApp.activate(ignoringOtherApps: true)
         panel.center()
@@ -248,13 +289,117 @@ final class DiskImageManagerModel: ObservableObject {
             let payload = try Data(contentsOf: url)
             try setImage(in: pane,
                          undoManager: undoManager,
-                         actionName: "Import PRG") { image in
-                try image.importFile(named: url.deletingPathExtension().lastPathComponent,
+                         actionName: "Import File") { image in
+                let fileName = image.filesystemKind == .cpm
+                    ? url.lastPathComponent
+                    : url.deletingPathExtension().lastPathComponent
+                try image.importFile(named: fileName,
                                      payload: payload)
             }
             setMessage("Imported \(url.lastPathComponent). Save the image to keep the change.", for: pane)
         } catch {
             setError(error.localizedDescription, for: pane)
+        }
+    }
+
+    func presentGEOSPackageAssistant(in pane: Pane) {
+        guard let image = state(for: pane).image,
+              image.filesystemKind == .cbmDOS,
+              image.supportsFileWrites else {
+            return
+        }
+
+        activePane = pane
+        geosPackageDraft = GEOSPackageDraft(pane: pane)
+    }
+
+    @discardableResult
+    func exportGEOSGRC(from draft: GEOSPackageDraft) -> Bool {
+        guard draft.canExportGRC else {
+            setError("Fix the GEOS package validation issues before exporting a GRC file.", for: draft.pane)
+            return false
+        }
+
+        let panel = NSSavePanel()
+        panel.title = "Export GEOS Resource File"
+        panel.message = "Save a generated GRC header for the validated PRG payload."
+        panel.prompt = "Export"
+        panel.allowedContentTypes = [UTType(filenameExtension: "grc")].compactMap { $0 }
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = "\(Self.safeFilename(draft.metadata.dosName)).grc"
+
+        NSApp.activate(ignoringOtherApps: true)
+        panel.center()
+
+        guard panel.runModal() == .OK,
+              let url = panel.url else {
+            return false
+        }
+
+        do {
+            try draft.metadata.generatedGRC.write(to: url, atomically: true, encoding: .utf8)
+            setMessage("Exported \(url.lastPathComponent).", for: draft.pane)
+            return true
+        } catch {
+            setError(error.localizedDescription, for: draft.pane)
+            return false
+        }
+    }
+
+    @discardableResult
+    func exportGEOSCVT(from draft: GEOSPackageDraft) -> Bool {
+        guard draft.canBuildPackage else {
+            setError("Fix the GEOS package validation issues before exporting a CVT file.", for: draft.pane)
+            return false
+        }
+
+        let panel = NSSavePanel()
+        panel.title = "Export GEOS Convert File"
+        panel.message = "Save a GEOS CVT package that can be copied onto a GEOS disk."
+        panel.prompt = "Export"
+        panel.allowedContentTypes = [UTType(filenameExtension: "cvt")].compactMap { $0 }
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = "\(Self.safeFilename(draft.metadata.dosName)).cvt"
+
+        NSApp.activate(ignoringOtherApps: true)
+        panel.center()
+
+        guard panel.runModal() == .OK,
+              let url = panel.url else {
+            return false
+        }
+
+        do {
+            let package = try draft.buildPackage()
+            try package.data.write(to: url, options: .atomic)
+            setMessage("Exported \(url.lastPathComponent).", for: draft.pane)
+            return true
+        } catch {
+            setError(error.localizedDescription, for: draft.pane)
+            return false
+        }
+    }
+
+    @discardableResult
+    func installGEOSPackage(from draft: GEOSPackageDraft,
+                            undoManager: UndoManager? = nil) -> Bool {
+        guard draft.canBuildPackage else {
+            setError("Fix the GEOS package validation issues before installing.", for: draft.pane)
+            return false
+        }
+
+        do {
+            let package = try draft.buildPackage()
+            try setImage(in: draft.pane,
+                         undoManager: undoManager,
+                         actionName: "Install GEOS Package") { image in
+                try image.installGEOSPackage(package)
+            }
+            setMessage("Installed \(package.diskName). Save the image to keep the change.", for: draft.pane)
+            return true
+        } catch {
+            setError(error.localizedDescription, for: draft.pane)
+            return false
         }
     }
 
@@ -395,6 +540,19 @@ final class DiskImageManagerModel: ObservableObject {
         }
     }
 
+    func makeGEOS1351Default(in pane: Pane, undoManager: UndoManager? = nil) {
+        do {
+            try setImage(in: pane,
+                         undoManager: undoManager,
+                         actionName: "Set GEOS 1351 Default") { image in
+                try image.makeGEOS1351Default()
+            }
+            setMessage("GEOS will use the 1351 mouse after you save and reboot from this disk.", for: pane)
+        } catch {
+            setError(error.localizedDescription, for: pane)
+        }
+    }
+
     func selectSector(_ address: CommodoreDiskAddress, in pane: Pane) {
         activePane = pane
         setState(for: pane) { state in
@@ -436,7 +594,7 @@ final class DiskImageManagerModel: ObservableObject {
         }
     }
 
-    func bindingForSelection(in pane: Pane) -> Binding<CommodoreDiskDirectoryEntry.ID?> {
+    func bindingForSelection(in pane: Pane) -> Binding<DiskImageDirectoryEntry.ID?> {
         Binding {
             self.state(for: pane).selectedEntryID
         } set: { selection in
@@ -478,7 +636,7 @@ final class DiskImageManagerModel: ObservableObject {
         }
     }
 
-    func filteredEntries(in pane: Pane) -> [CommodoreDiskDirectoryEntry] {
+    func filteredEntries(in pane: Pane) -> [DiskImageDirectoryEntry] {
         let state = state(for: pane)
         let query = state.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else {
@@ -498,7 +656,7 @@ final class DiskImageManagerModel: ObservableObject {
             return false
         }
 
-        return destination.geometry.supportsFileWrites
+        return destination.supportsFileWrites
     }
 
     private func setMessage(_ message: String, for pane: Pane) {
@@ -519,7 +677,7 @@ final class DiskImageManagerModel: ObservableObject {
     private func setImage(in pane: Pane,
                           undoManager: UndoManager? = nil,
                           actionName: String? = nil,
-                          mutate: (inout CommodoreDiskImage) throws -> Void) throws {
+                          mutate: (inout DiskImageDocument) throws -> Void) throws {
         var state = state(for: pane)
         guard let originalImage = state.image else {
             return
@@ -549,8 +707,8 @@ final class DiskImageManagerModel: ObservableObject {
 
     private func registerUndo(_ undoManager: UndoManager?,
                               pane: Pane,
-                              restoreImage: CommodoreDiskImage,
-                              redoImage: CommodoreDiskImage,
+                              restoreImage: DiskImageDocument,
+                              redoImage: DiskImageDocument,
                               actionName: String) {
         guard let undoManager else {
             return
@@ -569,10 +727,10 @@ final class DiskImageManagerModel: ObservableObject {
         undoManager.setActionName(actionName)
     }
 
-    private func restoreImage(_ image: CommodoreDiskImage,
+    private func restoreImage(_ image: DiskImageDocument,
                               in pane: Pane,
                               undoManager: UndoManager?,
-                              inverseImage: CommodoreDiskImage,
+                              inverseImage: DiskImageDocument,
                               actionName: String) {
         setState(for: pane) { state in
             state.image = image
@@ -614,6 +772,7 @@ final class DiskImageManagerModel: ObservableObject {
             state.fileByteCounts = [:]
             state.sectors = []
             state.rebuildAnalysis = nil
+            state.geosStatus = nil
             state.selectedAddress = nil
             state.sectorEditorText = ""
             return
@@ -626,9 +785,10 @@ final class DiskImageManagerModel: ObservableObject {
             })
             state.sectors = image.sectorMap()
             state.rebuildAnalysis = image.rebuildAnalysis()
+            state.geosStatus = image.geosStatus
 
             if state.selectedAddress == nil {
-                state.selectedAddress = image.geometry.directoryStart
+                state.selectedAddress = image.defaultSelectedAddress
             }
 
             if let address = state.selectedAddress,
@@ -655,13 +815,11 @@ final class DiskImageManagerModel: ObservableObject {
         [UTType(filenameExtension: "prg")].compactMap { $0 }
     }
 
-    private static func exportFilename(for entry: CommodoreDiskDirectoryEntry) -> String {
-        let stem = safeFilename(entry.name)
-        let suffix = entry.type.rawValue.lowercased()
-        return "\(stem).\(suffix)"
+    private static func exportFilename(for entry: DiskImageDirectoryEntry) -> String {
+        entry.exportFilename
     }
 
-    private static func optimizedFilename(for image: CommodoreDiskImage) -> String {
+    private static func optimizedFilename(for image: DiskImageDocument) -> String {
         let stem = image.url.deletingPathExtension().lastPathComponent
         return "\(safeFilename(stem))-optimized.\(image.format.rawValue)"
     }
@@ -675,6 +833,38 @@ final class DiskImageManagerModel: ObservableObject {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return cleaned.isEmpty ? "UNTITLED" : cleaned
     }
+
+    #if DEBUG
+    func openScreenshotImagesFromEnvironmentIfRequested() {
+        let environment = ProcessInfo.processInfo.environment
+        guard environment["VICE_MAC_DISK_MANAGER_SCREENSHOT"] == "1" else {
+            return
+        }
+
+        if let leftPath = environment["VICE_MAC_DISK_MANAGER_LEFT"],
+           !leftPath.isEmpty {
+            openScreenshotImage(at: leftPath, in: .left)
+        }
+
+        if let rightPath = environment["VICE_MAC_DISK_MANAGER_RIGHT"],
+           !rightPath.isEmpty {
+            openScreenshotImage(at: rightPath, in: .right)
+        }
+
+        activePane = .left
+    }
+
+    private func openScreenshotImage(at path: String, in pane: Pane) {
+        do {
+            try openImage(url: URL(fileURLWithPath: path), in: pane)
+            setState(for: pane) { state in
+                state.selectedEntryID = state.entries.first?.id
+            }
+        } catch {
+            setError(error.localizedDescription, for: pane)
+        }
+    }
+    #endif
 }
 
 struct DiskImageManagerView: View {
@@ -724,10 +914,19 @@ struct DiskImageManagerView: View {
                 Button {
                     model.importProgram(into: model.activePane, undoManager: undoManager)
                 } label: {
-                    Label("Import PRG", systemImage: "tray.and.arrow.down")
+                    Label("Import File", systemImage: "tray.and.arrow.down")
                 }
-                .disabled(model.state(for: model.activePane).image?.geometry.supportsFileWrites != true)
-                .help("Import a PRG into the active disk image")
+                .disabled(model.state(for: model.activePane).image?.supportsFileWrites != true)
+                .help("Import a file into the active disk image")
+
+                Button {
+                    model.presentGEOSPackageAssistant(in: model.activePane)
+                } label: {
+                    Label("GEOS Package", systemImage: "doc.badge.gearshape")
+                }
+                .disabled(model.state(for: model.activePane).image?.filesystemKind != .cbmDOS
+                          || model.state(for: model.activePane).image?.supportsFileWrites != true)
+                .help("Create a validated GEOS resource header for a linked PRG")
 
                 Button {
                     model.exportSelectedFile(from: model.activePane)
@@ -742,7 +941,7 @@ struct DiskImageManagerView: View {
                 } label: {
                     Label("Clone Optimized", systemImage: "wand.and.stars")
                 }
-                .disabled(model.state(for: model.activePane).image == nil)
+                .disabled(model.state(for: model.activePane).image?.supportsOptimizedClone != true)
                 .help("Create an optimized rebuilt copy of the active disk image")
 
                 Divider()
@@ -767,7 +966,7 @@ struct DiskImageManagerView: View {
                                                       saveActiveImage: {
                                                           model.saveImage(in: model.activePane)
                                                       },
-                                                      canImportProgram: model.state(for: model.activePane).image?.geometry.supportsFileWrites == true,
+                                                      canImportProgram: model.state(for: model.activePane).image?.supportsFileWrites == true,
                                                       importProgram: {
                                                           model.importProgram(into: model.activePane, undoManager: undoManager)
                                                       },
@@ -775,17 +974,17 @@ struct DiskImageManagerView: View {
                                                       exportSelectedFile: {
                                                           model.exportSelectedFile(from: model.activePane)
                                                       },
-                                                      canCloneOptimizedImage: model.state(for: model.activePane).image != nil,
+                                                      canCloneOptimizedImage: model.state(for: model.activePane).image?.supportsOptimizedClone == true,
                                                       cloneOptimizedImage: {
                                                           model.cloneOptimizedImage(in: model.activePane)
                                                       },
                                                       canRenameSelectedFile: model.state(for: model.activePane).selectedEntry != nil
-                                                          && model.state(for: model.activePane).image?.geometry.supportsFileWrites == true,
+                                                          && model.state(for: model.activePane).image?.supportsFileWrites == true,
                                                       renameSelectedFile: {
                                                           model.presentRenameSelectedFile(in: model.activePane)
                                                       },
                                                       canDeleteSelectedFile: model.state(for: model.activePane).selectedEntry != nil
-                                                          && model.state(for: model.activePane).image?.geometry.supportsFileWrites == true,
+                                                          && model.state(for: model.activePane).image?.supportsFileWrites == true,
                                                       deleteSelectedFile: {
                                                           model.deleteSelectedFile(in: model.activePane, undoManager: undoManager)
                                                       }))
@@ -812,6 +1011,28 @@ struct DiskImageManagerView: View {
                 model.cloneReviewedImage(from: draft)
             }
         }
+        .sheet(item: $model.geosPackageDraft) { draft in
+            GEOSPackageAssistantSheet(draft: draft) { updatedDraft in
+                if model.exportGEOSGRC(from: updatedDraft) {
+                    model.geosPackageDraft = nil
+                }
+            } onExportCVT: { updatedDraft in
+                if model.exportGEOSCVT(from: updatedDraft) {
+                    model.geosPackageDraft = nil
+                }
+            } onInstall: { updatedDraft in
+                if model.installGEOSPackage(from: updatedDraft, undoManager: undoManager) {
+                    model.geosPackageDraft = nil
+                }
+            } onCancel: {
+                model.geosPackageDraft = nil
+            }
+        }
+        #if DEBUG
+        .task {
+            model.openScreenshotImagesFromEnvironmentIfRequested()
+        }
+        #endif
     }
 }
 
@@ -872,6 +1093,235 @@ private struct NewDiskImageSheet: View {
         }
         .padding(24)
         .frame(width: 420)
+    }
+}
+
+private struct GEOSPackageAssistantSheet: View {
+    @State private var draft: DiskImageManagerModel.GEOSPackageDraft
+    @State private var localError: String?
+    let onExport: (DiskImageManagerModel.GEOSPackageDraft) -> Void
+    let onExportCVT: (DiskImageManagerModel.GEOSPackageDraft) -> Void
+    let onInstall: (DiskImageManagerModel.GEOSPackageDraft) -> Void
+    let onCancel: () -> Void
+
+    init(draft: DiskImageManagerModel.GEOSPackageDraft,
+         onExport: @escaping (DiskImageManagerModel.GEOSPackageDraft) -> Void,
+         onExportCVT: @escaping (DiskImageManagerModel.GEOSPackageDraft) -> Void,
+         onInstall: @escaping (DiskImageManagerModel.GEOSPackageDraft) -> Void,
+         onCancel: @escaping () -> Void) {
+        _draft = State(initialValue: draft)
+        self.onExport = onExport
+        self.onExportCVT = onExportCVT
+        self.onInstall = onInstall
+        self.onCancel = onCancel
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            header
+
+            Form {
+                Section("Payload") {
+                    HStack(spacing: 10) {
+                        Image(systemName: draft.prgData == nil ? "doc.badge.plus" : "doc.text")
+                            .foregroundStyle(draft.prgData == nil ? .secondary : Color.accentColor)
+                            .frame(width: 22)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(draft.prgDisplayName)
+                                .lineLimit(1)
+                            Text(payloadDetailText)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+
+                        Spacer()
+
+                        Button("Choose PRG...") {
+                            choosePRG()
+                        }
+                    }
+
+                    TextField("Entry Address", text: $draft.entryAddress)
+                        .font(.system(.body, design: .monospaced))
+                        .textFieldStyle(.roundedBorder)
+                }
+
+                Section("GEOS Header") {
+                    Picker("Type", selection: $draft.metadata.kind) {
+                        ForEach(GEOSProgramKind.allCases) { kind in
+                            Text(kind.title).tag(kind)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
+                    TextField("DOS Name", text: $draft.metadata.dosName)
+                    TextField("Class Name", text: $draft.metadata.className)
+                    TextField("Version", text: $draft.metadata.version)
+
+                    Picker("DOS Type", selection: $draft.metadata.dosType) {
+                        ForEach(GEOSProgramDOSType.allCases) { type in
+                            Text(type.title).tag(type)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
+                    Picker("Mode", selection: $draft.metadata.mode) {
+                        ForEach(GEOSProgramMode.allCases) { mode in
+                            Text(mode.title).tag(mode)
+                        }
+                    }
+
+                    TextField("Author", text: $draft.metadata.author)
+                    TextField("Info", text: $draft.metadata.info, axis: .vertical)
+                        .lineLimit(2...3)
+                }
+
+                Section("Preflight") {
+                    GEOSPackageIssueList(issues: visibleIssues)
+                }
+
+                Section("Generated GRC") {
+                    ScrollView {
+                        Text(draft.metadata.generatedGRC)
+                            .font(.system(size: 11.5, design: .monospaced))
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(8)
+                    }
+                    .frame(height: 118)
+                    .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 7))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 7)
+                            .stroke(.separator.opacity(0.6), lineWidth: 1)
+                    }
+                }
+            }
+            .formStyle(.grouped)
+            .frame(height: 590)
+
+            if let localError {
+                Label(localError, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+
+            HStack {
+                Spacer()
+
+                Button("Cancel") {
+                    onCancel()
+                }
+                .keyboardShortcut(.cancelAction)
+
+                Button("Export GRC...") {
+                    onExport(draft)
+                }
+                .disabled(!draft.canBuildPackage)
+
+                Button("Export CVT...") {
+                    onExportCVT(draft)
+                }
+                .disabled(!draft.canBuildPackage)
+
+                Button("Install") {
+                    onInstall(draft)
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+                .disabled(!draft.canExportGRC)
+            }
+        }
+        .padding(24)
+        .frame(width: 620)
+    }
+
+    private var header: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "doc.text.magnifyingglass")
+                .font(.system(size: 28, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("GEOS Package Assistant")
+                    .font(.title3.weight(.semibold))
+                Text("Validate a linked PRG, export a CVT, or install it on the open GEOS disk.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var payloadDetailText: String {
+        let validation = draft.prgValidation
+        guard validation.loadAddress != nil else {
+            return "Choose a linked Commodore PRG, not a raw object file."
+        }
+
+        return "\(validation.payloadByteCount) bytes, loads \(validation.loadRangeText), entry \(validation.entryAddressText)"
+    }
+
+    private var visibleIssues: [GEOSPackageIssue] {
+        let issues = draft.allIssues
+        let errorsAndWarnings = issues.filter { $0.severity != .info }
+        return errorsAndWarnings.isEmpty ? issues : errorsAndWarnings
+    }
+
+    private func choosePRG() {
+        let panel = NSOpenPanel()
+        panel.title = "Choose Linked PRG"
+        panel.message = "Choose the built GEOS PRG payload. Raw object files are not accepted here."
+        panel.prompt = "Choose"
+        panel.allowedContentTypes = [UTType(filenameExtension: "prg")].compactMap { $0 }
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+
+        NSApp.activate(ignoringOtherApps: true)
+        panel.center()
+
+        guard panel.runModal() == .OK,
+              let url = panel.url else {
+            return
+        }
+
+        do {
+            draft.prgData = try Data(contentsOf: url)
+            draft.prgURL = url
+            draft.entryAddress = ""
+            draft.metadata.applySuggestedName(from: url)
+            localError = nil
+        } catch {
+            localError = error.localizedDescription
+        }
+    }
+}
+
+private struct GEOSPackageIssueList: View {
+    let issues: [GEOSPackageIssue]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(issues) { issue in
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: issue.severity.systemImage)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(issue.severity.tint)
+                        .frame(width: 18)
+
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(issue.title)
+                            .font(.caption.weight(.semibold))
+                        Text(issue.detail)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -1191,6 +1641,7 @@ private struct CopyRailView: View {
 }
 
 private struct DiskImagePaneView: View {
+    @Environment(\.undoManager) private var undoManager
     @ObservedObject var model: DiskImageManagerModel
     let pane: DiskImageManagerModel.Pane
 
@@ -1202,10 +1653,17 @@ private struct DiskImagePaneView: View {
 
             if let image = state.image {
                 DiskImageSummaryView(image: image)
-                DiskImageRebuildAnalysisView(image: image,
-                                             analysis: state.rebuildAnalysis,
-                                             sectors: state.sectors) {
-                    model.cloneOptimizedImage(in: pane)
+                if let geosStatus = state.geosStatus {
+                    GEOSDiskToolsView(status: geosStatus) {
+                        model.makeGEOS1351Default(in: pane, undoManager: undoManager)
+                    }
+                }
+                if image.supportsOptimizedClone {
+                    DiskImageRebuildAnalysisView(image: image,
+                                                 analysis: state.rebuildAnalysis,
+                                                 sectors: state.sectors) {
+                        model.cloneOptimizedImage(in: pane)
+                    }
                 }
 
                 TabView {
@@ -1219,11 +1677,13 @@ private struct DiskImagePaneView: View {
                             Label("Sectors", systemImage: "square.grid.3x3")
                         }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .layoutPriority(1)
             } else {
                 ContentUnavailableView {
                     Label("No Disk Image", systemImage: "externaldrive")
                 } description: {
-                    Text("Open a D64, D67, D71, D80, D81, or D82 image.")
+                    Text("Open a CBM DOS or CP/M D64, D67, D71, D80, D81, or D82 image.")
                 } actions: {
                     Button("Open Image...") {
                         model.openImage(in: pane)
@@ -1257,9 +1717,21 @@ private struct DiskImagePaneHeader: View {
     var body: some View {
         let state = model.state(for: pane)
 
-        HStack(spacing: 10) {
-            Label(pane.title, systemImage: pane == .left ? "sidebar.left" : "sidebar.right")
-                .font(.headline)
+        HStack(spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: pane == .left ? "sidebar.left" : "sidebar.right")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 20)
+
+                Text(pane.title)
+                    .font(.headline)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            .layoutPriority(3)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(pane.title)
 
             if model.activePane == pane {
                 Text("Active")
@@ -1268,55 +1740,65 @@ private struct DiskImagePaneHeader: View {
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
                     .background(.secondary.opacity(0.14), in: Capsule())
+                    .fixedSize(horizontal: true, vertical: false)
+                    .layoutPriority(1)
             }
 
-            Spacer()
+            Spacer(minLength: 8)
 
-            Button {
-                model.presentNewImage(in: pane)
-            } label: {
-                Label("New", systemImage: "document.badge.plus")
-            }
-            .help("Create a blank disk image")
+            HStack(spacing: 3) {
+                DiskImagePaneHeaderButton(systemImage: "document.badge.plus",
+                                          title: "Create a blank disk image") {
+                    model.presentNewImage(in: pane)
+                }
 
-            Button {
-                model.openImage(in: pane)
-            } label: {
-                Label("Open", systemImage: "folder")
-            }
-            .help("Open image")
+                DiskImagePaneHeaderButton(systemImage: "folder",
+                                          title: "Open image") {
+                    model.openImage(in: pane)
+                }
 
-            Button {
-                model.saveImage(in: pane)
-            } label: {
-                Label("Save", systemImage: "square.and.arrow.down")
-            }
-            .disabled(state.image?.isModified != true)
-            .help("Save image")
+                DiskImagePaneHeaderButton(systemImage: "square.and.arrow.down",
+                                          title: "Save image",
+                                          isDisabled: state.image?.isModified != true) {
+                    model.saveImage(in: pane)
+                }
 
-            Button {
-                model.cloneOptimizedImage(in: pane)
-            } label: {
-                Label("Clone", systemImage: "wand.and.stars")
+                DiskImagePaneHeaderButton(systemImage: "wand.and.stars",
+                                          title: "Clone optimized copy",
+                                          isDisabled: state.image?.supportsOptimizedClone != true) {
+                    model.cloneOptimizedImage(in: pane)
+                }
             }
-            .disabled(state.image == nil)
-            .help("Clone optimized copy")
+            .fixedSize(horizontal: true, vertical: false)
         }
     }
 }
 
-private struct DiskImageSummaryView: View {
-    let image: CommodoreDiskImage
+private struct DiskImagePaneHeaderButton: View {
+    var systemImage: String
+    var title: String
+    var isDisabled = false
+    var action: () -> Void
 
     var body: some View {
-        let header = image.header
-        let freeBlocks = header.blocksFree
-        let usedFraction = freeBlocks.map { free in
-            guard image.geometry.totalSectors > 0 else {
-                return 0.0
-            }
-            return max(0, min(1, Double(image.geometry.totalSectors - free) / Double(image.geometry.totalSectors)))
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 13, weight: .semibold))
+                .frame(width: 28, height: 26)
+                .contentShape(Rectangle())
         }
+        .buttonStyle(.borderless)
+        .disabled(isDisabled)
+        .help(title)
+        .accessibilityLabel(title)
+    }
+}
+
+private struct DiskImageSummaryView: View {
+    let image: DiskImageDocument
+
+    var body: some View {
+        let usedFraction = image.usedFraction
 
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
@@ -1337,7 +1819,7 @@ private struct DiskImageSummaryView: View {
                         }
                     }
 
-                    Text(summaryText(header: header))
+                    Text(image.summaryText)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -1369,15 +1851,92 @@ private struct DiskImageSummaryView: View {
         .padding(10)
         .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
     }
+}
 
-    private func summaryText(header: CommodoreDiskHeader) -> String {
-        let free = header.blocksFree.map { "\($0) blocks free" } ?? "free map unavailable"
-        return "\(image.format.title) - \(header.name.isEmpty ? "Untitled" : header.name) - \(header.id) - \(free)"
+private struct GEOSDiskToolsView: View {
+    let status: GEOSDiskStatus
+    let onMake1351Default: () -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 10) {
+            Image(systemName: "cursorarrow.motionlines")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(statusTint)
+                .frame(width: 22)
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text("GEOS Input")
+                        .font(.system(size: 12.5, weight: .semibold))
+                    Text(defaultDriverTitle)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(statusTint)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2)
+                        .background(statusTint.opacity(0.12), in: Capsule())
+                }
+
+                Text(detailText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 8)
+
+            Button {
+                onMake1351Default()
+            } label: {
+                Label("Use 1351", systemImage: "computermouse")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(!status.canMake1351Default)
+            .help("Move the 1351 mouse driver ahead of joystick drivers in the GEOS directory")
+        }
+        .padding(10)
+        .background(statusTint.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(statusTint.opacity(0.22), lineWidth: 1)
+        }
+    }
+
+    private var defaultDriverTitle: String {
+        status.defaultInputDriver?.device.title ?? "No driver"
+    }
+
+    private var detailText: String {
+        if status.inputDrivers.isEmpty {
+            return "This looks like GEOS, but no input drivers were found in the directory."
+        }
+
+        if status.is1351Default {
+            return "The 1351 mouse driver is already first. Save the disk and boot with Mac Mouse 1351 on control port 1."
+        }
+
+        if status.preferred1351Driver != nil {
+            return "The joystick driver is first. Put the 1351 driver first so GEOS chooses it at startup."
+        }
+
+        return "No 1351 driver was found on this disk. Copy one from a GEOS 1351 utility disk first."
+    }
+
+    private var statusTint: Color {
+        if status.is1351Default {
+            return .green
+        }
+
+        if status.preferred1351Driver != nil {
+            return .orange
+        }
+
+        return .secondary
     }
 }
 
 private struct DiskImageRebuildAnalysisView: View {
-    let image: CommodoreDiskImage
+    let image: DiskImageDocument
     let analysis: CommodoreDiskRebuildAnalysis?
     let sectors: [CommodoreDiskSector]
     let onClone: () -> Void
@@ -1411,7 +1970,7 @@ private struct DiskImageRebuildAnalysisView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-                .disabled(image.geometry.supportsFileWrites == false)
+                .disabled(!image.supportsOptimizedClone)
                 .help("Review and create an optimized rebuilt copy")
             }
 
@@ -1563,8 +2122,16 @@ private struct DirectoryBrowserView: View {
                 } label: {
                     Label("Import", systemImage: "tray.and.arrow.down")
                 }
-                .disabled(state.image?.geometry.supportsFileWrites != true)
-                .help("Import PRG")
+                .disabled(state.image?.supportsFileWrites != true)
+                .help("Import a file")
+
+                Button {
+                    model.presentGEOSPackageAssistant(in: pane)
+                } label: {
+                    Label("GEOS", systemImage: "doc.badge.gearshape")
+                }
+                .disabled(state.image?.filesystemKind != .cbmDOS || state.image?.supportsFileWrites != true)
+                .help("Create a validated GEOS resource header")
             }
 
             Table(entries, selection: model.bindingForSelection(in: pane)) {
@@ -1580,7 +2147,7 @@ private struct DirectoryBrowserView: View {
                 .width(54)
 
                 TableColumn("Start") { entry in
-                    Text("\(entry.start.track):\(entry.start.sector)")
+                    Text(entry.startText)
                         .font(.system(size: 12, design: .monospaced))
                         .foregroundStyle(.secondary)
                 }
@@ -1603,14 +2170,14 @@ private struct DirectoryBrowserView: View {
                 Button("Rename File...") {
                     model.presentRenameSelectedFile(in: pane)
                 }
-                .disabled(state.selectedEntry == nil || state.image?.geometry.supportsFileWrites != true)
+                .disabled(state.selectedEntry == nil || state.image?.supportsFileWrites != true)
 
                 Divider()
 
                 Button("Delete File", role: .destructive) {
                     model.deleteSelectedFile(in: pane, undoManager: undoManager)
                 }
-                .disabled(state.selectedEntry == nil || state.image?.geometry.supportsFileWrites != true)
+                .disabled(state.selectedEntry == nil || state.image?.supportsFileWrites != true)
             }
 
             SelectedFileInspectorView(model: model, pane: pane)
@@ -1665,7 +2232,7 @@ private struct SelectedFileInspectorView: View {
 
         if let entry = state.selectedEntry {
             HStack(spacing: 10) {
-                Image(systemName: entryIcon(for: entry))
+                Image(systemName: entry.iconSystemName)
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .frame(width: 24)
@@ -1694,14 +2261,14 @@ private struct SelectedFileInspectorView: View {
                     Button("Rename...") {
                         model.presentRenameSelectedFile(in: pane)
                     }
-                    .disabled(state.image?.geometry.supportsFileWrites != true)
+                    .disabled(state.image?.supportsFileWrites != true)
 
                     Divider()
 
                     Button("Delete", role: .destructive) {
                         model.deleteSelectedFile(in: pane, undoManager: undoManager)
                     }
-                    .disabled(state.image?.geometry.supportsFileWrites != true)
+                    .disabled(state.image?.supportsFileWrites != true)
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
@@ -1723,26 +2290,9 @@ private struct SelectedFileInspectorView: View {
         }
     }
 
-    private func detailText(for entry: CommodoreDiskDirectoryEntry,
+    private func detailText(for entry: DiskImageDirectoryEntry,
                             state: DiskImageManagerModel.PaneState) -> String {
-        let bytes = state.fileByteCounts[entry.id].map { ByteCountFormatter.string(fromByteCount: Int64($0), countStyle: .file) } ?? "unknown size"
-        let lock = entry.isLocked ? "locked, " : ""
-        return "\(entry.typeText), \(lock)\(entry.blocks) blocks, \(bytes), starts T\(entry.start.track):S\(entry.start.sector)"
-    }
-
-    private func entryIcon(for entry: CommodoreDiskDirectoryEntry) -> String {
-        switch entry.type {
-        case .prg:
-            return "terminal"
-        case .seq, .usr, .rel:
-            return "doc.text"
-        case .del:
-            return "trash"
-        case .cbm, .dir:
-            return "folder"
-        case .unknown:
-            return "questionmark.app"
-        }
+        entry.detailText(byteCount: state.fileByteCounts[entry.id])
     }
 }
 
@@ -1753,25 +2303,56 @@ private struct SectorBrowserView: View {
     var body: some View {
         let state = model.state(for: pane)
 
-        VStack(spacing: 10) {
-            if let image = state.image {
-                SectorLegendView(sectors: state.sectors)
+        GeometryReader { proxy in
+            let layout = SectorBrowserLayout(availableHeight: proxy.size.height)
 
-                SectorGridView(model: model, pane: pane, image: image, sectors: state.sectors)
-                    .frame(minHeight: 210, idealHeight: 260)
+            VStack(spacing: 8) {
+                if let image = state.image {
+                    SectorLegendView(sectors: state.sectors)
+                        .frame(height: layout.legendHeight)
 
-                Divider()
+                    SectorGridView(model: model, pane: pane, image: image, sectors: state.sectors)
+                        .frame(height: layout.gridHeight)
 
-                SectorEditorView(model: model, pane: pane)
-                    .frame(minHeight: 260)
+                    Divider()
+
+                    SectorEditorView(model: model, pane: pane)
+                        .frame(height: layout.editorHeight)
+                }
             }
+            .padding(10)
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
         }
-        .padding(10)
+        .frame(minHeight: 0)
         .background(.background, in: RoundedRectangle(cornerRadius: 8))
         .overlay {
             RoundedRectangle(cornerRadius: 8)
                 .stroke(.separator.opacity(0.8), lineWidth: 1)
         }
+    }
+}
+
+private struct SectorBrowserLayout {
+    var availableHeight: CGFloat
+
+    var legendHeight: CGFloat {
+        22
+    }
+
+    var gridHeight: CGFloat {
+        guard contentHeight > 0 else {
+            return 0
+        }
+
+        return min(220, max(90, contentHeight * 0.54))
+    }
+
+    var editorHeight: CGFloat {
+        max(0, contentHeight - gridHeight)
+    }
+
+    private var contentHeight: CGFloat {
+        max(0, availableHeight - 20 - legendHeight - 8 - 1 - 8)
     }
 }
 
@@ -1826,7 +2407,7 @@ private struct SectorLegendView: View {
 private struct SectorGridView: View {
     @ObservedObject var model: DiskImageManagerModel
     let pane: DiskImageManagerModel.Pane
-    let image: CommodoreDiskImage
+    let image: DiskImageDocument
     let sectors: [CommodoreDiskSector]
 
     var body: some View {
@@ -2021,6 +2602,30 @@ private extension CommodoreDiskRebuildIssueSeverity {
         case .warning:
             return .orange
         case .blocked:
+            return .red
+        }
+    }
+}
+
+private extension GEOSPackageIssueSeverity {
+    var systemImage: String {
+        switch self {
+        case .info:
+            return "checkmark.circle.fill"
+        case .warning:
+            return "exclamationmark.triangle.fill"
+        case .error:
+            return "xmark.octagon.fill"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .info:
+            return .green
+        case .warning:
+            return .orange
+        case .error:
             return .red
         }
     }

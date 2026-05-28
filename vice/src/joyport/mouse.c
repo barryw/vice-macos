@@ -347,6 +347,8 @@ void mouse_reset(void)
 {
     mousedrv_mouse_changed();
 
+    mouse_move_x = 0.0f;
+    mouse_move_y = 0.0f;
     mouse_get_raw_int16(&mouse_latest_x, &mouse_latest_y);
     last_mouse_x = mouse_latest_x;
     last_mouse_y = mouse_latest_y;

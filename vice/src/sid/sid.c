@@ -546,6 +546,10 @@ void sid_reset(void)
 
 static int sidengine;
 
+#if defined(USE_MACOSUI) && defined(HAVE_RESIDFP)
+void residfp_set_visualizer_sid_chip(int chipno);
+#endif
+
 bool sid_sound_machine_set_engine_hooks(void)
 {
     sidengine = -1;
@@ -584,6 +588,10 @@ sound_t *sid_sound_machine_open(int chipno)
     if (!sid_sound_machine_set_engine_hooks()) {
         return NULL;
     }
+
+#if defined(USE_MACOSUI) && defined(HAVE_RESIDFP)
+    residfp_set_visualizer_sid_chip(chipno);
+#endif
 
     return sid_engine.open(siddata[chipno]);
 }

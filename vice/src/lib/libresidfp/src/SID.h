@@ -23,10 +23,10 @@
 #ifndef SIDFP_H
 #define SIDFP_H
 
-#include <memory>
-
+#include <algorithm>
 #include <cassert>
 #include <cstdint>
+#include <memory>
 
 #include "residfp/residfp_defs.h"
 #include "siddefs-fp.h"
@@ -158,6 +158,8 @@ private:
         return externalFilter.clock(exFiltInput);
     }
 
+    inline void writeVoiceSamples(short* voiceBuf, unsigned int voiceStride, int sampleIndex) const;
+
 private:
     SID(const SID&) = delete;
     SID& operator=(const SID&) = delete;
@@ -270,6 +272,7 @@ public:
      * @return number of samples produced
      */
     int clock(unsigned int cycles, short* buf);
+    int clock(unsigned int cycles, short* buf, short* voiceBuf, unsigned int voiceStride);
 
     /**
      * Clock SID forward using chosen output resampling algorithm.
@@ -279,6 +282,7 @@ public:
      * @return number of c64 clocks run
      */
     int clock(short* buf, int bufSize);
+    int clock(short* buf, int bufSize, short* voiceBuf, unsigned int voiceStride);
 
     /**
      * Clock SID forward with no audio production.
@@ -338,6 +342,21 @@ namespace reSIDfp
 {
 
 RESIDFP_INLINE
+void SID::writeVoiceSamples(short* voiceBuf, unsigned int voiceStride, int sampleIndex) const
+{
+    if (voiceBuf == nullptr || voiceStride < 3)
+    {
+        return;
+    }
+
+    for (int i = 0; i < 3; i++)
+    {
+        const float normalized = std::max(0.f, std::min(1.f, voice[i].cachedOutput()));
+        voiceBuf[(sampleIndex * voiceStride) + i] = static_cast<short>(normalized * 32767.f);
+    }
+}
+
+RESIDFP_INLINE
 void SID::ageBusValue(unsigned int n)
 {
     if (likely(busValueTtl != 0))
@@ -355,8 +374,15 @@ void SID::ageBusValue(unsigned int n)
 RESIDFP_INLINE
 int SID::clock(unsigned int cycles, short* buf)
 {
+    return clock(cycles, buf, nullptr, 0);
+}
+
+RESIDFP_INLINE
+int SID::clock(unsigned int cycles, short* buf, short* voiceBuf, unsigned int voiceStride)
+{
     assert(buf);
 
+    const bool captureVoices = voiceBuf != nullptr && voiceStride >= 3;
     ageBusValue(cycles);
     int s = 0;
 
@@ -374,7 +400,12 @@ int SID::clock(unsigned int cycles, short* buf)
                 int output = clockFilt();
                 if (unlikely(resampler->input(output)))
                 {
-                    buf[s++] = resampler->getOutput(scaleFactor);
+                    buf[s] = resampler->getOutput(scaleFactor);
+                    if (unlikely(captureVoices))
+                    {
+                        writeVoiceSamples(voiceBuf, voiceStride, s);
+                    }
+                    s++;
                 }
             }
 
@@ -394,9 +425,16 @@ int SID::clock(unsigned int cycles, short* buf)
 RESIDFP_INLINE
 int SID::clock(short* buf, int bufSize)
 {
+    return clock(buf, bufSize, nullptr, 0);
+}
+
+RESIDFP_INLINE
+int SID::clock(short* buf, int bufSize, short* voiceBuf, unsigned int voiceStride)
+{
     assert(buf);
     assert(bufSize > 0);
 
+    const bool captureVoices = voiceBuf != nullptr && voiceStride >= 3;
     int cycles = 0;
 
     for (int s = 0; s < bufSize;)
@@ -415,7 +453,12 @@ int SID::clock(short* buf, int bufSize)
                 int output = clockFilt();
                 if (unlikely(resampler->input(output)))
                 {
-                    buf[s++] = resampler->getOutput(scaleFactor);
+                    buf[s] = resampler->getOutput(scaleFactor);
+                    if (unlikely(captureVoices))
+                    {
+                        writeVoiceSamples(voiceBuf, voiceStride, s);
+                    }
+                    s++;
                     if (unlikely(s == bufSize))
                     {
                         break;

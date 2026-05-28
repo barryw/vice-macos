@@ -45,6 +45,9 @@ extern "C" {
 #include "resources.h"
 #include "sid-snapshot.h"
 #include "types.h"
+#ifdef USE_MACOSUI
+#include "vicemacbridge.h"
+#endif
 
 extern log_t sound_log;
 
@@ -60,6 +63,9 @@ struct sound_s
 {
     /* speed factor */
     int factor;
+    int chip_index;
+    int sample_rate;
+    int clock_rate;
 
     /* libresidfp does not have a public interface to the internal state of the
      * emulated SID, so we keep a mirror of the written register values here */
@@ -76,6 +82,56 @@ typedef struct sound_s sound_t;
 static short *buf = NULL;
 
 static int blen = 0;
+
+#ifdef USE_MACOSUI
+static short *voice_buf = NULL;
+static int voice_blen = 0;
+static int visualizer_chip_index = 0;
+
+void residfp_set_visualizer_sid_chip(int chipno)
+{
+    visualizer_chip_index = chipno;
+}
+
+static short *getvoicebuf(int len)
+{
+    if ((voice_buf == NULL) || (voice_blen < len)) {
+        if (voice_buf) {
+            lib_free(voice_buf);
+        }
+        voice_blen = len;
+        voice_buf = (short *)lib_calloc(len, sizeof(short));
+    }
+    return voice_buf;
+}
+
+static void residfp_publish_voice_samples(sound_t *psid, const short *samples, int frame_count)
+{
+    uint16_t frequency[VICEMAC_SID_VOICE_COUNT];
+    uint8_t control[VICEMAC_SID_VOICE_COUNT];
+    int voice;
+
+    if (psid == NULL || samples == NULL || frame_count <= 0) {
+        return;
+    }
+
+    for (voice = 0; voice < (int)VICEMAC_SID_VOICE_COUNT; voice++) {
+        const int base = voice * 7;
+        frequency[voice] = (uint16_t)(((psid->sid_register[base + 1] & 0xff) << 8)
+                                      | (psid->sid_register[base] & 0xff));
+        control[voice] = (uint8_t)(psid->sid_register[base + 4] & 0xff);
+    }
+
+    vicemac_publish_sid_voice_samples(samples,
+                                      (uint32_t)frame_count,
+                                      VICEMAC_SID_VOICE_COUNT,
+                                      (uint32_t)psid->chip_index,
+                                      (uint32_t)psid->sample_rate,
+                                      (uint32_t)psid->clock_rate,
+                                      frequency,
+                                      control);
+}
+#endif
 
 static short *getbuf(int len)
 {
@@ -95,9 +151,14 @@ static sound_t *residfp_open(uint8_t *sidstate)
     int i;
 
     psid = new sound_t;
+    memset(psid, 0, sizeof(*psid));
+#ifdef USE_MACOSUI
+    psid->chip_index = visualizer_chip_index;
+#endif
     psid->sid = new reSIDfp::SID;
 
     for (i = 0x00; i <= 0x18; i++) {
+        psid->sid_register[i] = sidstate[i];
         psid->sid->write(i, sidstate[i]);
     }
 
@@ -167,6 +228,8 @@ static int residfp_init(sound_t *psid, int speed, int cycles_per_sec, int factor
            range_6581_int, curve_6581_int, curve_8580_int, curve, range);*/
 
     psid->factor = factor;
+    psid->sample_rate = speed;
+    psid->clock_rate = cycles_per_sec;
 
     switch (model) {
         default:
@@ -232,6 +295,13 @@ static void residfp_close(sound_t *psid)
         lib_free(buf);
         buf = NULL;
     }
+#ifdef USE_MACOSUI
+    if (voice_buf) {
+        lib_free(voice_buf);
+        voice_buf = NULL;
+        voice_blen = 0;
+    }
+#endif
 }
 
 static uint8_t residfp_read(sound_t *psid, uint16_t addr)
@@ -285,6 +355,11 @@ static int residfp_calculate_samples(sound_t *psid, float *pbuf, int nr, CLOCK *
 static int residfp_calculate_samples(sound_t *psid, short *pbuf, int nr, int interleave, CLOCK *delta_t)
 {
     short *tmp_buf;
+#ifdef USE_MACOSUI
+    short *tmp_voice_buf = NULL;
+    int capture_voice_samples;
+    int requested_voice_frames;
+#endif
     int retval;
     int int_delta_t = (int)*delta_t;
 
@@ -292,8 +367,25 @@ static int residfp_calculate_samples(sound_t *psid, short *pbuf, int nr, int int
 
     if (psid->factor == 1000) {
         tmp_buf = getbuf(2 * nr);
+#ifdef USE_MACOSUI
+        requested_voice_frames = nr;
+        capture_voice_samples = vicemac_should_capture_sid_voice_samples((uint32_t)psid->chip_index,
+                                                                         (uint32_t)requested_voice_frames,
+                                                                         (uint32_t)psid->sample_rate);
+        if (capture_voice_samples) {
+            tmp_voice_buf = getvoicebuf(requested_voice_frames * (int)VICEMAC_SID_VOICE_COUNT);
+        }
+#endif
         /* CAUTION: unlike ReSID; this does NOT return the number of cycles "left to do" in int_delta_t */
+#ifdef USE_MACOSUI
+        if (capture_voice_samples) {
+            retval = psid->sid->clock(int_delta_t, tmp_buf, tmp_voice_buf, VICEMAC_SID_VOICE_COUNT);
+        } else {
+            retval = psid->sid->clock(int_delta_t, tmp_buf);
+        }
+#else
         retval = psid->sid->clock(int_delta_t, tmp_buf);
+#endif
         {
             int n, p = 0;
             for (n = 0; n < retval; n++) {
@@ -303,12 +395,30 @@ static int residfp_calculate_samples(sound_t *psid, short *pbuf, int nr, int int
         }
 
         (*delta_t) = 0;
+#ifdef USE_MACOSUI
+        if (capture_voice_samples) {
+            residfp_publish_voice_samples(psid, tmp_voice_buf, retval);
+        }
+#endif
         return retval;
     }
 
     /* Used when SID does not run at system clock ("SID card") */
     tmp_buf = getbuf(2 * nr * psid->factor / 1000);
+#ifdef USE_MACOSUI
+    requested_voice_frames = nr * psid->factor / 1000;
+    capture_voice_samples = vicemac_should_capture_sid_voice_samples((uint32_t)psid->chip_index,
+                                                                     (uint32_t)requested_voice_frames,
+                                                                     (uint32_t)psid->sample_rate);
+    if (capture_voice_samples) {
+        tmp_voice_buf = getvoicebuf(requested_voice_frames * (int)VICEMAC_SID_VOICE_COUNT);
+        retval = psid->sid->clock(int_delta_t, tmp_buf, tmp_voice_buf, VICEMAC_SID_VOICE_COUNT);
+    } else {
+        retval = psid->sid->clock(int_delta_t, tmp_buf);
+    }
+#else
     retval = psid->sid->clock(int_delta_t, tmp_buf);
+#endif
     {
         int n, p = 0;
         for (n = 0; n < retval; n++) {
@@ -318,6 +428,11 @@ static int residfp_calculate_samples(sound_t *psid, short *pbuf, int nr, int int
     }
 
     (*delta_t) = 0;
+#ifdef USE_MACOSUI
+    if (capture_voice_samples) {
+        residfp_publish_voice_samples(psid, tmp_voice_buf, retval);
+    }
+#endif
     return retval;
 }
 #endif

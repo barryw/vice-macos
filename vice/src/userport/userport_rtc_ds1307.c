@@ -164,6 +164,11 @@ void userport_rtc_ds1307_resources_shutdown(void)
     }
 }
 
+void userport_rtc_ds1307_sync_system_time(void)
+{
+    ds1307_sync_system_time(ds1307_context);
+}
+
 /* ---------------------------------------------------------------------*/
 
 static void userport_rtc_store_pbx(uint8_t value, int pulse)

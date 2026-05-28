@@ -1,0 +1,7 @@
+HEADER AUTO_EXEC "MACVICE RTC" "MacVICE RTC" "V1.0" {
+dostype USR
+mode any
+structure SEQ
+author "mac VICE"
+info "Sets GEOS time from the VICE DS1307 RTC."
+}

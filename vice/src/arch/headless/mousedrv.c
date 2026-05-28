@@ -33,6 +33,7 @@
 #include "mouse.h"
 #include "mousedrv.h"
 
+static mouse_func_t mouse_funcs;
 
 void mousedrv_init(void)
 {
@@ -48,6 +49,10 @@ int mousedrv_resources_init(const mouse_func_t *funcs)
 {
     /* printf("%s\n", __func__); */
 
+    if (funcs != NULL) {
+        mouse_funcs = *funcs;
+    }
+
     return 0;
 }
 
@@ -58,3 +63,35 @@ int mousedrv_cmdline_options_init(void)
     return 0;
 }
 
+void mouse_button(int bnumber, int state)
+{
+    switch (bnumber) {
+        case 0:
+            if (mouse_funcs.mbl) {
+                mouse_funcs.mbl(state);
+            }
+            break;
+        case 1:
+            if (mouse_funcs.mbm) {
+                mouse_funcs.mbm(state);
+            }
+            break;
+        case 2:
+            if (mouse_funcs.mbr) {
+                mouse_funcs.mbr(state);
+            }
+            break;
+        case 3:
+            if (mouse_funcs.mbu) {
+                mouse_funcs.mbu(state);
+            }
+            break;
+        case 4:
+            if (mouse_funcs.mbd) {
+                mouse_funcs.mbd(state);
+            }
+            break;
+        default:
+            break;
+    }
+}
