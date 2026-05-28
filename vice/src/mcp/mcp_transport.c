@@ -1045,11 +1045,10 @@ int mcp_transport_start(const char *host, int port,
     }
 
     if (!mcp_is_loopback_address(&addr.sin_addr) && !mcp_auth_configured()) {
-        mcp_transport_settings_clear();
-        pthread_mutex_unlock(&transport_mutex);
-        log_error(mcp_transport_log,
-                  "Refusing non-loopback MCP bind without MCPServerToken");
-        return -1;
+        log_warning(mcp_transport_log,
+                    "MCP server binding to non-loopback address %s without MCPServerToken; "
+                    "remote clients can control this emulator",
+                    host);
     }
 
     if (mcp_string_is_set(transport_cors_origin) && !mcp_auth_configured()) {
@@ -1214,4 +1213,28 @@ int mcp_transport_test_active_trap_dispatches_once(void)
     test_trap_dispatch_count = 0;
 
     return complete && has_response && dispatch_count == 1;
+}
+
+int mcp_transport_test_all_interfaces_without_token_starts(void)
+{
+    int started;
+
+    started = (mcp_transport_start("0.0.0.0", 0, NULL, NULL) == 0);
+    if (started) {
+        mcp_transport_stop();
+    }
+
+    return started;
+}
+
+int mcp_transport_test_cors_without_token_rejected(void)
+{
+    int rejected;
+
+    rejected = (mcp_transport_start("127.0.0.1", 0, NULL, "http://localhost:3000") < 0);
+    if (!rejected) {
+        mcp_transport_stop();
+    }
+
+    return rejected;
 }

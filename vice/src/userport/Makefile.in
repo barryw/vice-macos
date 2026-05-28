@@ -123,8 +123,9 @@ am_libuserport_a_OBJECTS = userport.$(OBJEXT) \
 	userport_ps2mouse.$(OBJEXT) userport_rtc_58321a.$(OBJEXT) \
 	userport_rtc_ds1307.$(OBJEXT) userport_spt_joystick.$(OBJEXT) \
 	userport_superpad64.$(OBJEXT) \
-	userport_synergy_joystick.$(OBJEXT) userport_wic64.$(OBJEXT) \
-	userport_funmp3.$(OBJEXT) userport_woj_joystick.$(OBJEXT)
+	userport_synergy_joystick.$(OBJEXT) userport_v8_joystick.$(OBJEXT) \
+	userport_wic64.$(OBJEXT) userport_funmp3.$(OBJEXT) \
+	userport_woj_joystick.$(OBJEXT)
 libuserport_a_OBJECTS = $(am_libuserport_a_OBJECTS)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
@@ -158,6 +159,7 @@ am__depfiles_remade = ./$(DEPDIR)/userport.Po \
 	./$(DEPDIR)/userport_spt_joystick.Po \
 	./$(DEPDIR)/userport_superpad64.Po \
 	./$(DEPDIR)/userport_synergy_joystick.Po \
+	./$(DEPDIR)/userport_v8_joystick.Po \
 	./$(DEPDIR)/userport_wic64.Po \
 	./$(DEPDIR)/userport_woj_joystick.Po
 am__mv = mv -f
@@ -493,6 +495,8 @@ libuserport_a_SOURCES = \
 	userport_superpad64.h \
 	userport_synergy_joystick.c \
 	userport_synergy_joystick.h \
+	userport_v8_joystick.c \
+	userport_v8_joystick.h \
 	userport_wic64.c \
 	userport_wic64.h \
 	userport_funmp3.c \

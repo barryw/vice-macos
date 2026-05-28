@@ -32,6 +32,8 @@ extern int mcp_tool_name_matches(const char *canonical_name, const char *request
 extern int mcp_transport_test_dispatch_mutex_serializes(void);
 extern int mcp_transport_test_abandoned_trap_skips_dispatch(void);
 extern int mcp_transport_test_active_trap_dispatches_once(void);
+extern int mcp_transport_test_all_interfaces_without_token_starts(void);
+extern int mcp_transport_test_cors_without_token_rejected(void);
 
 /* MCP Base Protocol tool declarations */
 extern cJSON* mcp_tool_initialize(cJSON *params);
@@ -1723,6 +1725,18 @@ TEST(transport_abandoned_trap_skips_dispatch)
 TEST(transport_active_trap_dispatches_once)
 {
     ASSERT_TRUE(mcp_transport_test_active_trap_dispatches_once());
+}
+
+/* Test: explicit all-interface binds remain backwards compatible without auth */
+TEST(transport_all_interfaces_without_token_starts)
+{
+    ASSERT_TRUE(mcp_transport_test_all_interfaces_without_token_starts());
+}
+
+/* Test: browser CORS exposure still requires an auth token */
+TEST(transport_cors_without_token_rejected)
+{
+    ASSERT_TRUE(mcp_transport_test_cors_without_token_rejected());
 }
 
 /* ===================================================================
@@ -8293,6 +8307,8 @@ int main(void)
     RUN_TEST(transport_dispatch_mutex_serializes);
     RUN_TEST(transport_abandoned_trap_skips_dispatch);
     RUN_TEST(transport_active_trap_dispatches_once);
+    RUN_TEST(transport_all_interfaces_without_token_starts);
+    RUN_TEST(transport_cors_without_token_rejected);
 
     /* Symbol loading tests */
     RUN_TEST(symbols_load_kickasm_format);

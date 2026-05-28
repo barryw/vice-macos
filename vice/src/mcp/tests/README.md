@@ -10,6 +10,7 @@ The MCP test suite validates the core functionality of the MCP server integratio
 - Input validation
 - JSON response formatting
 - Error code compliance with JSON-RPC 2.0
+- Transport bind/auth policy regressions
 
 ## Building and Running Tests
 
@@ -101,12 +102,23 @@ These are unit tests that validate individual MCP components in isolation.
 They do NOT test:
 
 - Full VICE integration (requires running emulator)
-- Network transport layer
-- HTTP/SSE functionality
+- End-to-end HTTP request handling against a real emulator process
+- Event streaming (`GET /events` currently returns `501 Not Implemented`)
 - Actual CPU state manipulation
 - Memory operations with real emulator
 
-For integration testing, use manual testing with a running VICE instance.
+For integration testing, use manual testing with a running VICE instance:
+
+```bash
+# Terminal 1
+x64sc -mcpserver -mcpserverhost 0.0.0.0
+
+# Terminal 2
+curl -sS http://127.0.0.1:6510/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json' \
+  --data '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"vice_ping","arguments":{}},"id":1}'
+```
 
 ## Future Enhancements
 

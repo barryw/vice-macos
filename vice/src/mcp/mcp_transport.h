@@ -55,7 +55,7 @@ extern void mcp_transport_shutdown(void);
  *
  *  @param host  IP address to bind to
  *  @param port  TCP port number
- *  @param auth_token  Optional bearer token. Required for non-loopback binds and CORS.
+ *  @param auth_token  Optional bearer token. Required for CORS and recommended for non-loopback binds.
  *  @param cors_origin Optional exact CORS origin. Wildcards are rejected.
  *  @return 0 on success, -1 on failure
  */
@@ -82,5 +82,7 @@ extern int mcp_transport_sse_send_event(const char *event_type, const char *data
 extern int mcp_transport_test_dispatch_mutex_serializes(void);
 extern int mcp_transport_test_abandoned_trap_skips_dispatch(void);
 extern int mcp_transport_test_active_trap_dispatches_once(void);
+extern int mcp_transport_test_all_interfaces_without_token_starts(void);
+extern int mcp_transport_test_cors_without_token_rejected(void);
 
 #endif /* VICE_MCP_TRANSPORT_H */

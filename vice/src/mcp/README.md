@@ -13,16 +13,16 @@ The MCP server is organized into three main components:
 - Configuration API
 
 ### 2. Transport Layer (`mcp_transport.c/h`)
-- Streamable HTTP transport (HTTP POST + SSE)
+- Streamable HTTP transport (`POST /mcp`)
 - JSON-RPC 2.0 message handling
-- Server-Sent Events (SSE) for real-time notifications
+- Reserved Server-Sent Events endpoint (`GET /events`) that returns `501 Not Implemented`
 - Default port: 6510 (chosen for 6510 CPU reference)
 
 ### 3. Tool Dispatch (`mcp_tools.c/h`)
 - MCP tool registry and dispatch
 - Tool implementations (execution control, memory, registers, etc.)
 - Direct access to VICE internal state (zero-copy architecture)
-- Event notifications (breakpoints, state changes)
+- Tool responses for live emulator state
 
 ## Current Status
 
@@ -32,14 +32,12 @@ The MCP server is organized into three main components:
 - ✅ JSON library integration (cJSON bundled)
 - ✅ VICE internal API integration
 - ✅ JSON-RPC 2.0 endpoint (POST /mcp)
-- ✅ Server-Sent Events endpoint (GET /events)
+- ✅ Reserved Server-Sent Events endpoint (`GET /events`) returning `501 Not Implemented`
 - ✅ Thread safety (pthread mutex)
 - ✅ Security hardening (request limits, timeouts, CORS)
 - ✅ Comprehensive test coverage
 
 ## Building
-
-(To be updated once build system integration is complete)
 
 ```bash
 # Configure with MCP server support
@@ -48,8 +46,8 @@ The MCP server is organized into three main components:
 # Build VICE
 make
 
-# Run with MCP server enabled
-x64sc -mcpserver -mcpserverport 6510
+# Run with MCP server enabled on 127.0.0.1:6510
+x64sc -mcpserver
 ```
 
 ## Configuration
@@ -60,7 +58,7 @@ The MCP server can be configured via resources or command-line options:
 - `MCPServerEnabled` (0/1) - Enable/disable MCP server
 - `MCPServerPort` (1024-65535) - Port to listen on (default: 6510)
 - `MCPServerHost` (string) - Host to bind to (default: 127.0.0.1)
-- `MCPServerToken` (string) - Optional bearer token. Required for non-loopback binds and CORS.
+- `MCPServerToken` (string) - Optional bearer token. Required for CORS; strongly recommended for non-loopback binds.
 - `MCPServerCORSOrigin` (string) - Optional exact CORS origin. Wildcards are rejected.
 
 **Command-line:**
@@ -69,9 +67,36 @@ x64sc -mcpserver                  # Enable MCP server
 x64sc +mcpserver                  # Disable MCP server
 x64sc -mcpserverport 6510         # Set port
 x64sc -mcpservertoken secret      # Require Authorization: Bearer secret
+x64sc -mcpserverhost 0.0.0.0
 x64sc -mcpserverhost 0.0.0.0 -mcpservertoken secret
 x64sc -mcpservercorsorigin http://localhost:3000 -mcpservertoken secret
 ```
+
+`MCPServerHost` is the address VICE binds to:
+
+- `127.0.0.1` means same-machine clients only. This is the default.
+- `0.0.0.0` means listen on every network interface.
+- Clients do not connect to `0.0.0.0`. Same-machine clients use
+  `http://127.0.0.1:6510/mcp`; remote clients use the host's real LAN IP, for
+  example `http://192.168.1.42:6510/mcp`.
+
+Token behavior:
+
+- No token configured: requests do not need an `Authorization` header.
+- Token configured: every request must include `Authorization: Bearer <token>`.
+- CORS configured: a token is required.
+- `0.0.0.0` without a token is allowed for backwards compatibility, but the
+  transport logs a warning because remote clients can control the emulator.
+
+Common setups:
+
+| Use case | Start VICE with | Client URL | Auth header |
+|---|---|---|---|
+| Same machine | `x64sc -mcpserver` | `http://127.0.0.1:6510/mcp` | None |
+| Same machine, custom port | `x64sc -mcpserver -mcpserverport 7000` | `http://127.0.0.1:7000/mcp` | None |
+| LAN access | `x64sc -mcpserver -mcpserverhost 0.0.0.0` | `http://<host-ip>:6510/mcp` | None |
+| LAN access with token | `x64sc -mcpserver -mcpserverhost 0.0.0.0 -mcpservertoken secret` | `http://<host-ip>:6510/mcp` | `Authorization: Bearer secret` |
+| Browser client | `x64sc -mcpserver -mcpservercorsorigin http://localhost:3000 -mcpservertoken secret` | `http://127.0.0.1:6510/mcp` | `Authorization: Bearer secret` |
 
 ## HTTP Transport Layer
 
@@ -81,17 +106,49 @@ The MCP server exposes two HTTP endpoints:
 
 Accepts JSON-RPC 2.0 requests and returns responses.
 
-**Example Request:**
+Every request must use `Content-Type: application/json`. Clients should also send
+`Accept: application/json`.
+
+VICE accepts direct JSON-RPC method calls:
+
 ```bash
-curl -X POST http://127.0.0.1:6510/mcp \
+curl -sS http://127.0.0.1:6510/mcp \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer secret" \
-  -d '{
+  -H "Accept: application/json" \
+  --data '{
     "jsonrpc": "2.0",
     "method": "vice.ping",
-    "params": {},
     "id": 1
   }'
+```
+
+Standard MCP clients usually call tools through `tools/call`. The public tool
+names returned by `tools/list` use underscores so clients that dislike dotted
+names can call them safely:
+
+```bash
+curl -sS http://127.0.0.1:6510/mcp \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  --data '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "vice_ping",
+      "arguments": {}
+    },
+    "id": 2
+  }'
+```
+
+If `MCPServerToken` is configured, add the bearer header to every request:
+
+```bash
+curl -sS http://127.0.0.1:6510/mcp \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -H "Authorization: Bearer secret" \
+  --data '{"jsonrpc":"2.0","method":"vice.ping","id":3}'
 ```
 
 **Example Response:**
@@ -134,8 +191,8 @@ until it can stream real events instead of pretending to work.
 ## Security
 
 - **Default binding:** localhost-only (127.0.0.1)
-- **Remote access:** Requires explicit configuration with `-mcpserverhost` and `MCPServerToken`
-- **Authentication:** Optional on loopback, required for non-loopback binds and CORS
+- **Remote access:** Requires explicit configuration with `-mcpserverhost`. Use `MCPServerToken` unless the network is already trusted.
+- **Authentication:** Optional on loopback, recommended for non-loopback binds, required for CORS
 - **CORS:** Disabled by default; only one exact origin can be allowed
 - **Port range:** Restricted to 1024-65535 (no privileged ports)
 - **DoS protection:** Request size limits, connection limits, timeouts
@@ -146,6 +203,9 @@ until it can stream real events instead of pretending to work.
 **Security Warnings:**
 - No HTTPS support - terminate TLS at reverse proxy level for remote access
 - Command-line tokens may be visible to local process-list tools. Prefer resource files or a wrapper when that matters.
+- Binding to `0.0.0.0` exposes emulator control to the network. This is useful
+  for remote agents and CI machines, but it is not a browser sandbox or a public
+  API boundary.
 
 **Recommended Production Setup:**
 ```nginx
@@ -183,21 +243,26 @@ make test
 ```
 
 Tests include:
-- **test_mcp_tools.c**: Tool dispatch and validation
-- **test_mcp_transport.c**: HTTP transport memory safety
+- **test_mcp_tools.c**: Tool dispatch, validation, transport regressions, and
+  bind/auth policy coverage
 
-All tests pass with zero memory leaks (valgrind verified).
+The transport regression tests cover both sides of the bind/auth policy:
+
+- `0.0.0.0` without a token starts successfully.
+- CORS without a token is rejected.
 
 ### Integration Tests
 
 Test HTTP transport with running VICE:
 ```bash
 # Terminal 1: Start VICE with MCP server
-x64sc -mcpserver -mcpserverport 6510
+x64sc -mcpserver -mcpserverhost 0.0.0.0
 
-# Terminal 2: Run integration tests
-cd vice/src/mcp/tests
-./test_http_transport.sh
+# Terminal 2: Hit the live MCP endpoint
+curl -sS http://127.0.0.1:6510/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json' \
+  --data '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"vice_ping","arguments":{}},"id":1}'
 ```
 
 See `tests/README.md` for detailed testing documentation.

@@ -66,7 +66,7 @@ extern void mcp_server_shutdown(void);
  *  The server runs in a separate thread using libmicrohttpd.
  *
  *  @param host  IP address to bind to (e.g., "127.0.0.1" or "0.0.0.0").
- *               Non-loopback binds require MCPServerToken.
+ *               MCPServerToken is recommended for non-loopback binds.
  *  @param port  TCP port number to listen on
  *  @return 0 on success, -1 on failure
  */

@@ -120,7 +120,8 @@ am_libjoyport_a_OBJECTS = bbrtc.$(OBJEXT) cardkey.$(OBJEXT) \
 	inception.$(OBJEXT) joyport.$(OBJEXT) \
 	joyport_diag_586220_harness.$(OBJEXT) joyport_io_sim.$(OBJEXT) \
 	joystick.$(OBJEXT) lightpen.$(OBJEXT) mouse.$(OBJEXT) \
-	mouse_1351.$(OBJEXT) mouse_neos.$(OBJEXT) \
+	mouse_1351.$(OBJEXT) mouse_digital.$(OBJEXT) \
+	mouse_neos.$(OBJEXT) \
 	mouse_paddle.$(OBJEXT) mouse_quadrature.$(OBJEXT) \
 	multijoy.$(OBJEXT) ninja_snespad.$(OBJEXT) \
 	paperclip64.$(OBJEXT) paperclip64e.$(OBJEXT) \
@@ -153,7 +154,8 @@ am__depfiles_remade = ./$(DEPDIR)/bbrtc.Po ./$(DEPDIR)/cardkey.Po \
 	./$(DEPDIR)/joyport_diag_586220_harness.Po \
 	./$(DEPDIR)/joyport_io_sim.Po ./$(DEPDIR)/joystick.Po \
 	./$(DEPDIR)/lightpen.Po ./$(DEPDIR)/mouse.Po \
-	./$(DEPDIR)/mouse_1351.Po ./$(DEPDIR)/mouse_neos.Po \
+	./$(DEPDIR)/mouse_1351.Po ./$(DEPDIR)/mouse_digital.Po \
+	./$(DEPDIR)/mouse_neos.Po \
 	./$(DEPDIR)/mouse_paddle.Po ./$(DEPDIR)/mouse_quadrature.Po \
 	./$(DEPDIR)/multijoy.Po ./$(DEPDIR)/ninja_snespad.Po \
 	./$(DEPDIR)/paperclip2.Po ./$(DEPDIR)/paperclip64.Po \
@@ -483,6 +485,8 @@ libjoyport_a_SOURCES = \
 	mouse.h \
 	mouse_1351.c \
 	mouse_1351.h \
+	mouse_digital.c \
+	mouse_digital.h \
 	mouse_neos.c \
 	mouse_neos.h \
 	mouse_paddle.c \
