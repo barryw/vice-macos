@@ -36,7 +36,6 @@
 #include "resources.h"
 #include "ui.h"
 #include "userport/userport.h"
-#include "userport/userport_rtc_ds1307.h"
 #include "version.h"
 #include "vicemacbridge.h"
 #include "vsync.h"
@@ -2402,6 +2401,24 @@ static void vicemac_dispatch_queued_mouse_events(void)
     }
 }
 
+typedef void (*vicemac_userport_rtc_sync_fn)(void);
+
+static void vicemac_sync_userport_rtc_system_time(void)
+{
+    static vicemac_userport_rtc_sync_fn sync_fn = 0;
+    static int did_resolve_sync_fn = 0;
+
+    if (!did_resolve_sync_fn) {
+        sync_fn = (vicemac_userport_rtc_sync_fn)dlsym(RTLD_SELF,
+                                                      "userport_rtc_ds1307_sync_system_time");
+        did_resolve_sync_fn = 1;
+    }
+
+    if (sync_fn != 0) {
+        sync_fn();
+    }
+}
+
 static void vicemac_dispatch_machine_command(vicemac_machine_command_t *command)
 {
     switch (command->type) {
@@ -2416,7 +2433,7 @@ static void vicemac_dispatch_machine_command(vicemac_machine_command_t *command)
             if (command->value) {
                 (void)resources_set_int("UserportRTCDS1307Save", 0);
                 if (resources_set_int("UserportDevice", USERPORT_DEVICE_RTC_DS1307) >= 0) {
-                    userport_rtc_ds1307_sync_system_time();
+                    vicemac_sync_userport_rtc_system_time();
                 }
             } else if (userport_get_device() == USERPORT_DEVICE_RTC_DS1307) {
                 (void)resources_set_int("UserportDevice", USERPORT_DEVICE_NONE);

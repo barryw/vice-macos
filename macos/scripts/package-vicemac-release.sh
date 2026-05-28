@@ -428,22 +428,8 @@ configure_xcodebuild_settings() {
     XCODEBUILD_SETTINGS+=("VICE_MAC_GIT_SHA=$MAC_GIT_SHA")
     XCODEBUILD_SETTINGS+=("VICE_UPSTREAM_GIT_SHA=$UPSTREAM_GIT_SHA")
 
-    if [[ -n "$CODE_SIGN_IDENTITY" ]]; then
-        XCODEBUILD_SETTINGS+=("CODE_SIGN_IDENTITY=$CODE_SIGN_IDENTITY")
-
-        if [[ "$CODE_SIGN_IDENTITY" != "-" ]]; then
-            local other_code_sign_flags
-
-            other_code_sign_flags="--timestamp"
-            if [[ -n "$CODE_SIGN_KEYCHAIN" ]]; then
-                other_code_sign_flags+=" --keychain $CODE_SIGN_KEYCHAIN"
-            fi
-
-            XCODEBUILD_SETTINGS+=("OTHER_CODE_SIGN_FLAGS=$other_code_sign_flags")
-            XCODEBUILD_SETTINGS+=("CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO")
-        fi
-    fi
-
+    # Final artifacts are signed after staging. Passing a manual identity here
+    # breaks automatically signed Swift package bundles such as Waveform.
     if [[ -n "$DEVELOPMENT_TEAM" ]]; then
         XCODEBUILD_SETTINGS+=("DEVELOPMENT_TEAM=$DEVELOPMENT_TEAM")
     fi
