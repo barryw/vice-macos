@@ -608,6 +608,22 @@ resign_sparkle_framework() {
     codesign_release_path "$sparkle_framework" --preserve-metadata=identifier,entitlements,flags
 }
 
+resign_embedded_dylibs() {
+    local app="$1"
+    local framework_dir="$app/Contents/Frameworks"
+    local dylib
+
+    if [[ ! -d "$framework_dir" ]]; then
+        return
+    fi
+
+    for dylib in "$framework_dir"/*.dylib; do
+        if [[ -f "$dylib" ]]; then
+            codesign_release_path "$dylib" --preserve-metadata=identifier,flags
+        fi
+    done
+}
+
 resign_release_apps() {
     local stage_dir="$1"
     local app_name
@@ -615,8 +631,9 @@ resign_release_apps() {
 
     for app_name in "${RELEASE_APPS[@]}"; do
         app="$stage_dir/$app_name.app"
+        resign_embedded_dylibs "$app"
         resign_sparkle_framework "$app"
-        codesign_release_path "$app" --preserve-metadata=identifier,entitlements,flags
+        codesign_release_path "$app"
     done
 }
 
