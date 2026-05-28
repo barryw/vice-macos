@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MACOS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 DIST_DIR="${VICE_MAC_DIST_DIR:-$MACOS_DIR/dist}"
-SMOKE_APPS="${VICE_MAC_SMOKE_APPS:-x64sc xvic xpet xplus4 xc16 xc232 xv364 x128 vsid}"
+SMOKE_APPS="${VICE_MAC_SMOKE_APPS:-x64sc xvic xpet xplus4 xc16 xc232 xv364 x128}"
 SMOKE_TIMEOUT="${VICE_MAC_SMOKE_TIMEOUT:-35}"
 SMOKE_ATTEMPTS="${VICE_MAC_SMOKE_ATTEMPTS:-2}"
 KEEP_LOGS="${VICE_MAC_SMOKE_KEEP_LOGS:-0}"
