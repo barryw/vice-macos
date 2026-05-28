@@ -227,7 +227,7 @@ final class VSIDSession: ObservableObject {
             let engineWasStarted = didStartEngine
             startEngineIfNeeded(initialTuneURL: engineWasStarted ? nil : url)
             if engineWasStarted && didStartEngine {
-                _ = ViceEngineAutostartMedia(url.path, false)
+                _ = ViceEngineAutostartMedia(url.path, MediaOpenBehavior.load.viceRunMode)
             }
         } catch {
             statusText = error.localizedDescription

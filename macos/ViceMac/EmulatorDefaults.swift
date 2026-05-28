@@ -17,6 +17,12 @@ enum EmulatorDefaults {
     private static let petModelKey = "vice.petModel"
     private static let romImagesKey = "vice.romImages"
     private static let ramExpansionKey = "vice.ramExpansion"
+    private static let mediaBehaviorKey = "vice.mediaBehavior"
+    private static let snapshotConfigurationKey = "vice.snapshotConfiguration"
+    private static let sessionBehaviorKey = "vice.sessionBehavior"
+    private static let printerConfigurationKey = "vice.printerConfiguration"
+    private static let sidConfigurationKey = "vice.sidConfiguration"
+    private static let tapeConfigurationKey = "vice.tapeConfiguration"
     private static let controlPortsKey = "vice.controlPorts"
     private static let driveConfigurationsKey = "vice.driveConfigurations"
     private static let keyboardMappingKey = "vice.keyboardMapping"
@@ -260,6 +266,116 @@ enum EmulatorDefaults {
 
     static func saveRAMExpansion(_ expansion: RAMExpansion, for machine: EmulatedMachine) {
         UserDefaults.standard.set(expansion.rawValue, forKey: key(ramExpansionKey, machine: machine))
+    }
+
+    static func loadMediaBehavior(for machine: EmulatedMachine) -> MediaBehaviorConfiguration {
+        guard let data = UserDefaults.standard.data(forKey: key(mediaBehaviorKey, machine: machine))
+                ?? legacyData(forKey: mediaBehaviorKey, machine: machine),
+              let configuration = try? JSONDecoder().decode(MediaBehaviorConfiguration.self, from: data) else {
+            return .standard
+        }
+
+        return configuration
+    }
+
+    static func saveMediaBehavior(_ configuration: MediaBehaviorConfiguration, for machine: EmulatedMachine) {
+        guard let data = try? JSONEncoder().encode(configuration) else {
+            return
+        }
+
+        UserDefaults.standard.set(data, forKey: key(mediaBehaviorKey, machine: machine))
+    }
+
+    static func loadSnapshotConfiguration(for machine: EmulatedMachine) -> SnapshotConfiguration {
+        guard let data = UserDefaults.standard.data(forKey: key(snapshotConfigurationKey, machine: machine))
+                ?? legacyData(forKey: snapshotConfigurationKey, machine: machine),
+              let configuration = try? JSONDecoder().decode(SnapshotConfiguration.self, from: data) else {
+            return .standard
+        }
+
+        return configuration
+    }
+
+    static func saveSnapshotConfiguration(_ configuration: SnapshotConfiguration, for machine: EmulatedMachine) {
+        guard let data = try? JSONEncoder().encode(configuration) else {
+            return
+        }
+
+        UserDefaults.standard.set(data, forKey: key(snapshotConfigurationKey, machine: machine))
+    }
+
+    static func loadSessionBehavior(for machine: EmulatedMachine) -> SessionBehaviorConfiguration {
+        guard let data = UserDefaults.standard.data(forKey: key(sessionBehaviorKey, machine: machine))
+                ?? legacyData(forKey: sessionBehaviorKey, machine: machine),
+              let configuration = try? JSONDecoder().decode(SessionBehaviorConfiguration.self, from: data) else {
+            return .standard
+        }
+
+        return configuration
+    }
+
+    static func saveSessionBehavior(_ configuration: SessionBehaviorConfiguration, for machine: EmulatedMachine) {
+        guard let data = try? JSONEncoder().encode(configuration) else {
+            return
+        }
+
+        UserDefaults.standard.set(data, forKey: key(sessionBehaviorKey, machine: machine))
+    }
+
+    static func loadPrinterConfiguration(for machine: EmulatedMachine) -> PrinterConfiguration {
+        guard let data = UserDefaults.standard.data(forKey: key(printerConfigurationKey, machine: machine))
+                ?? legacyData(forKey: printerConfigurationKey, machine: machine),
+              let configuration = try? JSONDecoder().decode(PrinterConfiguration.self, from: data) else {
+            return .standard
+        }
+
+        return configuration
+    }
+
+    static func savePrinterConfiguration(_ configuration: PrinterConfiguration, for machine: EmulatedMachine) {
+        guard let data = try? JSONEncoder().encode(configuration) else {
+            return
+        }
+
+        UserDefaults.standard.set(data, forKey: key(printerConfigurationKey, machine: machine))
+    }
+
+    static func loadSIDConfiguration(for machine: EmulatedMachine) -> SIDConfiguration {
+        guard machine.capabilities.supportsSIDModelSelection,
+              let data = UserDefaults.standard.data(forKey: key(sidConfigurationKey, machine: machine))
+                ?? legacyData(forKey: sidConfigurationKey, machine: machine),
+              let configuration = try? JSONDecoder().decode(SIDConfiguration.self, from: data) else {
+            return .standard
+        }
+
+        return configuration
+    }
+
+    static func saveSIDConfiguration(_ configuration: SIDConfiguration, for machine: EmulatedMachine) {
+        guard machine.capabilities.supportsSIDModelSelection,
+              let data = try? JSONEncoder().encode(configuration) else {
+            return
+        }
+
+        UserDefaults.standard.set(data, forKey: key(sidConfigurationKey, machine: machine))
+    }
+
+    static func loadTapeConfiguration(for machine: EmulatedMachine) -> TapeConfiguration {
+        guard let data = UserDefaults.standard.data(forKey: key(tapeConfigurationKey, machine: machine))
+                ?? legacyData(forKey: tapeConfigurationKey, machine: machine),
+              let configuration = try? JSONDecoder().decode(TapeConfiguration.self, from: data) else {
+            return .standard
+        }
+
+        return configuration
+    }
+
+    static func saveTapeConfiguration(_ configuration: TapeConfiguration, for machine: EmulatedMachine) {
+        guard let data = try? JSONEncoder().encode(configuration) else {
+            return
+        }
+
+        UserDefaults.standard.set(data, forKey: key(tapeConfigurationKey, machine: machine))
     }
 
     static func loadControlPorts(for machine: EmulatedMachine) -> ControlPortConfiguration {

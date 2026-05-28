@@ -16,6 +16,7 @@ final class ModelConfigurationTests: XCTestCase {
         let configuration = try JSONDecoder().decode(DriveConfiguration.self, from: json)
 
         XCTAssertEqual(configuration.accessMode, .native)
+        XCTAssertTrue(configuration.protectsInsertedDisks)
         XCTAssertFalse(configuration.soundEnabled)
         XCTAssertEqual(configuration.soundVolume, 25)
     }
@@ -326,6 +327,85 @@ final class ModelConfigurationTests: XCTestCase {
         XCTAssertEqual(arguments.value(after: "-drivesoundvolume"), "2000")
     }
 
+    func testDriveProtectionStartupUsesReadOnlyAttachOptions() {
+        let machine = EmulatedMachine.x128
+        let driveConfigurations = [
+            DriveConfiguration(unit: 8,
+                               isAttached: true,
+                               driveType: .c4040,
+                               protectsInsertedDisks: true,
+                               soundEnabled: false,
+                               soundVolume: 25)
+        ]
+        let arguments = machine.startupArguments(configuration: startupConfiguration(for: machine,
+                                                                                     driveConfigurations: driveConfigurations))
+
+        XCTAssertTrue(arguments.contains("-attach8ro"))
+        XCTAssertTrue(arguments.contains("-attach8d1ro"))
+    }
+
+    func testMediaAndTapeStartupOptionsUseMacSettings() {
+        let machine = EmulatedMachine.x64sc
+        let mediaBehavior = MediaBehaviorConfiguration(openBehavior: .load,
+                                                       warpDuringAutostart: false,
+                                                       useTrueDriveDuringAutostart: true)
+        let tapeConfiguration = TapeConfiguration(isDatasetteEnabled: true,
+                                                  soundEnabled: true,
+                                                  soundVolume: 50)
+        let arguments = machine.startupArguments(configuration: startupConfiguration(for: machine,
+                                                                                     mediaBehavior: mediaBehavior,
+                                                                                     tapeConfiguration: tapeConfiguration))
+
+        XCTAssertTrue(arguments.contains("-autostart-handle-tde"))
+        XCTAssertTrue(arguments.contains("+autostart-warp"))
+        XCTAssertEqual(arguments.value(after: "-tapeport1device"), "1")
+        XCTAssertTrue(arguments.contains("-datasettesound"))
+        XCTAssertEqual(arguments.value(after: "-dssoundvolume"), "2048")
+    }
+
+    func testPrinterStartupOptionsUseMacPrintQueue() {
+        let machine = EmulatedMachine.x64sc
+        let printerConfiguration = PrinterConfiguration(isEnabled: true,
+                                                        deviceNumber: 4,
+                                                        model: .mps803)
+        let arguments = machine.startupArguments(configuration: startupConfiguration(for: machine,
+                                                                                     printerConfiguration: printerConfiguration))
+
+        XCTAssertTrue(arguments.contains("-busdevice4"))
+        XCTAssertEqual(arguments.value(after: "-devicebackend4"), "1")
+        XCTAssertEqual(arguments.value(after: "-prtxtdev1"), "/tmp/macvice-print/geos-print")
+        XCTAssertEqual(arguments.value(after: "-pr4txtdev"), "0")
+        XCTAssertEqual(arguments.value(after: "-pr4drv"), "mps803")
+        XCTAssertEqual(arguments.value(after: "-pr4output"), "graphics")
+    }
+
+    func testDisabledPrinterStartupOptionsLeaveDeviceOff() {
+        let machine = EmulatedMachine.x64sc
+        let printerConfiguration = PrinterConfiguration(isEnabled: false,
+                                                        deviceNumber: 5,
+                                                        model: .nl10)
+        let arguments = machine.startupArguments(configuration: startupConfiguration(for: machine,
+                                                                                     printerConfiguration: printerConfiguration))
+
+        XCTAssertTrue(arguments.contains("+busdevice5"))
+        XCTAssertEqual(arguments.value(after: "-devicebackend5"), "0")
+        XCTAssertEqual(arguments.value(after: "-pr5drv"), "nl10")
+        XCTAssertEqual(arguments.value(after: "-pr5output"), "graphics")
+    }
+
+    func testSIDLayoutStartupOptionsUseExtraSIDResources() {
+        let machine = EmulatedMachine.x64sc
+        let sidConfiguration = SIDConfiguration(layout: .triple,
+                                                secondAddress: .d420,
+                                                thirdAddress: .de00)
+        let arguments = machine.startupArguments(configuration: startupConfiguration(for: machine,
+                                                                                     sidConfiguration: sidConfiguration))
+
+        XCTAssertEqual(arguments.value(after: "-sidextra"), "2")
+        XCTAssertEqual(arguments.value(after: "-sid2address"), "\(SIDAddressPreset.d420.rawValue)")
+        XCTAssertEqual(arguments.value(after: "-sid3address"), "\(SIDAddressPreset.de00.rawValue)")
+    }
+
     func testFastDriveStartupKeepsDriveAttachedAndDisablesTrueDrive() {
         let machine = EmulatedMachine.x64sc
         let driveConfigurations = [
@@ -358,6 +438,34 @@ final class ModelConfigurationTests: XCTestCase {
         XCTAssertEqual(EmulatorMediaFile(url: URL(fileURLWithPath: "/tmp/demo.crt")), .cartridge(.crt))
         XCTAssertEqual(EmulatorMediaFile(url: URL(fileURLWithPath: "/tmp/demo.vsf")), .snapshot(.vsf))
         XCTAssertNil(EmulatorMediaFile(url: URL(fileURLWithPath: "/tmp/demo.txt")))
+    }
+
+    func testP1ConfigurationDefaultsDecodeLegacyValues() throws {
+        let data = "{}".data(using: .utf8)!
+
+        let snapshot = try JSONDecoder().decode(SnapshotConfiguration.self, from: data)
+        let behavior = try JSONDecoder().decode(SessionBehaviorConfiguration.self, from: data)
+        let printer = try JSONDecoder().decode(PrinterConfiguration.self, from: data)
+
+        XCTAssertEqual(snapshot, .standard)
+        XCTAssertEqual(snapshot.summaryTitle, "Machine state, ROM images, and attached disks")
+        XCTAssertEqual(behavior, .standard)
+        XCTAssertFalse(behavior.pauseWhenAppInactive)
+        XCTAssertEqual(printer, .standard)
+    }
+
+    func testFrameSourceCopiesLatestFrameWithoutSequenceFilter() {
+        let source = EmulatorFrameSource.displaySource(for: .x64sc)
+        let frame = EmulatorVideoFrame(width: 2,
+                                       height: 1,
+                                       bytesPerRow: 8,
+                                       sequence: 42,
+                                       pixels: Data(repeating: 255, count: 8))
+
+        source.publish(frame)
+
+        XCTAssertEqual(source.copyLatestFrame()?.sequence, 42)
+        XCTAssertNil(source.copyLatestFrame(after: 42))
     }
 
     func testSupportedMediaExtensionsRespectMachineCapabilities() {
@@ -1132,6 +1240,10 @@ final class ModelConfigurationTests: XCTestCase {
                                       machineModel: MachineModel? = nil,
                                       videoStandard: EmulatorSession.VideoStandard = .ntsc,
                                       ramExpansion: RAMExpansion = .none,
+                                      mediaBehavior: MediaBehaviorConfiguration = .standard,
+                                      sidConfiguration: SIDConfiguration = .standard,
+                                      tapeConfiguration: TapeConfiguration = .standard,
+                                      printerConfiguration: PrinterConfiguration = .standard,
                                       driveConfigurations: [DriveConfiguration]? = nil,
                                       syncSystemTime: Bool = false) -> MachineStartupConfiguration {
         MachineStartupConfiguration(executablePath: "/tmp/vice",
@@ -1145,6 +1257,11 @@ final class ModelConfigurationTests: XCTestCase {
                                     displayOutput: displayOutput ?? machine.defaultDisplayOutput,
                                     romImages: .standard,
                                     ramExpansion: ramExpansion,
+                                    mediaBehavior: mediaBehavior,
+                                    sidConfiguration: sidConfiguration,
+                                    tapeConfiguration: tapeConfiguration,
+                                    printerConfiguration: printerConfiguration,
+                                    printerOutputBasePath: "/tmp/macvice-print/geos-print",
                                     driveConfigurations: driveConfigurations ?? machine.defaultDriveConfigurations(),
                                     syncSystemTime: syncSystemTime)
     }

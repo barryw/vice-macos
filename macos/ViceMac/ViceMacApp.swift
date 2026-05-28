@@ -150,6 +150,10 @@ struct ViceMacApp: App {
                     MediaOpenPanel.saveSnapshot(for: emulator)
                 }
                 .keyboardShortcut("s", modifiers: [.command, .option])
+
+                Button("Export Screenshot...") {
+                    MediaOpenPanel.exportScreenshot(for: emulator)
+                }
             }
 
             CommandGroup(after: .pasteboard) {
@@ -200,6 +204,12 @@ struct ViceMacApp: App {
                 }
                 .keyboardShortcut("d", modifiers: [.command, .shift])
 
+                Button("Print Queue...") {
+                    openWindow(id: PrintQueueWindow.id)
+                    emulator.refreshPrintQueue()
+                }
+                .keyboardShortcut("p", modifiers: [.command, .option])
+
                 if let diskImageManagerActions {
                     Divider()
 
@@ -233,16 +243,40 @@ struct ViceMacApp: App {
 
                 ForEach(emulator.driveConfigurations) { configuration in
                     Menu("Drive \(configuration.unit)") {
-                        Button("Attach Disk...") {
-                            MediaOpenPanel.openDisk(for: emulator,
-                                                    unit: configuration.unit,
-                                                    autorun: false)
-                        }
+                        if configuration.driveType.slotCount > 1 {
+                            Menu("Attach Disk") {
+                                ForEach(configuration.driveType.driveNumbers, id: \.self) { driveNumber in
+                                    Button("Drive \(configuration.unit):\(driveNumber)...") {
+                                        MediaOpenPanel.openDisk(for: emulator,
+                                                                unit: configuration.unit,
+                                                                driveNumber: driveNumber,
+                                                                autorun: false)
+                                    }
+                                }
+                            }
 
-                        Button("Attach and Run Disk...") {
-                            MediaOpenPanel.openDisk(for: emulator,
-                                                    unit: configuration.unit,
-                                                    autorun: true)
+                            Menu("Attach and Run Disk") {
+                                ForEach(configuration.driveType.driveNumbers, id: \.self) { driveNumber in
+                                    Button("Drive \(configuration.unit):\(driveNumber)...") {
+                                        MediaOpenPanel.openDisk(for: emulator,
+                                                                unit: configuration.unit,
+                                                                driveNumber: driveNumber,
+                                                                autorun: true)
+                                    }
+                                }
+                            }
+                        } else {
+                            Button("Attach Disk...") {
+                                MediaOpenPanel.openDisk(for: emulator,
+                                                        unit: configuration.unit,
+                                                        autorun: false)
+                            }
+
+                            Button("Attach and Run Disk...") {
+                                MediaOpenPanel.openDisk(for: emulator,
+                                                        unit: configuration.unit,
+                                                        autorun: true)
+                            }
                         }
 
                         if configuration.driveType.slotCount > 1 {
@@ -363,6 +397,13 @@ struct ViceMacApp: App {
         }
         .defaultSize(width: DebuggerWindow.size.width,
                      height: DebuggerWindow.size.height)
+
+        Window("Print Queue", id: PrintQueueWindow.id) {
+            PrintQueueView()
+                .environmentObject(emulator)
+        }
+        .defaultSize(width: PrintQueueWindow.size.width,
+                     height: PrintQueueWindow.size.height)
 
         Settings {
             SettingsView()
@@ -664,6 +705,188 @@ private enum DebuggerWindow {
     static let size = CGSize(width: 1_320, height: 860)
 }
 
+private enum PrintQueueWindow {
+    static let id = "print-queue"
+    static let size = CGSize(width: 980, height: 720)
+}
+
+private struct PrintQueueView: View {
+    @EnvironmentObject private var emulator: EmulatorSession
+    @State private var selectedPageID: PrinterSpoolPage.ID?
+
+    var body: some View {
+        VStack(spacing: 0) {
+            printQueueToolbar
+
+            Divider()
+
+            HSplitView {
+                pageList
+                    .frame(minWidth: 260, idealWidth: 300, maxWidth: 360)
+
+                pagePreview
+                    .frame(minWidth: 520, maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .onAppear {
+            emulator.refreshPrintQueue()
+            selectDefaultPage()
+        }
+        .onChange(of: emulator.printSpoolPages) { _, _ in
+            normalizeSelection()
+        }
+    }
+
+    private var printQueueToolbar: some View {
+        HStack(spacing: 12) {
+            Label(emulator.printQueueStatusTitle, systemImage: "printer")
+                .font(.headline)
+
+            Text(emulator.printerConfiguration.statusTitle)
+                .foregroundStyle(.secondary)
+
+            Spacer()
+
+            Button("Save as PDF...") {
+                savePDF()
+            }
+            .disabled(emulator.printSpoolPages.isEmpty)
+
+            Button("Print...") {
+                emulator.printQueuedPages()
+            }
+            .disabled(emulator.printSpoolPages.isEmpty)
+
+            Button("Clear") {
+                emulator.clearPrintQueue()
+                selectedPageID = nil
+            }
+            .disabled(emulator.printSpoolPages.isEmpty)
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 12)
+    }
+
+    private var pageList: some View {
+        List(selection: $selectedPageID) {
+            ForEach(Array(emulator.printSpoolPages.enumerated()), id: \.element.id) { index, page in
+                HStack(spacing: 10) {
+                    Image(systemName: "doc.richtext")
+                        .foregroundStyle(.secondary)
+                        .frame(width: 20)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Page \(index + 1)")
+                            .font(.body.weight(.medium))
+
+                        Text(page.detailTitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+                .tag(page.id)
+                .padding(.vertical, 4)
+            }
+        }
+        .overlay {
+            if emulator.printSpoolPages.isEmpty {
+                ContentUnavailableView("No Printed Pages",
+                                       systemImage: "printer",
+                                       description: Text("Completed GEOS printer pages will appear here."))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var pagePreview: some View {
+        if let selectedPage {
+            ScrollView([.horizontal, .vertical]) {
+                VStack {
+                    PrintPagePreview(url: selectedPage.url)
+                        .padding(28)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .background(Color(nsColor: .textBackgroundColor).opacity(0.26))
+        } else {
+            ContentUnavailableView("Select a Page",
+                                   systemImage: "doc.viewfinder",
+                                   description: Text("Choose a printed page to preview it."))
+        }
+    }
+
+    private var selectedPage: PrinterSpoolPage? {
+        guard let selectedPageID else {
+            return nil
+        }
+
+        return emulator.printSpoolPages.first { $0.id == selectedPageID }
+    }
+
+    private func selectDefaultPage() {
+        selectedPageID = emulator.printSpoolPages.last?.id
+    }
+
+    private func normalizeSelection() {
+        guard !emulator.printSpoolPages.isEmpty else {
+            selectedPageID = nil
+            return
+        }
+
+        if let selectedPageID,
+           emulator.printSpoolPages.contains(where: { $0.id == selectedPageID }) {
+            return
+        }
+
+        selectDefaultPage()
+    }
+
+    private func savePDF() {
+        let panel = NSSavePanel()
+        panel.title = "Save Printout"
+        panel.message = "Save the queued printer pages as a PDF."
+        panel.prompt = "Save"
+        panel.allowedContentTypes = [.pdf]
+        panel.nameFieldStringValue = "\(emulator.machine.shortName)-printout.pdf"
+
+        NSApp.activate(ignoringOtherApps: true)
+        panel.center()
+
+        guard panel.runModal() == .OK,
+              let url = panel.url else {
+            return
+        }
+
+        emulator.exportPrintQueuePDF(to: url)
+    }
+}
+
+private struct PrintPagePreview: View {
+    let url: URL
+
+    var body: some View {
+        if let image = NSImage(contentsOf: url) {
+            Image(nsImage: image)
+                .interpolation(.none)
+                .resizable()
+                .scaledToFit()
+                .frame(maxWidth: 720, maxHeight: 900)
+                .background(Color.white)
+                .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                .shadow(color: .black.opacity(0.16), radius: 16, y: 8)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .strokeBorder(.separator.opacity(0.6))
+                }
+        } else {
+            ContentUnavailableView("Unable to Preview Page",
+                                   systemImage: "exclamationmark.triangle",
+                                   description: Text(url.lastPathComponent))
+        }
+    }
+}
+
 @MainActor
 private enum MediaOpenPanel {
     static func openMedia(for emulator: EmulatorSession, autorun: Bool) {
@@ -680,14 +903,20 @@ private enum MediaOpenPanel {
         emulator.openMedia(urls: panel.urls, autorun: autorun)
     }
 
-    static func openDisk(for emulator: EmulatorSession, unit: Int, autorun: Bool) {
+    static func openDisk(for emulator: EmulatorSession,
+                         unit: Int,
+                         driveNumber: Int = 0,
+                         autorun: Bool) {
         guard let configuration = emulator.driveConfigurations.first(where: { $0.unit == unit }) else {
             return
         }
 
         let extensions = configuration.driveType.supportedDiskImageTypes.map(\.rawValue)
+        let destinationTitle = configuration.driveType.slotCount > 1
+            ? "drive \(unit):\(driveNumber)"
+            : "drive \(unit)"
         let panel = openPanel(title: "Attach Disk",
-                              message: "Choose a \(configuration.driveType.supportedDiskImageDescription) image for drive \(unit).",
+                              message: "Choose a \(configuration.driveType.supportedDiskImageDescription) image for \(destinationTitle).",
                               prompt: autorun ? "Attach and Run" : "Attach",
                               filenameExtensions: extensions)
 
@@ -696,7 +925,10 @@ private enum MediaOpenPanel {
             return
         }
 
-        emulator.attachDisk(to: unit, url: url, autorun: autorun)
+        emulator.attachDisk(to: unit,
+                            driveNumber: driveNumber,
+                            url: url,
+                            autorun: autorun)
     }
 
     static func openCartridge(for emulator: EmulatorSession) {
@@ -730,7 +962,7 @@ private enum MediaOpenPanel {
     static func saveSnapshot(for emulator: EmulatorSession) {
         let panel = NSSavePanel()
         panel.title = "Save Snapshot"
-        panel.message = "Save the current \(emulator.machineDisplayName) machine state."
+        panel.message = "Save the current \(emulator.machineDisplayName) machine state. \(emulator.snapshotConfiguration.summaryTitle)."
         panel.prompt = "Save"
         panel.canCreateDirectories = true
         panel.nameFieldStringValue = "\(emulator.machine.shortName)-Snapshot.vsf"
@@ -748,6 +980,29 @@ private enum MediaOpenPanel {
             ? url.appendingPathExtension(SnapshotFileType.vsf.rawValue)
             : url
         emulator.saveSnapshot(url: snapshotURL)
+    }
+
+    static func exportScreenshot(for emulator: EmulatorSession) {
+        let panel = NSSavePanel()
+        panel.title = "Export Screenshot"
+        panel.message = "Export the current \(emulator.machineDisplayName) screen as a PNG image."
+        panel.prompt = "Export"
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = "\(emulator.machine.shortName)-Screenshot.png"
+        panel.allowedContentTypes = [.png]
+
+        NSApp.activate(ignoringOtherApps: true)
+        panel.center()
+
+        guard panel.runModal() == .OK,
+              let url = panel.url else {
+            return
+        }
+
+        let screenshotURL = url.pathExtension.lowercased() == "png"
+            ? url
+            : url.appendingPathExtension("png")
+        emulator.exportScreenshot(url: screenshotURL)
     }
 
     private static func openPanel(title: String,

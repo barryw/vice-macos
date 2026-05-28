@@ -80,6 +80,12 @@ struct ContentView: View {
         .onAppear {
             emulator.start()
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
+            emulator.handleApplicationActivationChanged(isActive: false)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            emulator.handleApplicationActivationChanged(isActive: true)
+        }
         .onOpenURL { url in
             emulator.openMedia(url: url)
         }

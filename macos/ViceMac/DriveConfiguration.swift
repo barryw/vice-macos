@@ -8,6 +8,7 @@ struct DriveConfiguration: Identifiable, Codable, Equatable {
     var isAttached: Bool
     var driveType: DriveType
     var accessMode: DriveAccessMode
+    var protectsInsertedDisks: Bool
     var soundEnabled: Bool
     var soundVolume: Int
 
@@ -17,12 +18,14 @@ struct DriveConfiguration: Identifiable, Codable, Equatable {
          isAttached: Bool,
          driveType: DriveType,
          accessMode: DriveAccessMode = .native,
+         protectsInsertedDisks: Bool = true,
          soundEnabled: Bool,
          soundVolume: Int) {
         self.unit = unit
         self.isAttached = isAttached
         self.driveType = driveType
         self.accessMode = accessMode
+        self.protectsInsertedDisks = protectsInsertedDisks
         self.soundEnabled = soundEnabled
         self.soundVolume = Self.normalizedSoundVolumePercent(soundVolume)
     }
@@ -34,6 +37,7 @@ struct DriveConfiguration: Identifiable, Codable, Equatable {
         isAttached = try container.decode(Bool.self, forKey: .isAttached)
         driveType = try container.decode(DriveType.self, forKey: .driveType)
         accessMode = try container.decodeIfPresent(DriveAccessMode.self, forKey: .accessMode) ?? .native
+        protectsInsertedDisks = try container.decodeIfPresent(Bool.self, forKey: .protectsInsertedDisks) ?? true
         soundEnabled = try container.decodeIfPresent(Bool.self, forKey: .soundEnabled) ?? false
         soundVolume = Self.soundVolumePercent(fromStoredValue: try container.decodeIfPresent(Int.self, forKey: .soundVolume) ?? 25)
     }

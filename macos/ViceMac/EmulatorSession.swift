@@ -2,6 +2,8 @@ import AppKit
 import Combine
 import Foundation
 import GameController
+import ImageIO
+import UniformTypeIdentifiers
 
 struct EmulatorStartupError: Identifiable, Equatable {
     let id = UUID()
@@ -644,6 +646,9 @@ final class EmulatorSession: ObservableObject {
                 return
             }
 
+            if !isPaused {
+                pausedBecauseAppInactive = false
+            }
             applyPauseState()
         }
     }
@@ -749,6 +754,81 @@ final class EmulatorSession: ObservableObject {
             applyRAMExpansion()
         }
     }
+    @Published var mediaBehavior: MediaBehaviorConfiguration {
+        didSet {
+            guard mediaBehavior != oldValue else {
+                return
+            }
+
+            EmulatorDefaults.saveMediaBehavior(mediaBehavior, for: machine)
+            applyMediaBehavior()
+        }
+    }
+    @Published var snapshotConfiguration: SnapshotConfiguration {
+        didSet {
+            guard snapshotConfiguration != oldValue else {
+                return
+            }
+
+            EmulatorDefaults.saveSnapshotConfiguration(snapshotConfiguration, for: machine)
+        }
+    }
+    @Published var sessionBehavior: SessionBehaviorConfiguration {
+        didSet {
+            guard sessionBehavior != oldValue else {
+                return
+            }
+
+            EmulatorDefaults.saveSessionBehavior(sessionBehavior, for: machine)
+            applySessionBehavior(oldValue: oldValue)
+        }
+    }
+    @Published var printerConfiguration: PrinterConfiguration {
+        didSet {
+            let normalizedConfiguration = PrinterConfiguration(isEnabled: printerConfiguration.isEnabled,
+                                                               deviceNumber: printerConfiguration.deviceNumber,
+                                                               model: printerConfiguration.model)
+            guard printerConfiguration == normalizedConfiguration else {
+                printerConfiguration = normalizedConfiguration
+                return
+            }
+
+            guard printerConfiguration != oldValue else {
+                return
+            }
+
+            EmulatorDefaults.savePrinterConfiguration(printerConfiguration, for: machine)
+            applyPrinterConfiguration(previousDeviceNumber: oldValue.deviceNumber)
+        }
+    }
+    @Published var sidConfiguration: SIDConfiguration {
+        didSet {
+            guard sidConfiguration != oldValue else {
+                return
+            }
+
+            EmulatorDefaults.saveSIDConfiguration(sidConfiguration, for: machine)
+            applySIDConfiguration()
+        }
+    }
+    @Published var tapeConfiguration: TapeConfiguration {
+        didSet {
+            let normalizedConfiguration = TapeConfiguration(isDatasetteEnabled: tapeConfiguration.isDatasetteEnabled,
+                                                            soundEnabled: tapeConfiguration.soundEnabled,
+                                                            soundVolume: tapeConfiguration.soundVolume)
+            guard tapeConfiguration == normalizedConfiguration else {
+                tapeConfiguration = normalizedConfiguration
+                return
+            }
+
+            guard tapeConfiguration != oldValue else {
+                return
+            }
+
+            EmulatorDefaults.saveTapeConfiguration(tapeConfiguration, for: machine)
+            applyTapeConfiguration()
+        }
+    }
     @Published var controlPorts: ControlPortConfiguration {
         didSet {
             let sanitizedConfiguration = controlPorts.sanitized()
@@ -801,6 +881,7 @@ final class EmulatorSession: ObservableObject {
     }
     @Published private var driveActivities: [Int: DriveActivity] = [:]
     @Published var cartridgeStatus = CartridgeStatus.detached
+    @Published private(set) var tapeImagePath: String?
     @Published private(set) var gameControllerNames: [String] = []
     @Published private var controlPortValues: [ControlPort: UInt16] = [:]
     @Published var filterSettings: VideoFilterSettings {
@@ -814,6 +895,7 @@ final class EmulatorSession: ObservableObject {
     }
     @Published var statusText: String
     @Published var startupError: EmulatorStartupError?
+    @Published private(set) var printSpoolPages: [PrinterSpoolPage] = []
 
     let frameSource: EmulatorFrameSource
     private var didStartEngine = false
@@ -822,6 +904,8 @@ final class EmulatorSession: ObservableObject {
     private var lastJoystickValues: [UUID: UInt16] = [:]
     private var pressedMouseButtons = Set<UInt32>()
     private var gameControllerObservers: [NSObjectProtocol] = []
+    private var pausedBecauseAppInactive = false
+    private var printQueueTimer: Timer?
 
     nonisolated static func normalizedDriveConfigurations(_ configurations: [DriveConfiguration],
                                                           for machine: EmulatedMachine) -> [DriveConfiguration] {
@@ -840,6 +924,17 @@ final class EmulatorSession: ObservableObject {
 
             return configuration
         }
+    }
+
+    nonisolated static func printSpoolDirectoryURL(for machine: EmulatedMachine) -> URL {
+        let baseURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
+            .first
+            ?? URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+
+        return baseURL
+            .appendingPathComponent("mac VICE", isDirectory: true)
+            .appendingPathComponent("Print Spool", isDirectory: true)
+            .appendingPathComponent(machine.id.rawValue, isDirectory: true)
     }
 
     enum DisplayMode: String, CaseIterable, Identifiable {
@@ -1018,6 +1113,12 @@ final class EmulatorSession: ObservableObject {
         soundVolume = EmulatorDefaults.loadSoundVolume()
         romImages = EmulatorDefaults.loadROMImages(for: machine)
         ramExpansion = EmulatorDefaults.loadRAMExpansion(for: machine)
+        mediaBehavior = EmulatorDefaults.loadMediaBehavior(for: machine)
+        snapshotConfiguration = EmulatorDefaults.loadSnapshotConfiguration(for: machine)
+        sessionBehavior = EmulatorDefaults.loadSessionBehavior(for: machine)
+        printerConfiguration = EmulatorDefaults.loadPrinterConfiguration(for: machine)
+        sidConfiguration = EmulatorDefaults.loadSIDConfiguration(for: machine)
+        tapeConfiguration = EmulatorDefaults.loadTapeConfiguration(for: machine)
         controlPorts = EmulatorDefaults.loadControlPorts(for: machine)
         driveConfigurations = EmulatorDefaults.loadDriveConfigurations(for: machine)
         keyboardMapping = EmulatorDefaults.loadKeyboardMapping(for: machine)
@@ -1025,10 +1126,13 @@ final class EmulatorSession: ObservableObject {
         statusText = "Starting \(machine.shortName)"
         frameSource = EmulatorFrameSource.displaySource(for: machine)
         setupGameControllerMonitoring()
+        refreshPrintQueue()
+        startPrintQueueMonitoring()
     }
 
     deinit {
         MainActor.assumeIsolated {
+            printQueueTimer?.invalidate()
             for observer in gameControllerObservers {
                 NotificationCenter.default.removeObserver(observer)
             }
@@ -1136,6 +1240,29 @@ final class EmulatorSession: ObservableObject {
         }
     }
 
+    var printSpoolDirectoryURL: URL {
+        Self.printSpoolDirectoryURL(for: machine)
+    }
+
+    var printSpoolBaseURL: URL {
+        printSpoolDirectoryURL.appendingPathComponent(PrinterSpoolPage.filenamePrefix)
+    }
+
+    var printSpoolBasePath: String {
+        printSpoolBaseURL.path
+    }
+
+    var printQueueStatusTitle: String {
+        switch printSpoolPages.count {
+        case 0:
+            return "No pages"
+        case 1:
+            return "1 page"
+        default:
+            return "\(printSpoolPages.count) pages"
+        }
+    }
+
     func diskImagePath(for unit: Int, driveNumber: Int) -> String? {
         visibleDriveActivities
             .first { $0.unit == unit }?
@@ -1215,6 +1342,31 @@ final class EmulatorSession: ObservableObject {
 
     func controlPortDeviceID(for port: ControlPort) -> UUID? {
         controlPorts.assignedDeviceID(for: port)
+    }
+
+    var pointerControlAssignment: PointerControlAssignment {
+        let assignedPort = availableControlPorts.first { port in
+            controlPorts.assignedDevice(for: port)?.kind == .mouse1351
+        }
+
+        return PointerControlAssignment(port: assignedPort)
+    }
+
+    func setPointerControlAssignment(_ assignment: PointerControlAssignment) {
+        var updatedConfiguration = controlPorts
+
+        for port in availableControlPorts where updatedConfiguration.assignedDevice(for: port)?.kind == .mouse1351 {
+            updatedConfiguration.setAssignedDeviceID(nil, for: port)
+        }
+
+        if let port = assignment.port,
+           availableControlPorts.contains(port) {
+            let mouseID = existingMacMouseDeviceID(in: updatedConfiguration)
+                ?? makeDefaultMacMouseDevice(in: &updatedConfiguration)
+            updatedConfiguration.setAssignedDeviceID(mouseID, for: port)
+        }
+
+        controlPorts = updatedConfiguration
     }
 
     func connectionState(for device: ControlDeviceConfiguration) -> ControlDeviceConnectionState {
@@ -1311,6 +1463,16 @@ final class EmulatorSession: ObservableObject {
         controlPorts = updatedConfiguration
     }
 
+    private func existingMacMouseDeviceID(in configuration: ControlPortConfiguration) -> UUID? {
+        configuration.devices.first { $0.kind == .mouse1351 }?.id
+    }
+
+    private func makeDefaultMacMouseDevice(in configuration: inout ControlPortConfiguration) -> UUID {
+        let device = ControlDeviceConfiguration.mouse1351(name: uniqueControlDeviceName(baseName: "Mac Mouse 1351"))
+        configuration.devices.append(device)
+        return device.id
+    }
+
     func setKeyboardMappingMode(_ mode: VICEKeyboardMappingMode) {
         guard keyboardMapping.mode != mode else {
             return
@@ -1402,6 +1564,8 @@ final class EmulatorSession: ObservableObject {
             .appendingPathComponent(machine.dynamicLibraryName)
             .path
 
+        preparePrintSpoolDirectory()
+
         didStartEngine = true
         ViceEngineSetVideoFrameCallback(viceFrameCallback,
                                         Unmanaged.passUnretained(frameSource).toOpaque())
@@ -1421,6 +1585,11 @@ final class EmulatorSession: ObservableObject {
                                                                displayOutput: displayOutput,
                                                                romImages: romImages,
                                                                ramExpansion: ramExpansion,
+                                                               mediaBehavior: mediaBehavior,
+                                                               sidConfiguration: sidConfiguration,
+                                                               tapeConfiguration: tapeConfiguration,
+                                                               printerConfiguration: printerConfiguration,
+                                                               printerOutputBasePath: printSpoolBasePath,
                                                                driveConfigurations: driveConfigurations,
                                                                syncSystemTime: syncSystemTime)
         let startupArguments = machine.startupArguments(configuration: startupConfiguration)
@@ -1491,7 +1660,34 @@ final class EmulatorSession: ObservableObject {
     }
 
     func togglePause() {
+        pausedBecauseAppInactive = false
         isPaused.toggle()
+    }
+
+    func handleApplicationActivationChanged(isActive: Bool) {
+        guard sessionBehavior.pauseWhenAppInactive else {
+            return
+        }
+
+        if isActive {
+            guard pausedBecauseAppInactive else {
+                return
+            }
+
+            pausedBecauseAppInactive = false
+            if isPaused {
+                isPaused = false
+            }
+            return
+        }
+
+        guard !isPaused else {
+            pausedBecauseAppInactive = false
+            return
+        }
+
+        pausedBecauseAppInactive = true
+        isPaused = true
     }
 
     func applyFilterPreset(_ preset: VideoFilterPreset) {
@@ -1850,19 +2046,36 @@ final class EmulatorSession: ObservableObject {
 
     @discardableResult
     func openMedia(url: URL, autorun: Bool = false) -> Bool {
+        openMedia(url: url, behavior: autorun ? .run : nil)
+    }
+
+    @discardableResult
+    func openMedia(url: URL, behavior: MediaOpenBehavior?) -> Bool {
         guard let mediaFile = EmulatorMediaFile(url: url) else {
             let title = url.lastPathComponent.isEmpty ? "Media" : url.lastPathComponent
             statusText = "\(title) is not a supported media file"
             return false
         }
 
+        let openBehavior = behavior ?? mediaBehavior.openBehavior
+
         switch mediaFile {
         case let .disk(diskImageType):
             return attachDiskToFirstCompatibleDrive(url: url,
                                                     diskImageType: diskImageType,
-                                                    autorun: autorun)
-        case .autostart:
-            return autostartMedia(url: url, autorun: autorun)
+                                                    behavior: openBehavior)
+        case let .autostart(type):
+            if type == .tap,
+               openBehavior == .attach {
+                return attachTape(url: url)
+            }
+
+            let didOpen = autostartMedia(url: url, behavior: openBehavior == .attach ? .load : openBehavior)
+            if didOpen,
+               type == .tap {
+                tapeImagePath = url.path
+            }
+            return didOpen
         case .cartridge:
             return attachCartridge(url: url)
         case .snapshot:
@@ -1878,11 +2091,16 @@ final class EmulatorSession: ObservableObject {
 
     @discardableResult
     func attachDisk(to unit: Int, url: URL, autorun: Bool) -> Bool {
-        attachDisk(to: unit, driveNumber: 0, url: url, autorun: autorun)
+        attachDisk(to: unit, driveNumber: 0, url: url, behavior: autorun ? .run : .attach)
     }
 
     @discardableResult
     func attachDisk(to unit: Int, driveNumber: Int, url: URL, autorun: Bool) -> Bool {
+        attachDisk(to: unit, driveNumber: driveNumber, url: url, behavior: autorun ? .run : .attach)
+    }
+
+    @discardableResult
+    func attachDisk(to unit: Int, driveNumber: Int, url: URL, behavior: MediaOpenBehavior) -> Bool {
         guard unit >= 8 && unit <= 11 else {
             return false
         }
@@ -1905,13 +2123,16 @@ final class EmulatorSession: ObservableObject {
             return false
         }
 
+        applyDiskWriteProtection(configuration)
+        applyMediaBehavior(updateStatus: false)
+
         let didAttach = url.path.withCString { path in
-            ViceEngineAttachDisk(UInt32(unit), UInt32(driveNumber), path, autorun)
+            ViceEngineAttachDisk(UInt32(unit), UInt32(driveNumber), path, behavior.viceRunMode)
         }
 
         if didAttach {
             rememberMedia(url)
-            statusText = "\(url.lastPathComponent) attached to drive \(unit)"
+            statusText = "\(url.lastPathComponent) \(behavior.statusVerb) on \(driveAddress(unit: unit, driveNumber: driveNumber))"
         } else {
             statusText = "Unable to attach \(url.lastPathComponent)"
         }
@@ -1953,20 +2174,73 @@ final class EmulatorSession: ObservableObject {
 
     @discardableResult
     func autostartMedia(url: URL, autorun: Bool) -> Bool {
+        autostartMedia(url: url, behavior: autorun ? .run : .load)
+    }
+
+    @discardableResult
+    func autostartMedia(url: URL, behavior: MediaOpenBehavior) -> Bool {
+        let runBehavior = behavior == .attach ? MediaOpenBehavior.load : behavior
+        applyMediaBehavior(updateStatus: false)
+
         let didStart = url.path.withCString { path in
-            ViceEngineAutostartMedia(path, autorun)
+            ViceEngineAutostartMedia(path, runBehavior.viceRunMode)
         }
 
         if didStart {
             rememberMedia(url)
-            statusText = autorun
-                ? "\(url.lastPathComponent) started"
-                : "\(url.lastPathComponent) loading"
+            statusText = "\(url.lastPathComponent) \(runBehavior.statusVerb)"
         } else {
             statusText = "Unable to open \(url.lastPathComponent)"
         }
 
         return didStart
+    }
+
+    @discardableResult
+    func attachTape(url: URL) -> Bool {
+        guard machine.capabilities.supportsTape else {
+            statusText = "\(machineDisplayName) does not support tape media"
+            return false
+        }
+
+        applyTapeConfiguration(updateStatus: false)
+
+        let didAttach = url.path.withCString { path in
+            ViceEngineAttachTape(1, path)
+        }
+
+        if didAttach {
+            tapeImagePath = url.path
+            rememberMedia(url)
+            statusText = "\(url.lastPathComponent) attached to Datasette"
+        } else {
+            statusText = "Unable to attach \(url.lastPathComponent)"
+        }
+
+        return didAttach
+    }
+
+    func detachTape() {
+        guard machine.capabilities.supportsTape else {
+            return
+        }
+
+        if ViceEngineDetachTape(1) {
+            tapeImagePath = nil
+            statusText = "Tape ejected"
+        } else {
+            statusText = "Unable to eject tape"
+        }
+    }
+
+    func controlTape(_ command: TapeControlCommand) {
+        guard machine.capabilities.supportsTape else {
+            return
+        }
+
+        if ViceEngineControlTape(1, command.rawValue) {
+            statusText = "Datasette \(command.title.lowercased())"
+        }
     }
 
     private func driveAddress(unit: Int, driveNumber: Int) -> String {
@@ -2029,7 +2303,9 @@ final class EmulatorSession: ObservableObject {
         }
 
         let didSave = url.path.withCString { path in
-            ViceEngineSaveSnapshot(path, true, true)
+            ViceEngineSaveSnapshot(path,
+                                   snapshotConfiguration.includesROMImages,
+                                   snapshotConfiguration.includesAttachedDisks)
         }
 
         if didSave {
@@ -2040,6 +2316,80 @@ final class EmulatorSession: ObservableObject {
         }
 
         return didSave
+    }
+
+    @discardableResult
+    func exportScreenshot(url: URL) -> Bool {
+        guard let frame = frameSource.copyLatestFrame() else {
+            statusText = "No emulator frame is available yet"
+            return false
+        }
+
+        do {
+            try Self.writePNG(frame: frame, to: url)
+            rememberMedia(url)
+            statusText = "Screenshot exported"
+            return true
+        } catch {
+            statusText = "Unable to export screenshot"
+            return false
+        }
+    }
+
+    func refreshPrintQueue() {
+        preparePrintSpoolDirectory()
+        let pages = Self.loadPrintSpoolPages(from: printSpoolDirectoryURL)
+        if pages != printSpoolPages {
+            printSpoolPages = pages
+        }
+    }
+
+    func clearPrintQueue() {
+        for page in printSpoolPages {
+            try? FileManager.default.removeItem(at: page.url)
+        }
+        refreshPrintQueue()
+        statusText = "Print queue cleared"
+    }
+
+    @discardableResult
+    func exportPrintQueuePDF(to url: URL) -> Bool {
+        refreshPrintQueue()
+        guard !printSpoolPages.isEmpty else {
+            statusText = "No printed pages"
+            return false
+        }
+
+        do {
+            try Self.writePDF(pages: printSpoolPages, to: url)
+            rememberMedia(url)
+            statusText = "Printout saved"
+            return true
+        } catch {
+            statusText = "Unable to save printout"
+            return false
+        }
+    }
+
+    func printQueuedPages() {
+        refreshPrintQueue()
+        guard !printSpoolPages.isEmpty else {
+            statusText = "No printed pages"
+            return
+        }
+
+        let view = PrinterSpoolPrintView(pageURLs: printSpoolPages.map(\.url))
+        let printInfo = NSPrintInfo.shared.copy() as? NSPrintInfo ?? NSPrintInfo.shared
+        printInfo.horizontalPagination = .fit
+        printInfo.verticalPagination = .fit
+        printInfo.isHorizontallyCentered = true
+        printInfo.isVerticallyCentered = true
+
+        let operation = NSPrintOperation(view: view, printInfo: printInfo)
+        operation.jobTitle = "\(machine.shortName) Printout"
+        operation.showsPrintPanel = true
+        operation.showsProgressPanel = true
+        operation.run()
     }
 
     @discardableResult
@@ -2067,7 +2417,7 @@ final class EmulatorSession: ObservableObject {
 
     private func attachDiskToFirstCompatibleDrive(url: URL,
                                                   diskImageType: DiskImageFileType,
-                                                  autorun: Bool) -> Bool {
+                                                  behavior: MediaOpenBehavior) -> Bool {
         guard let target = firstCompatibleDriveTarget(for: diskImageType) else {
             statusText = "No enabled drive supports \(diskImageType.title) images"
             return false
@@ -2076,7 +2426,7 @@ final class EmulatorSession: ObservableObject {
         return attachDisk(to: target.unit,
                           driveNumber: target.driveNumber,
                           url: url,
-                          autorun: autorun)
+                          behavior: behavior)
     }
 
     private func firstCompatibleDriveTarget(for diskImageType: DiskImageFileType) -> (unit: Int, driveNumber: Int)? {
@@ -2096,12 +2446,157 @@ final class EmulatorSession: ObservableObject {
         NSDocumentController.shared.noteNewRecentDocumentURL(url)
     }
 
+    private func startPrintQueueMonitoring() {
+        printQueueTimer?.invalidate()
+        printQueueTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.refreshPrintQueue()
+            }
+        }
+    }
+
+    private func preparePrintSpoolDirectory() {
+        try? FileManager.default.createDirectory(at: printSpoolDirectoryURL,
+                                                 withIntermediateDirectories: true)
+    }
+
+    private static func loadPrintSpoolPages(from directoryURL: URL) -> [PrinterSpoolPage] {
+        guard let urls = try? FileManager.default.contentsOfDirectory(at: directoryURL,
+                                                                      includingPropertiesForKeys: [
+                                                                        .contentModificationDateKey,
+                                                                        .fileSizeKey,
+                                                                        .isRegularFileKey
+                                                                      ],
+                                                                      options: [.skipsHiddenFiles]) else {
+            return []
+        }
+
+        return urls
+            .filter { url in
+                url.pathExtension.lowercased() == "bmp"
+                    && url.deletingPathExtension().lastPathComponent.hasPrefix(PrinterSpoolPage.filenamePrefix)
+            }
+            .compactMap { url -> PrinterSpoolPage? in
+                guard let values = try? url.resourceValues(forKeys: [
+                    .contentModificationDateKey,
+                    .fileSizeKey,
+                    .isRegularFileKey
+                ]),
+                      values.isRegularFile == true else {
+                    return nil
+                }
+
+                return PrinterSpoolPage(url: url,
+                                        byteCount: values.fileSize ?? 0,
+                                        modifiedAt: values.contentModificationDate ?? .distantPast)
+            }
+            .sorted { lhs, rhs in
+                if lhs.modifiedAt == rhs.modifiedAt {
+                    return lhs.url.lastPathComponent < rhs.url.lastPathComponent
+                }
+                return lhs.modifiedAt < rhs.modifiedAt
+            }
+    }
+
+    private static func writePNG(frame: EmulatorVideoFrame, to url: URL) throws {
+        guard frame.width > 0,
+              frame.height > 0,
+              frame.bytesPerRow >= frame.width * 4,
+              frame.pixels.count >= frame.bytesPerRow * frame.height else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+
+        guard let provider = CGDataProvider(data: frame.pixels as CFData),
+              let image = CGImage(width: frame.width,
+                                  height: frame.height,
+                                  bitsPerComponent: 8,
+                                  bitsPerPixel: 32,
+                                  bytesPerRow: frame.bytesPerRow,
+                                  space: CGColorSpaceCreateDeviceRGB(),
+                                  bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+                                  provider: provider,
+                                  decode: nil,
+                                  shouldInterpolate: false,
+                                  intent: .defaultIntent),
+              let destination = CGImageDestinationCreateWithURL(url as CFURL,
+                                                               UTType.png.identifier as CFString,
+                                                               1,
+                                                               nil) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+
+        CGImageDestinationAddImage(destination, image, nil)
+        guard CGImageDestinationFinalize(destination) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+    }
+
+    private static func writePDF(pages: [PrinterSpoolPage], to url: URL) throws {
+        let renderedPages = try pages.map { page -> (image: CGImage, box: CGRect) in
+            let source = try imageSource(for: page.url)
+            let image = try cgImage(from: source)
+            return (image, pdfPageBox(for: source, image: image))
+        }
+
+        guard let firstPage = renderedPages.first else {
+            throw CocoaError(.fileReadNoSuchFile)
+        }
+
+        var mediaBox = firstPage.box
+        guard let context = CGContext(url as CFURL, mediaBox: &mediaBox, nil) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+
+        for page in renderedPages {
+            context.beginPDFPage(nil)
+            context.interpolationQuality = .none
+            context.draw(page.image, in: mediaBox)
+            context.endPDFPage()
+        }
+        context.closePDF()
+    }
+
+    private static func imageSource(for url: URL) throws -> CGImageSource {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, [
+            kCGImageSourceShouldCache: true
+        ] as CFDictionary) else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+
+        return source
+    }
+
+    private static func cgImage(from source: CGImageSource) throws -> CGImage {
+        guard let image = CGImageSourceCreateImageAtIndex(source, 0, [
+            kCGImageSourceShouldCache: true
+        ] as CFDictionary) else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+
+        return image
+    }
+
+    private static func pdfPageBox(for source: CGImageSource, image: CGImage) -> CGRect {
+        let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
+        let dpiX = properties?[kCGImagePropertyDPIWidth] as? CGFloat ?? 72
+        let dpiY = properties?[kCGImagePropertyDPIHeight] as? CGFloat ?? 72
+        let width = CGFloat(image.width) * 72 / max(dpiX, 1)
+        let height = CGFloat(image.height) * 72 / max(dpiY, 1)
+
+        return CGRect(x: 0, y: 0, width: max(width, 1), height: max(height, 1))
+    }
+
     private func applyRuntimeConfiguration() {
         if machine.supportsRuntimeVideoStandardUpdates {
             applyVideoStandard(updateStatus: false)
         }
+        applySessionBehavior(oldValue: sessionBehavior)
+        applyMediaBehavior(updateStatus: false)
+        applyPrinterConfiguration(updateStatus: false)
         applySIDModel(updateStatus: false)
+        applySIDConfiguration(updateStatus: false)
         applySoundSettings(updateStatus: false)
+        applyTapeConfiguration(updateStatus: false)
         applyEmulationSpeed(updateStatus: false)
         applyDisplayOutput(updateStatus: false)
         applyPauseState(updateStatus: false)
@@ -2112,6 +2607,19 @@ final class EmulatorSession: ObservableObject {
         applyKeyboardMapping(updateStatus: false)
         applyControlPorts()
         applySystemTimeSync(updateStatus: false)
+    }
+
+    private func applySessionBehavior(oldValue: SessionBehaviorConfiguration) {
+        guard oldValue.pauseWhenAppInactive,
+              !sessionBehavior.pauseWhenAppInactive,
+              pausedBecauseAppInactive else {
+            return
+        }
+
+        pausedBecauseAppInactive = false
+        if isPaused {
+            isPaused = false
+        }
     }
 
     private func applySystemTimeSync(updateStatus: Bool = true) {
@@ -2146,6 +2654,7 @@ final class EmulatorSession: ObservableObject {
         if case .x64sc = activeMachineModel {
             applyMachineModel(updateStatus: false)
             applySIDModel(updateStatus: false)
+            applySIDConfiguration(updateStatus: false)
             applyROMImages()
             applyDriveConfigurations(updateStatus: false)
         } else {
@@ -2171,6 +2680,77 @@ final class EmulatorSession: ObservableObject {
 
         if updateStatus {
             statusText = "SID \(sidModel.title)"
+        }
+    }
+
+    private func applySIDConfiguration(updateStatus: Bool = true) {
+        guard ViceEngineIsRunning(),
+              machine.capabilities.supportsSIDModelSelection else {
+            return
+        }
+
+        setVICEIntResource("Sid2AddressStart", value: sidConfiguration.secondAddress.rawValue)
+        setVICEIntResource("Sid3AddressStart", value: sidConfiguration.thirdAddress.rawValue)
+        setVICEIntResource("SidStereo", value: sidConfiguration.layout.extraSIDCount)
+
+        if updateStatus {
+            statusText = sidConfiguration.layout.title
+        }
+    }
+
+    private func applyMediaBehavior(updateStatus: Bool = true) {
+        guard ViceEngineIsRunning() else {
+            return
+        }
+
+        setVICEIntResource("AutostartWarp", value: mediaBehavior.warpDuringAutostart ? 1 : 0)
+        setVICEIntResource("AutostartHandleTrueDriveEmulation",
+                           value: mediaBehavior.useTrueDriveDuringAutostart ? 1 : 0)
+
+        if updateStatus {
+            statusText = "Media opens with \(mediaBehavior.openBehavior.title.lowercased())"
+        }
+    }
+
+    private func applyPrinterConfiguration(updateStatus: Bool = true,
+                                           previousDeviceNumber: Int? = nil) {
+        guard ViceEngineIsRunning() else {
+            return
+        }
+
+        preparePrintSpoolDirectory()
+
+        let device = printerConfiguration.deviceNumber
+        if let previousDeviceNumber,
+           previousDeviceNumber != device {
+            setVICEIntResource("Printer\(previousDeviceNumber)", value: 0)
+            setVICEIntResource("BusDevice\(previousDeviceNumber)", value: 0)
+        }
+
+        setVICEStringResource("PrinterTextDevice1", value: printSpoolBasePath)
+        setVICEIntResource("Printer\(device)TextDevice", value: 0)
+        setVICEStringResource("Printer\(device)Driver", value: printerConfiguration.model.viceDriverName)
+        setVICEStringResource("Printer\(device)Output", value: printerConfiguration.model.outputMode)
+        setVICEIntResource("Printer\(device)", value: printerConfiguration.isEnabled ? 1 : 0)
+        setVICEIntResource("BusDevice\(device)", value: printerConfiguration.isEnabled ? 1 : 0)
+
+        if updateStatus {
+            statusText = "Printer \(printerConfiguration.statusTitle.lowercased())"
+        }
+    }
+
+    private func applyTapeConfiguration(updateStatus: Bool = true) {
+        guard ViceEngineIsRunning(),
+              machine.capabilities.supportsTape else {
+            return
+        }
+
+        setVICEIntResource("TapePort1Device", value: tapeConfiguration.isDatasetteEnabled ? 1 : 0)
+        setVICEIntResource("DatasetteSound", value: tapeConfiguration.soundEnabled ? 1 : 0)
+        setVICEIntResource("DatasetteSoundVolume", value: tapeConfiguration.viceSoundVolume)
+
+        if updateStatus {
+            statusText = tapeConfiguration.isDatasetteEnabled ? "Datasette connected" : "Datasette disconnected"
         }
     }
 
@@ -2209,6 +2789,7 @@ final class EmulatorSession: ObservableObject {
 
         applyMachineModel()
         applySIDModel(updateStatus: false)
+        applySIDConfiguration(updateStatus: false)
         applyROMImages()
         applyDriveConfigurations(updateStatus: false)
     }
@@ -2349,6 +2930,7 @@ final class EmulatorSession: ObservableObject {
 
             setVICEIntResource("Drive\(configuration.unit)Type", value: driveType)
             applyDriveAccessMode(configuration)
+            applyDiskWriteProtection(configuration)
         }
 
         if updateStatus {
@@ -2367,6 +2949,7 @@ final class EmulatorSession: ObservableObject {
         }
 
         var accessModeUpdates: [DriveConfiguration] = []
+        var driveProtectionUpdates: [DriveConfiguration] = []
         var driveSoundSettingsChanged = false
 
         for configuration in driveConfigurations {
@@ -2382,6 +2965,7 @@ final class EmulatorSession: ObservableObject {
             let driveHardwareUnchanged = configuration.isAttached == oldConfiguration.isAttached
                 && configuration.driveType == oldConfiguration.driveType
             let accessModeChanged = configuration.accessMode != oldConfiguration.accessMode
+            let driveProtectionChanged = configuration.protectsInsertedDisks != oldConfiguration.protectsInsertedDisks
             let driveSoundChanged = configuration.soundEnabled != oldConfiguration.soundEnabled
                 || configuration.soundVolume != oldConfiguration.soundVolume
 
@@ -2398,7 +2982,11 @@ final class EmulatorSession: ObservableObject {
                 driveSoundSettingsChanged = true
             }
 
-            guard accessModeChanged || driveSoundChanged else {
+            if driveProtectionChanged {
+                driveProtectionUpdates.append(configuration)
+            }
+
+            guard accessModeChanged || driveSoundChanged || driveProtectionChanged else {
                 applyDriveConfigurations()
                 return
             }
@@ -2410,6 +2998,10 @@ final class EmulatorSession: ObservableObject {
 
         for configuration in accessModeUpdates {
             applyDriveAccessMode(configuration)
+        }
+
+        for configuration in driveProtectionUpdates {
+            applyDiskWriteProtection(configuration)
         }
     }
 
@@ -2432,6 +3024,13 @@ final class EmulatorSession: ObservableObject {
                            value: accessMode.trueDriveEmulationResourceValue)
         setVICEIntResource("TrapDevice\(configuration.unit)",
                            value: accessMode.trapDeviceResourceValue)
+    }
+
+    private func applyDiskWriteProtection(_ configuration: DriveConfiguration) {
+        for driveNumber in configuration.driveType.driveNumbers {
+            setVICEIntResource("AttachDevice\(configuration.unit)d\(driveNumber)Readonly",
+                               value: configuration.protectsInsertedDisks ? 1 : 0)
+        }
     }
 
     private func setVICEIntResource(_ name: String, value: Int32) {
@@ -2745,6 +3344,80 @@ final class EmulatorSession: ObservableObject {
         controller.vendorName ?? "Game Controller"
     }
 
+}
+
+private final class PrinterSpoolPrintView: NSView {
+    private let images: [NSImage]
+    private let paperSize: NSSize
+
+    init(pageURLs: [URL]) {
+        images = pageURLs.compactMap(NSImage.init(contentsOf:))
+        let printInfo = NSPrintInfo.shared
+        paperSize = printInfo.paperSize
+        super.init(frame: NSRect(x: 0,
+                                 y: 0,
+                                 width: max(printInfo.paperSize.width, 1),
+                                 height: max(printInfo.paperSize.height * CGFloat(max(images.count, 1)), 1)))
+    }
+
+    required init?(coder: NSCoder) {
+        images = []
+        paperSize = NSPrintInfo.shared.paperSize
+        super.init(coder: coder)
+    }
+
+    override var isFlipped: Bool {
+        true
+    }
+
+    override func knowsPageRange(_ range: NSRangePointer) -> Bool {
+        range.pointee = NSRange(location: 1, length: max(images.count, 1))
+        return true
+    }
+
+    override func rectForPage(_ page: Int) -> NSRect {
+        NSRect(x: 0,
+               y: CGFloat(max(page - 1, 0)) * paperSize.height,
+               width: paperSize.width,
+               height: paperSize.height)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.white.setFill()
+        dirtyRect.fill()
+
+        for (index, image) in images.enumerated() {
+            let pageRect = rectForPage(index + 1)
+            guard dirtyRect.intersects(pageRect) else {
+                continue
+            }
+
+            let destination = image.size.scaledToFit(in: pageRect.insetBy(dx: 36, dy: 36))
+            image.draw(in: destination,
+                       from: .zero,
+                       operation: .sourceOver,
+                       fraction: 1)
+        }
+    }
+}
+
+private extension NSSize {
+    func scaledToFit(in rect: NSRect) -> NSRect {
+        guard width > 0,
+              height > 0,
+              rect.width > 0,
+              rect.height > 0 else {
+            return rect
+        }
+
+        let scale = min(rect.width / width, rect.height / height)
+        let scaledSize = NSSize(width: width * scale, height: height * scale)
+
+        return NSRect(x: rect.midX - scaledSize.width / 2,
+                      y: rect.midY - scaledSize.height / 2,
+                      width: scaledSize.width,
+                      height: scaledSize.height)
+    }
 }
 
 private enum ViceResource {

@@ -55,6 +55,12 @@ final class EmulatorFrameSource {
         }
     }
 
+    func copyLatestFrame() -> EmulatorVideoFrame? {
+        lock.withLock {
+            latestFrame
+        }
+    }
+
     func presentationSize(for pixelSize: CGSize) -> CGSize {
         displayProfile.presentationSize(for: pixelSize)
     }

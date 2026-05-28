@@ -44,10 +44,13 @@ typedef int (*ViceQueueDriveResetFunction)(uint32_t unit);
 typedef int (*ViceQueueDriveAttachDiskFunction)(uint32_t unit,
                                                 uint32_t drive,
                                                 const char *path,
-                                                int autorun);
+                                                int run_mode);
 typedef int (*ViceQueueDriveDetachDiskFunction)(uint32_t unit, uint32_t drive);
 typedef int (*ViceQueueDriveSoundPreviewFunction)(uint32_t unit);
-typedef int (*ViceQueueMediaAutostartFunction)(const char *path, int autorun);
+typedef int (*ViceQueueMediaAutostartFunction)(const char *path, int run_mode);
+typedef int (*ViceQueueTapeAttachFunction)(uint32_t unit, const char *path);
+typedef int (*ViceQueueTapeDetachFunction)(uint32_t unit);
+typedef int (*ViceQueueTapeControlFunction)(uint32_t unit, int command);
 typedef int (*ViceQueueCartridgeAttachFunction)(const char *path);
 typedef int (*ViceQueueCartridgeDetachFunction)(void);
 typedef int (*ViceSaveSnapshotFunction)(const char *path, int save_roms, int save_disks);
@@ -122,6 +125,9 @@ typedef struct ViceEngineSymbols {
     ViceQueueDriveDetachDiskFunction queueDriveDetachDisk;
     ViceQueueDriveSoundPreviewFunction queueDriveSoundPreview;
     ViceQueueMediaAutostartFunction queueMediaAutostart;
+    ViceQueueTapeAttachFunction queueTapeAttach;
+    ViceQueueTapeDetachFunction queueTapeDetach;
+    ViceQueueTapeControlFunction queueTapeControl;
     ViceQueueCartridgeAttachFunction queueCartridgeAttach;
     ViceQueueCartridgeDetachFunction queueCartridgeDetach;
     ViceSaveSnapshotFunction saveSnapshot;
@@ -383,6 +389,9 @@ static int loadRuntimeSymbols(void *handle, ViceEngineSymbols *symbols)
     LOAD_RUNTIME_SYMBOL(queueDriveDetachDisk, "vicemac_queue_drive_detach_disk");
     LOAD_RUNTIME_SYMBOL(queueDriveSoundPreview, "vicemac_queue_drive_sound_preview");
     LOAD_RUNTIME_SYMBOL(queueMediaAutostart, "vicemac_queue_media_autostart");
+    LOAD_RUNTIME_SYMBOL(queueTapeAttach, "vicemac_queue_tape_attach");
+    LOAD_RUNTIME_SYMBOL(queueTapeDetach, "vicemac_queue_tape_detach");
+    LOAD_RUNTIME_SYMBOL(queueTapeControl, "vicemac_queue_tape_control");
     LOAD_RUNTIME_SYMBOL(queueCartridgeAttach, "vicemac_queue_cartridge_attach");
     LOAD_RUNTIME_SYMBOL(queueCartridgeDetach, "vicemac_queue_cartridge_detach");
     LOAD_RUNTIME_SYMBOL(saveSnapshot, "vicemac_save_snapshot");
@@ -754,13 +763,13 @@ bool ViceEngineResetDrive(uint32_t unit)
     return runtimeSymbols.queueDriveReset(unit) != 0;
 }
 
-bool ViceEngineAttachDisk(uint32_t unit, uint32_t drive, const char *path, bool autorun)
+bool ViceEngineAttachDisk(uint32_t unit, uint32_t drive, const char *path, int32_t runMode)
 {
     if (!atomic_load(&engineRunning) || runtimeSymbols.queueDriveAttachDisk == NULL) {
         return false;
     }
 
-    return runtimeSymbols.queueDriveAttachDisk(unit, drive, path, autorun ? 1 : 0) != 0;
+    return runtimeSymbols.queueDriveAttachDisk(unit, drive, path, runMode) != 0;
 }
 
 bool ViceEngineDetachDisk(uint32_t unit, uint32_t drive)
@@ -781,13 +790,40 @@ bool ViceEnginePreviewDriveSound(uint32_t unit)
     return runtimeSymbols.queueDriveSoundPreview(unit) != 0;
 }
 
-bool ViceEngineAutostartMedia(const char *path, bool autorun)
+bool ViceEngineAutostartMedia(const char *path, int32_t runMode)
 {
     if (!atomic_load(&engineRunning) || runtimeSymbols.queueMediaAutostart == NULL) {
         return false;
     }
 
-    return runtimeSymbols.queueMediaAutostart(path, autorun ? 1 : 0) != 0;
+    return runtimeSymbols.queueMediaAutostart(path, runMode) != 0;
+}
+
+bool ViceEngineAttachTape(uint32_t unit, const char *path)
+{
+    if (!atomic_load(&engineRunning) || runtimeSymbols.queueTapeAttach == NULL) {
+        return false;
+    }
+
+    return runtimeSymbols.queueTapeAttach(unit, path) != 0;
+}
+
+bool ViceEngineDetachTape(uint32_t unit)
+{
+    if (!atomic_load(&engineRunning) || runtimeSymbols.queueTapeDetach == NULL) {
+        return false;
+    }
+
+    return runtimeSymbols.queueTapeDetach(unit) != 0;
+}
+
+bool ViceEngineControlTape(uint32_t unit, int32_t command)
+{
+    if (!atomic_load(&engineRunning) || runtimeSymbols.queueTapeControl == NULL) {
+        return false;
+    }
+
+    return runtimeSymbols.queueTapeControl(unit, command) != 0;
 }
 
 bool ViceEngineAttachCartridge(const char *path)

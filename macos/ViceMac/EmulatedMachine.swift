@@ -586,6 +586,7 @@ struct MachineCapabilities: Equatable {
     let supportsCartridges: Bool
     let supportsRAMExpansion: Bool
     var supportsSystemTimeSync = false
+    var supportsTape = true
     let controlPorts: [ControlPort]
     let driveUnits: [Int]
     let driveTypes: [DriveType]
@@ -604,6 +605,11 @@ struct MachineStartupConfiguration {
     let displayOutput: MachineDisplayOutput
     let romImages: ROMImageConfiguration
     let ramExpansion: RAMExpansion
+    let mediaBehavior: MediaBehaviorConfiguration
+    let sidConfiguration: SIDConfiguration
+    let tapeConfiguration: TapeConfiguration
+    let printerConfiguration: PrinterConfiguration
+    let printerOutputBasePath: String
     let driveConfigurations: [DriveConfiguration]
     let syncSystemTime: Bool
 }
@@ -683,6 +689,9 @@ struct EmulatedMachine: Identifiable, Equatable {
         ]
 
         arguments += startupOptions(for: configuration)
+        arguments += mediaStartupOptions(for: configuration.mediaBehavior)
+        arguments += printerStartupOptions(configuration: configuration.printerConfiguration,
+                                           outputBasePath: configuration.printerOutputBasePath)
 
         if let startupOption = configuration.displayOutput.startupOption {
             arguments.append(startupOption)
@@ -693,6 +702,11 @@ struct EmulatedMachine: Identifiable, Equatable {
                 "-sidmodel",
                 "\(configuration.sidModel.rawValue)"
             ]
+            arguments += sidStartupOptions(for: configuration.sidConfiguration)
+        }
+
+        if capabilities.supportsTape {
+            arguments += tapeStartupOptions(for: configuration.tapeConfiguration)
         }
 
         if capabilities.supportsSystemTimeSync && configuration.syncSystemTime {
@@ -726,6 +740,68 @@ struct EmulatedMachine: Identifiable, Equatable {
         return arguments
     }
 
+    private func mediaStartupOptions(for configuration: MediaBehaviorConfiguration) -> [String] {
+        [
+            configuration.useTrueDriveDuringAutostart ? "-autostart-handle-tde" : "+autostart-handle-tde",
+            configuration.warpDuringAutostart ? "-autostart-warp" : "+autostart-warp"
+        ]
+    }
+
+    private func sidStartupOptions(for configuration: SIDConfiguration) -> [String] {
+        var options = [
+            "-sidextra",
+            "\(configuration.layout.extraSIDCount)"
+        ]
+
+        if configuration.layout.extraSIDCount >= 1 {
+            options += [
+                "-sid2address",
+                "\(configuration.secondAddress.rawValue)"
+            ]
+        }
+
+        if configuration.layout.extraSIDCount >= 2 {
+            options += [
+                "-sid3address",
+                "\(configuration.thirdAddress.rawValue)"
+            ]
+        }
+
+        return options
+    }
+
+    private func tapeStartupOptions(for configuration: TapeConfiguration) -> [String] {
+        [
+            "-tapeport1device",
+            configuration.isDatasetteEnabled ? "1" : "0",
+            configuration.soundEnabled ? "-datasettesound" : "+datasettesound",
+            "-dssoundvolume",
+            "\(configuration.viceSoundVolume)"
+        ]
+    }
+
+    private func printerStartupOptions(configuration: PrinterConfiguration,
+                                       outputBasePath: String) -> [String] {
+        let device = configuration.deviceNumber
+        let textDeviceOption = "-pr\(device)txtdev"
+        let driverOption = "-pr\(device)drv"
+        let outputOption = "-pr\(device)output"
+
+        return [
+            configuration.isEnabled ? "-busdevice\(device)" : "+busdevice\(device)",
+            "-devicebackend\(device)",
+            configuration.isEnabled ? "1" : "0",
+            "-prtxtdev1",
+            outputBasePath,
+            textDeviceOption,
+            "0",
+            driverOption,
+            configuration.model.viceDriverName,
+            outputOption,
+            configuration.model.outputMode
+        ]
+    }
+
     private func driveStartupOptions(for configurations: [DriveConfiguration]) -> [String] {
         var options: [String] = []
         let activeConfigurations = configurations.filter { configuration in
@@ -752,6 +828,13 @@ struct EmulatedMachine: Identifiable, Equatable {
                 accessMode == .native ? "-drive\(configuration.unit)truedrive" : "+drive\(configuration.unit)truedrive",
                 accessMode == .fast ? "-trapdevice\(configuration.unit)" : "+trapdevice\(configuration.unit)"
             ]
+
+            for driveNumber in configuration.driveType.driveNumbers {
+                let suffix = driveNumber == 0 ? "" : "d\(driveNumber)"
+                options.append(configuration.protectsInsertedDisks
+                               ? "-attach\(configuration.unit)\(suffix)ro"
+                               : "-attach\(configuration.unit)\(suffix)rw")
+            }
         }
 
         return options

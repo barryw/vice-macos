@@ -215,6 +215,58 @@ enum ControlDeviceConnectionState: Equatable {
     }
 }
 
+enum PointerControlAssignment: String, CaseIterable, Identifiable {
+    case off
+    case port1
+    case port2
+
+    var id: String { rawValue }
+
+    var port: ControlPort? {
+        switch self {
+        case .off:
+            return nil
+        case .port1:
+            return .one
+        case .port2:
+            return .two
+        }
+    }
+
+    init(port: ControlPort?) {
+        switch port {
+        case .one:
+            self = .port1
+        case .two:
+            self = .port2
+        case nil:
+            self = .off
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .off:
+            return "Off"
+        case .port1:
+            return "Port 1"
+        case .port2:
+            return "Port 2"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .off:
+            return "The Mac pointer stays with macOS."
+        case .port1:
+            return "Use the Mac pointer as a 1351 mouse in port 1."
+        case .port2:
+            return "Use the Mac pointer as a 1351 mouse in port 2."
+        }
+    }
+}
+
 struct KeyboardJoystickMapping: Codable, Equatable {
     var up: UInt16
     var down: UInt16
