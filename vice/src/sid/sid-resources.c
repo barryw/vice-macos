@@ -67,9 +67,11 @@ static int sid_resid_8580_filter_bias;
 static int sid_resid_enable_raw_output;
 #endif
 #if defined(HAVE_RESIDFP)
+static int sid_residfp_6581_old_caps;
 static int sid_residfp_6581_filter_curve;
 static int sid_residfp_6581_filter_range;
 static int sid_residfp_8580_filter_curve;
+static int sid_residfp_combined_waveform_strength;
 #endif
 int sid_stereo = 0;
 int checking_sid_stereo;
@@ -104,7 +106,9 @@ static int set_sid_engine(int set_engine, void *param)
     int engine = set_engine;
 
     if (engine == SID_ENGINE_DEFAULT) {
-#ifdef HAVE_RESID
+#if defined(HAVE_RESIDFP)
+        engine = SID_ENGINE_RESIDFP;
+#elif defined(HAVE_RESID)
         engine = SID_ENGINE_RESID;
 #else
         engine = SID_ENGINE_FASTSID;
@@ -397,6 +401,28 @@ static int set_sid_residfp_6581_filter_range(int i, void *param)
     return 0;
 }
 
+static int set_sid_residfp_combined_waveform_strength(int i, void *param)
+{
+    if (i < RESIDFP_COMBINED_WAVEFORM_STRENGTH_MIN) {
+        i = RESIDFP_COMBINED_WAVEFORM_STRENGTH_MIN;
+    } else if (i > RESIDFP_COMBINED_WAVEFORM_STRENGTH_MAX) {
+        i = RESIDFP_COMBINED_WAVEFORM_STRENGTH_MAX;
+    }
+
+    sid_residfp_combined_waveform_strength = i;
+    sid_state_changed = 1;
+    return 0;
+}
+
+static int set_sid_residfp_6581_old_caps(int val, void *param)
+{
+    sid_residfp_6581_old_caps = val ? 1 : 0;
+
+    sid_state_changed = 1;
+
+    return 0;
+}
+
 #endif
 
 #ifdef HAVE_HARDSID
@@ -458,7 +484,7 @@ static int sid_enabled = 1;
 void sid_set_enable(int value)
 {
     int val = value ? 1 : 0;
-
+printf("sid_set_enable: %d\n",value);
     if (val == sid_enabled) {
         return;
     }
@@ -507,19 +533,27 @@ static const resource_int_t resid_resources_int[] = {
 
 #if defined(HAVE_RESIDFP)
 static const resource_int_t residfp_resources_int[] = {
+    { "SidResid6581OldCaps", 0, RES_EVENT_NO, NULL,
+      &sid_residfp_6581_old_caps, set_sid_residfp_6581_old_caps, NULL },
     { "SidResid6581FilterCurve", RESIDFP_6581_FILTER_CURVE_DEFAULT, RES_EVENT_NO, NULL,
       &sid_residfp_6581_filter_curve, set_sid_residfp_6581_filter_curve, NULL },
     { "SidResid6581FilterRange", RESIDFP_6581_FILTER_RANGE_DEFAULT, RES_EVENT_NO, NULL,
       &sid_residfp_6581_filter_range, set_sid_residfp_6581_filter_range, NULL },
     { "SidResid8580FilterCurve", RESIDFP_8580_FILTER_CURVE_DEFAULT, RES_EVENT_NO, NULL,
       &sid_residfp_8580_filter_curve, set_sid_residfp_8580_filter_curve, NULL },
+    { "SidResidCombinedWaveformStrength", RESIDFP_COMBINED_WAVEFORM_STRENGTH_DEFAULT, RES_EVENT_NO, NULL,
+      &sid_residfp_combined_waveform_strength, set_sid_residfp_combined_waveform_strength, NULL },
     RESOURCE_INT_LIST_END
 };
 #endif
 
 static resource_int_t common_resources_int[] = {
     /* CAUTION: position is hardcoded below */
-#if defined (HAVE_RESID) || defined (HAVE_RESIDFP)
+#if defined (HAVE_RESIDFP)
+    { "SidEngine", SID_ENGINE_DEFAULT,
+      RES_EVENT_STRICT, (resource_value_t)SID_ENGINE_RESIDFP,
+      &sid_engine, set_sid_engine, NULL },
+#elif defined (HAVE_RESID)
     { "SidEngine", SID_ENGINE_DEFAULT,
       RES_EVENT_STRICT, (resource_value_t)SID_ENGINE_RESID,
       &sid_engine, set_sid_engine, NULL },
@@ -574,7 +608,9 @@ int sid_common_resources_init(void)
        here so the default value will not end up in the config file. */
 
     /* setup the default for sid engine */
-#ifdef HAVE_RESID
+#ifdef HAVE_RESIDFP
+    common_resources_int[0].factory_value = SID_ENGINE_RESIDFP;
+#elif defined(HAVE_RESID)
     common_resources_int[0].factory_value = SID_ENGINE_RESID;
 #else
     common_resources_int[0].factory_value = SID_ENGINE_FASTSID;
