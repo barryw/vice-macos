@@ -18,7 +18,7 @@ steps:
     image: bash
     commands:
       - bash -n website/tools/capture-marketing-screenshots.sh
-      - tidy -qe website/index.html
+      - tidy -qe --new-blocklevel-tags header,nav,main,section,figure,figcaption website/index.html
       - node --check website/site.js
       - kubectl apply -k k8s --dry-run=client
 
