@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: macvice
+  labels:
+    app.kubernetes.io/name: macvice
+    app.kubernetes.io/part-of: macvice

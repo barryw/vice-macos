@@ -6,10 +6,10 @@
     <title>mac VICE - Native Commodore emulation for macOS</title>
     <meta
       name="description"
-      content="mac VICE wraps the trusted VICE emulator core in native Apple Silicon Mac apps with Metal display output, signed releases, and Mac-first controls."
+      content="mac VICE packages the VICE emulator as native Apple Silicon Mac apps with Metal display output, Mac settings, and signed DMG releases."
     >
     <meta property="og:title" content="mac VICE">
-    <meta property="og:description" content="Native Apple Silicon apps for the VICE emulator engine.">
+    <meta property="og:description" content="VICE emulator apps for Apple Silicon Macs.">
     <meta property="og:type" content="website">
     <meta property="og:image" content="assets/mac-vice-icon.png">
     <link rel="icon" href="assets/mac-vice-icon.png">
@@ -23,10 +23,8 @@
         <span>mac VICE</span>
       </a>
       <nav class="site-nav" aria-label="Primary">
-        <a href="#features">Features</a>
-        <a href="#machines">Machines</a>
-        <a href="#screenshots">Screenshots</a>
-        <a href="#disk-tool">Disk Tool</a>
+        <a href="#gallery">Gallery</a>
+        <a href="#disk-tool">Disk Manager</a>
         <a href="#download">Download</a>
       </nav>
     </header>
@@ -34,11 +32,11 @@
     <main id="top">
       <section class="hero" aria-labelledby="hero-title">
         <div class="hero-copy">
-          <p class="eyebrow">Native Apple Silicon builds of VICE</p>
+          <p class="eyebrow">VICE, packaged for macOS</p>
           <h1 id="hero-title">mac VICE</h1>
           <p class="hero-subtitle">
-            A native Mac home for the VICE engine: Metal display output, Mac menus,
-            visual settings, signed DMGs, and one focused app for each machine.
+            Current VICE, packaged for Apple Silicon Macs with Metal display
+            output, Mac settings, and signed DMG releases.
           </p>
           <div class="hero-actions">
             <a
@@ -46,148 +44,65 @@
               id="hero-download"
               href="https://github.com/barryw/vice-macos/releases/latest"
             >Download latest DMG</a>
-            <a class="button secondary" href="#screenshots">See the app</a>
+            <a class="button secondary" href="#gallery">View gallery</a>
           </div>
           <p class="release-note" id="hero-release-note">
-            Latest notarized release is published on GitHub.
+            Latest signed release is published on GitHub.
           </p>
         </div>
 
         <div class="hero-stage" aria-label="mac VICE app preview">
           <figure class="hero-shot">
             <img
-              src="assets/screenshots/x64sc-basic.png"
+              src="assets/screenshots/x64sc-hvsc.png"
               width="1800"
-              height="949"
-              alt="x64sc running a BASIC loop in a native mac VICE window"
+              height="930"
+              alt="x64sc running the HVSC intro disk in a native mac VICE window"
             >
-            <figcaption>x64sc with Metal display controls and native Mac window chrome.</figcaption>
+            <figcaption>x64sc running the HVSC intro disk.</figcaption>
           </figure>
-          <div class="floating-panel display-panel" aria-hidden="true">
-            <strong>Display</strong>
-            <span>CRT 1084</span>
-            <span>Scanlines 34%</span>
-            <span>Warmth 18%</span>
-          </div>
-          <div class="floating-panel release-panel" aria-hidden="true">
-            <strong>Release</strong>
-            <span>Signed DMG</span>
-            <span>Sparkle updates</span>
-          </div>
         </div>
       </section>
 
-      <section class="trust-strip" aria-label="Release highlights">
-        <span>Real upstream VICE core</span>
-        <span>Developer ID signed</span>
-        <span>Apple notarized</span>
-        <span>Sparkle updates</span>
-      </section>
-
-      <section class="section" id="features" aria-labelledby="features-title">
+      <section class="section gallery-section" id="gallery" aria-labelledby="gallery-title">
         <div class="section-heading">
-          <p class="eyebrow">Mac-first without losing VICE</p>
-          <h2 id="features-title">The emulator serious Commodore users already trust, rebuilt around native macOS.</h2>
+          <p class="eyebrow">Machine gallery</p>
+          <h2 id="gallery-title">The machines are the point.</h2>
         </div>
 
-        <div class="feature-grid">
-          <article class="feature-card accent-blue">
-            <h3>Native Metal Display</h3>
-            <p>
-              Low-latency frame delivery with display profiles for clean LCD output,
-              CRT-style displays, PVM, RF, and phosphor looks.
-            </p>
-          </article>
-          <article class="feature-card accent-green">
-            <h3>Machine-Aware Apps</h3>
-            <p>
-              Separate apps for x64sc, x128, xvic, PET, Plus/4, C16, C232, and V364,
-              each exposing settings that make sense for that machine.
-            </p>
-          </article>
-          <article class="feature-card accent-red">
-            <h3>Mac Media Flows</h3>
-            <p>
-              Open disks, tapes, cartridges, snapshots, and PRG files through normal
-              macOS panels, document handling, and drag-and-drop.
-            </p>
-          </article>
-          <article class="feature-card accent-yellow">
-            <h3>Visual Keyboard Mapping</h3>
-            <p>
-              Inspect VICE keymaps as a keyboard instead of editing config files,
-              then remap keys through a Mac-native editor.
-            </p>
-          </article>
-          <article class="feature-card accent-cyan">
-            <h3>Native Tools</h3>
-            <p>
-              Disk image management, runtime controls, machine model settings, and
-              monitor work are brought into focused native windows.
-            </p>
-          </article>
-          <article class="feature-card accent-gray">
-            <h3>Clean Releases</h3>
-            <p>
-              Release packages are CI-built, checksummed, signed, notarized, stapled,
-              and wired for Sparkle updates through GitHub Releases.
-            </p>
-          </article>
-        </div>
-      </section>
-
-      <section class="section screenshots" id="screenshots" aria-labelledby="screenshots-title">
-        <div class="section-heading">
-          <p class="eyebrow">Screenshots</p>
-          <h2 id="screenshots-title">A native workspace for old machines.</h2>
-        </div>
-
-        <div class="screenshot-grid">
-          <article class="screenshot-large screenshot-card">
+        <div class="gallery-grid">
+          <article class="gallery-card">
             <img
               class="product-shot"
-              src="assets/screenshots/x64sc-basic.png"
+              src="assets/screenshots/x64sc-hvsc.png"
+              width="1800"
+              height="930"
+              alt="x64sc running the HVSC intro disk"
+            >
+            <div class="caption">
+              <p class="machine-name">x64sc</p>
+              <h3>Commodore 64</h3>
+              <p>HVSC intro disk, SID music, demos, GEOS, and the software people remember.</p>
+            </div>
+          </article>
+
+          <article class="gallery-card">
+            <img
+              class="product-shot"
+              src="assets/screenshots/x128-geos.png"
               width="1800"
               height="949"
-              alt="x64sc running a repeating BASIC program"
-            >
-            <div class="caption">
-              <h3>Metal-rendered machine output</h3>
-              <p>Real x64sc output with native toolbar controls and the tuned CRT display chain active.</p>
-            </div>
-          </article>
-
-          <article class="screenshot-card">
-            <img
-              class="product-shot"
-              src="assets/screenshots/x64sc-display-settings.png"
-              width="1400"
-              height="1322"
               loading="lazy"
-              alt="Display settings showing profiles and CRT controls"
+              alt="x128 running GEOS 128 in 80-column mode"
             >
             <div class="caption">
-              <h3>Display settings with real controls</h3>
-              <p>Profiles, scanlines, phosphor mask, curve, halation, persistence, saturation, and warmth.</p>
+              <p class="machine-name">x128</p>
+              <h3>Commodore 128</h3>
+              <p>GEOS 128 in 80-column VDC mode, CP/M disks, and native C128 workflows.</p>
             </div>
           </article>
 
-          <article class="screenshot-card">
-            <img
-              class="product-shot"
-              src="assets/screenshots/x128-machine-settings.png"
-              width="1400"
-              height="1322"
-              loading="lazy"
-              alt="C128 machine settings showing model, video standard, RAM expansion, and ROM images"
-            >
-            <div class="caption">
-              <h3>Settings that match the machine</h3>
-              <p>C128DCR model selection, video standard, RAM expansion, and ROM slots in one native pane.</p>
-            </div>
-          </article>
-
-          <article class="screenshot-card">
+          <article class="gallery-card">
             <img
               class="product-shot"
               src="assets/screenshots/xvic-basic.png"
@@ -197,12 +112,13 @@
               alt="xvic running BASIC on a VIC-20 display"
             >
             <div class="caption">
-              <h3>VIC-20 with machine-specific controls</h3>
-              <p>Memory expansion, video standard, controls, and cartridge state stay visible without leaving the machine.</p>
+              <p class="machine-name">xvic</p>
+              <h3>VIC-20</h3>
+              <p>Gridrunner, Omega Race, cartridge classics, and very small BASIC programs.</p>
             </div>
           </article>
 
-          <article class="screenshot-card">
+          <article class="gallery-card">
             <img
               class="product-shot"
               src="assets/screenshots/xpet-basic.png"
@@ -212,12 +128,13 @@
               alt="xpet running BASIC on a green PET display"
             >
             <div class="caption">
-              <h3>PET output in its own app</h3>
-              <p>The PET family gets its own window, status bar, model state, and monochrome display profile.</p>
+              <p class="machine-name">xpet</p>
+              <h3>PET family</h3>
+              <p>Monochrome BASIC, early business software, and classic PET displays.</p>
             </div>
           </article>
 
-          <article class="screenshot-card">
+          <article class="gallery-card">
             <img
               class="product-shot"
               src="assets/screenshots/xplus4-basic.png"
@@ -227,37 +144,40 @@
               alt="xplus4 running BASIC with TED video output"
             >
             <div class="caption">
-              <h3>Plus/4-class TED video</h3>
-              <p>Separate Plus/4-family builds keep TED video and control-port behavior out of generic emulator clutter.</p>
+              <p class="machine-name">xplus4</p>
+              <h3>Plus/4 family</h3>
+              <p>TED color, Plus/4 software, C16, C232, and V364 machines.</p>
             </div>
           </article>
+
         </div>
       </section>
 
       <section class="section disk-tool-section" id="disk-tool" aria-labelledby="disk-tool-title">
         <div class="section-heading">
           <p class="eyebrow">Disk image manager</p>
-          <h2 id="disk-tool-title">Open, inspect, edit, and rebuild Commodore block images without leaving the Mac UI.</h2>
+          <h2 id="disk-tool-title">Disk images, without leaving the app.</h2>
         </div>
 
         <div class="disk-tool-layout">
-          <article class="disk-tool-main screenshot-card">
+          <article class="disk-tool-main gallery-card">
             <img
               class="product-shot"
               src="assets/screenshots/disk-manager-files.png"
               width="1600"
               height="1086"
               loading="lazy"
-              alt="Disk Image Manager showing a D64 image, directory listing, rebuild analysis, and empty destination pane"
+              alt="Disk Image Manager showing a D64 image, directory listing, rebuild analysis, and sector map"
             >
             <div class="caption">
-              <h3>Directory, rebuild analysis, and transfer panes</h3>
-              <p>Open D64-family images, inspect files, export PRGs, copy between panes, and review whether a disk can be rebuilt with optimized sector placement.</p>
+              <p class="machine-name">Disk Manager</p>
+              <h3>Browse, edit, inspect, rebuild.</h3>
+              <p>Open D64-family images, move files, inspect sectors, and keep disks in Mac windows.</p>
             </div>
           </article>
 
-          <div class="disk-tool-side">
-            <article class="screenshot-card">
+          <aside class="disk-tool-side" aria-label="Disk image manager details">
+            <article class="gallery-card">
               <img
                 class="product-shot"
                 src="assets/screenshots/disk-manager-new-image.png"
@@ -267,71 +187,27 @@
                 alt="New Disk Image sheet for creating a blank D64 image"
               >
               <div class="caption">
-                <h3>Create clean blank images</h3>
-                <p>Pick a supported format, disk name, and ID from a native sheet.</p>
+                <h3>Create blank images</h3>
+                <p>Choose a format, disk name, and ID.</p>
               </div>
             </article>
 
-            <div class="disk-tool-points" aria-label="Disk image manager capabilities">
-              <span>Open D64, D67, D71, D80, D81, and D82</span>
-              <span>Create blank images</span>
-              <span>Import and export PRG files</span>
-              <span>Rename or delete directory entries</span>
-              <span>Inspect sectors and BAM allocation</span>
-              <span>Clone optimized rebuilt copies</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="section machine-section" id="machines" aria-labelledby="machines-title">
-        <div class="section-heading">
-          <p class="eyebrow">Included apps</p>
-          <h2 id="machines-title">One release package. Multiple machines.</h2>
-        </div>
-        <div class="machine-grid" aria-label="Supported machine apps">
-          <article>
-            <strong>x64sc</strong>
-            <span>Commodore 64, cycle-exact</span>
-          </article>
-          <article>
-            <strong>x128</strong>
-            <span>Commodore 128</span>
-          </article>
-          <article>
-            <strong>xvic</strong>
-            <span>VIC-20</span>
-          </article>
-          <article>
-            <strong>xpet</strong>
-            <span>PET family</span>
-          </article>
-          <article>
-            <strong>xplus4</strong>
-            <span>Plus/4</span>
-          </article>
-          <article>
-            <strong>xc16</strong>
-            <span>Commodore 16</span>
-          </article>
-          <article>
-            <strong>xc232</strong>
-            <span>Commodore 232</span>
-          </article>
-          <article>
-            <strong>xv364</strong>
-            <span>Commodore V364</span>
-          </article>
+            <ul class="disk-tool-points">
+              <li>D64, D67, D71, D80, D81, and D82</li>
+              <li>Import, export, rename, and delete</li>
+              <li>Sector maps, BAM allocation, and clean rebuilds</li>
+              <li>GEOS helpers where they actually save pain</li>
+            </ul>
+          </aside>
         </div>
       </section>
 
       <section class="download-section" id="download" aria-labelledby="download-title">
         <div class="download-copy">
           <p class="eyebrow">Latest release</p>
-          <h2 id="download-title">Install the current signed DMG from GitHub.</h2>
+          <h2 id="download-title">Download the DMG.</h2>
           <p>
-            The release package contains the machine apps. Drag the ones you use into
-            Applications, then stay current with Sparkle updates.
+            The DMG contains the machine apps. Drag the ones you use into Applications.
           </p>
         </div>
 
@@ -349,14 +225,6 @@
           <div class="release-links" aria-label="Release links">
             <a id="release-notes-link" href="https://github.com/barryw/vice-macos/releases/latest">Release notes</a>
             <a id="checksums-link" href="https://github.com/barryw/vice-macos/releases/latest">Checksums</a>
-            <a href="https://github.com/barryw/vice-macos/releases/latest/download/appcast.xml">Appcast</a>
-          </div>
-          <div class="latest-notes" aria-live="polite">
-            <h3>Release highlights</h3>
-            <ul id="latest-notes-list">
-              <li>Native Apple Silicon macOS builds of the VICE machine apps.</li>
-              <li>DMG installer image, checksums, and Sparkle appcast metadata.</li>
-            </ul>
           </div>
         </div>
       </section>

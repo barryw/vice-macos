@@ -7,11 +7,21 @@ APP_DIR="${VICE_MAC_SCREENSHOT_APP_DIR:-/private/tmp/vice-macos-website-shots/Bu
 OUT_DIR="$ROOT_DIR/website/assets/screenshots"
 RAW_OUT_DIR="${VICE_MAC_SCREENSHOT_RAW_DIR:-/private/tmp/vice-macos-website-screenshots-raw}"
 WINDOW_ID_SCRIPT="$ROOT_DIR/website/tools/window-id.swift"
+SCREENSHOT_ONLY="${1:-${VICE_MAC_SCREENSHOT_ONLY:-}}"
 
 export CLANG_MODULE_CACHE_PATH="${CLANG_MODULE_CACHE_PATH:-/private/tmp/vice-macos-website-swift-module-cache}"
 
 mkdir -p "$OUT_DIR"
 mkdir -p "$RAW_OUT_DIR"
+
+safe_open() {
+    /usr/bin/env -i \
+        "HOME=$HOME" \
+        "USER=${USER:-$(id -un)}" \
+        "LOGNAME=${LOGNAME:-$(id -un)}" \
+        "PATH=/usr/bin:/bin:/usr/sbin:/sbin" \
+        /usr/bin/open "$@"
+}
 
 quit_app() {
     local process_name="$1"
@@ -121,6 +131,50 @@ find_downloads_disk_image() {
     return 1
 }
 
+find_hvsc_showcase_disk() {
+    local explicit="${VICE_MAC_SCREENSHOT_HVSC_DISK:-}"
+    local candidate
+
+    if [[ -n "$explicit" && -f "$explicit" ]]; then
+        printf '%s\n' "$explicit"
+        return 0
+    fi
+
+    for candidate in \
+        "$HOME/Downloads/20_Years_HVSC.d64" \
+        "$HOME/20_Years_HVSC.d64" \
+        "$HOME/Downloads/HVSC_Intro_41.d64" \
+        "$HOME/HVSC_Intro_41.d64"; do
+        if [[ -f "$candidate" ]]; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+find_geos128_showcase_disk() {
+    local explicit="${VICE_MAC_SCREENSHOT_GEOS128_DISK:-}"
+    local candidate
+
+    if [[ -n "$explicit" && -f "$explicit" ]]; then
+        printf '%s\n' "$explicit"
+        return 0
+    fi
+
+    for candidate in \
+        "$HOME/Downloads/geos128-v2/GEOS128-V2-Disks/GEOS128-1351.D64" \
+        "$HOME/Downloads/geos128-v2/GEOS128-V2-Disks/GEOS128.D64"; do
+        if [[ -f "$candidate" ]]; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
 paste_into_emulator() {
     local process_name="$1"
     local text="$2"
@@ -139,6 +193,34 @@ on run argv
 end run
 APPLESCRIPT
     sleep 1.6
+}
+
+open_media_with_app() {
+    local process_name="$1"
+    local media_path="$2"
+
+    osascript - "$process_name" "$media_path" <<'APPLESCRIPT'
+on run argv
+    set processName to item 1 of argv
+    set mediaPath to item 2 of argv
+    set the clipboard to mediaPath
+    tell application "System Events"
+        tell process processName
+            set frontmost to true
+            keystroke "o" using command down
+            delay 0.5
+            keystroke "g" using {command down, shift down}
+            delay 0.2
+            keystroke "v" using command down
+            delay 0.2
+            key code 36
+            delay 0.5
+            key code 36
+        end tell
+    end tell
+end run
+APPLESCRIPT
+    sleep 1.4
 }
 
 open_settings() {
@@ -174,7 +256,7 @@ capture_machine() {
     local paste_text="${4:-}"
 
     quit_app "$app_name"
-    open -n "$APP_DIR/$app_name.app"
+    safe_open -n "$APP_DIR/$app_name.app"
     wait_for_window "$app_name" ""
     set_window_bounds "$app_name" "" 90 80 930 700
     sleep 2.0
@@ -184,6 +266,88 @@ capture_machine() {
     fi
 
     capture_window "$app_name" "" "$output_name"
+}
+
+capture_machine_showcase() {
+    local app_name="$1"
+    local bundle_id="$2"
+    local output_name="$3"
+    local media_path="$4"
+    local paste_text="${5:-}"
+    local wait_after_paste="${6:-8}"
+
+    quit_app "$app_name"
+    safe_open -n "$APP_DIR/$app_name.app"
+    wait_for_window "$app_name" ""
+    set_window_bounds "$app_name" "" 90 80 930 700
+    sleep 2.0
+
+    open_media_with_app "$app_name" "$media_path"
+
+    if [[ -n "$paste_text" ]]; then
+        paste_into_emulator "$app_name" "$paste_text"
+    fi
+
+    sleep "$wait_after_paste"
+    capture_window "$app_name" "" "$output_name"
+}
+
+capture_x64sc_hvsc_showcase() {
+    local hvsc_disk
+    local load_command
+    local load_wait=42
+    local run_wait=18
+
+    hvsc_disk="$(find_hvsc_showcase_disk || true)"
+    if [[ -z "$hvsc_disk" ]]; then
+        echo "No HVSC showcase disk found; skipping x64sc HVSC screenshot." >&2
+        return 0
+    fi
+
+    case "$(basename "$hvsc_disk")" in
+        20_Years_HVSC.d64)
+            load_command=$'LOAD"-HVSC 20 YEARS!-",8,1\n'
+            load_wait=115
+            run_wait=35
+            ;;
+        *)
+            load_command=$'LOAD"HVSC INTRO",8,1\n'
+            ;;
+    esac
+
+    quit_app "x64sc"
+    safe_open -n "$APP_DIR/x64sc.app"
+    wait_for_window "x64sc" ""
+    set_window_bounds "x64sc" "" 90 80 930 700
+    sleep 2.0
+
+    open_media_with_app "x64sc" "$hvsc_disk"
+    paste_into_emulator "x64sc" "$load_command"
+    sleep "$load_wait"
+    paste_into_emulator "x64sc" $'RUN\n'
+    sleep "$run_wait"
+    capture_window "x64sc" "" "x64sc-hvsc.png"
+    quit_app "x64sc"
+}
+
+capture_x128_geos_showcase() {
+    local geos_disk
+
+    geos_disk="$(find_geos128_showcase_disk || true)"
+    if [[ -z "$geos_disk" ]]; then
+        echo "No GEOS 128 disk found; skipping x128 GEOS screenshot." >&2
+        return 0
+    fi
+
+    defaults write "com.barrywalker.vicemac.c128" "vice.displayOutput.x128" "c128.80Column"
+
+    capture_machine_showcase "x128" \
+        "com.barrywalker.vicemac.c128" \
+        "x128-geos.png" \
+        "$geos_disk" \
+        $'LOAD"GEOS128",8,1\nRUN\n' \
+        46
+    quit_app "x128"
 }
 
 open_disk_image_manager() {
@@ -234,7 +398,7 @@ capture_disk_image_manager() {
     fi
 
     quit_app "x64sc"
-    open -n \
+    safe_open -n \
         --env VICE_MAC_DISK_MANAGER_SCREENSHOT=1 \
         --env "VICE_MAC_DISK_MANAGER_LEFT=$left_disk" \
         --env "VICE_MAC_DISK_MANAGER_RIGHT=$right_disk" \
@@ -253,7 +417,7 @@ capture_disk_image_manager() {
     quit_app "x64sc"
 }
 
-if [[ "${VICE_MAC_SCREENSHOT_ONLY:-}" == "disk-manager" ]]; then
+if [[ "$SCREENSHOT_ONLY" == "disk-manager" ]]; then
     capture_disk_image_manager
     make_web_copy "disk-manager-files.png" 1600
     make_web_copy "disk-manager-new-image.png" 1200
@@ -261,15 +425,27 @@ if [[ "${VICE_MAC_SCREENSHOT_ONLY:-}" == "disk-manager" ]]; then
     exit 0
 fi
 
-capture_machine "x64sc" "com.barrywalker.vicemac.c64" "x64sc-basic.png" $'10 PRINT "MAC VICE X64SC"\n20 PRINT "METAL DISPLAY"\n30 GOTO 10\nRUN\n'
-open_settings "x64sc" "com.barrywalker.vicemac.c64" "display" "Display" "x64sc-display-settings.png"
-quit_app "x64sc"
+if [[ "$SCREENSHOT_ONLY" == "showcase" ]]; then
+    capture_x64sc_hvsc_showcase
+    capture_x128_geos_showcase
+    make_web_copy "x64sc-hvsc.png" 1800
+    make_web_copy "x128-geos.png" 1800
+    echo "Captured screenshots in $OUT_DIR"
+    exit 0
+fi
+
+if [[ "$SCREENSHOT_ONLY" == "x64sc-showcase" ]]; then
+    capture_x64sc_hvsc_showcase
+    make_web_copy "x64sc-hvsc.png" 1800
+    echo "Captured screenshots in $OUT_DIR"
+    exit 0
+fi
+
+capture_x64sc_hvsc_showcase
 
 capture_disk_image_manager
 
-capture_machine "x128" "com.barrywalker.vicemac.c128" "x128-basic.png" $'10 PRINT "C128 NATIVE MAC"\n20 PRINT "40/80 COLUMN READY"\nRUN\n'
-open_settings "x128" "com.barrywalker.vicemac.c128" "machine" "Machine" "x128-machine-settings.png"
-quit_app "x128"
+capture_x128_geos_showcase
 
 capture_machine "xvic" "com.barrywalker.vicemac.vic20" "xvic-basic.png" $'10 PRINT "VIC-20 ON MAC"\n20 PRINT "REAL VICE CORE"\nRUN\n'
 quit_app "xvic"
@@ -280,11 +456,10 @@ quit_app "xpet"
 capture_machine "xplus4" "com.barrywalker.vicemac.plus4" "xplus4-basic.png" $'10 PRINT "PLUS/4 FAMILY"\n20 PRINT "TED VIDEO"\nRUN\n'
 quit_app "xplus4"
 
-make_web_copy "x64sc-basic.png" 1800
-make_web_copy "x64sc-display-settings.png" 1400
+make_web_copy "x64sc-hvsc.png" 1800
 make_web_copy "disk-manager-files.png" 1600
 make_web_copy "disk-manager-new-image.png" 1200
-make_web_copy "x128-machine-settings.png" 1400
+make_web_copy "x128-geos.png" 1800
 make_web_copy "xvic-basic.png" 1400
 make_web_copy "xpet-basic.png" 1400
 make_web_copy "xplus4-basic.png" 1400

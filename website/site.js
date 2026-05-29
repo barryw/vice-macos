@@ -13,7 +13,6 @@
   const releaseNotesLink = document.getElementById("release-notes-link");
   const checksumsLink = document.getElementById("checksums-link");
   const heroReleaseNote = document.getElementById("hero-release-note");
-  const latestNotesList = document.getElementById("latest-notes-list");
 
   const formatDate = (value) => {
     if (!value) {
@@ -42,33 +41,6 @@
     }
 
     return `${size.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
-  };
-
-  const releaseBullets = (body) => {
-    if (!body) {
-      return [];
-    }
-
-    return body
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => /^[-*]\s+/.test(line))
-      .map((line) => line.replace(/^[-*]\s+/, "").replace(/\s+/g, " "))
-      .filter(Boolean)
-      .slice(0, 5);
-  };
-
-  const setList = (items) => {
-    if (!latestNotesList || items.length === 0) {
-      return;
-    }
-
-    latestNotesList.replaceChildren();
-    items.forEach((item) => {
-      const li = document.createElement("li");
-      li.textContent = item;
-      latestNotesList.appendChild(li);
-    });
   };
 
   fetch(apiUrl, {
@@ -125,8 +97,6 @@
       } else if (heroReleaseNote) {
         heroReleaseNote.textContent = `${version} is available on GitHub Releases.`;
       }
-
-      setList(releaseBullets(release.body));
     })
     .catch(() => {
       downloadLinks.forEach((link) => {

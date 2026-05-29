@@ -1,0 +1,51 @@
+when:
+  - event: push
+    evaluate: 'CI_COMMIT_BRANCH == "macos/native-metal"'
+    path:
+      include:
+        - website/**
+        - k8s/**
+        - .woodpecker/website.yaml
+  - event: manual
+    evaluate: 'CI_COMMIT_BRANCH == "macos/native-metal"'
+
+labels:
+  backend: local
+  platform: darwin/arm64
+
+steps:
+  - name: validate
+    image: bash
+    commands:
+      - bash -n website/tools/capture-marketing-screenshots.sh
+      - tidy -qe website/index.html
+      - node --check website/site.js
+      - kubectl apply -k k8s --dry-run=client
+
+  - name: build-and-push
+    image: bash
+    depends_on:
+      - validate
+    environment:
+      GHCR_TOKEN:
+        from_secret: github_token
+      GHCR_USERNAME: barryw
+      WEBSITE_IMAGE: ghcr.io/barryw/macvice-website
+    commands:
+      - IMAGE_TAG="$(printf '%.12s' "$CI_COMMIT_SHA")"
+      - echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
+      - docker build -f website/Containerfile -t "$WEBSITE_IMAGE:$IMAGE_TAG" -t "$WEBSITE_IMAGE:latest" website
+      - docker push "$WEBSITE_IMAGE:$IMAGE_TAG"
+      - docker push "$WEBSITE_IMAGE:latest"
+
+  - name: deploy
+    image: bash
+    depends_on:
+      - build-and-push
+    environment:
+      WEBSITE_IMAGE: ghcr.io/barryw/macvice-website
+    commands:
+      - IMAGE_TAG="$(printf '%.12s' "$CI_COMMIT_SHA")"
+      - kubectl apply -k k8s
+      - kubectl -n macvice set image deployment/macvice-website "website=$WEBSITE_IMAGE:$IMAGE_TAG"
+      - kubectl -n macvice rollout status deployment/macvice-website --timeout=180s

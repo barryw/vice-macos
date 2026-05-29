@@ -1,6 +1,11 @@
 when:
   - event: push
     evaluate: 'CI_COMMIT_BRANCH == "macos/native-metal"'
+    path:
+      exclude:
+        - website/**
+        - k8s/**
+        - .woodpecker/website.yaml
   - event: manual
     evaluate: 'CI_COMMIT_BRANCH == "macos/native-metal"'
   - event: tag

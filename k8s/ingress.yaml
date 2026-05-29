@@ -1,0 +1,38 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: macvice-website
+  labels:
+    app.kubernetes.io/name: macvice-website
+    app.kubernetes.io/component: website
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-production
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - secretName: macvice-com-tls
+      hosts:
+        - macvice.com
+        - www.macvice.com
+  rules:
+    - host: macvice.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: macvice-website
+                port:
+                  name: http
+    - host: www.macvice.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: macvice-website
+                port:
+                  name: http
