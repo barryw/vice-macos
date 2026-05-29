@@ -59,3 +59,4 @@ The Woodpecker Kubernetes backend must have:
 
 - a `woodpecker-agent` service account with deploy permissions
 - the existing `github_token` secret with permission to push to GHCR
+- a `default/ghcr-secret` pull secret that can be copied into `macvice`

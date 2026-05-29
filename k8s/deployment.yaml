@@ -17,6 +17,8 @@ spec:
         app.kubernetes.io/name: macvice-website
         app.kubernetes.io/component: website
     spec:
+      imagePullSecrets:
+        - name: ghcr-secret
       securityContext:
         runAsNonRoot: true
         seccompProfile:

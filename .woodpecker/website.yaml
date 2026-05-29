@@ -59,6 +59,9 @@ steps:
     commands:
       - IMAGE_TAG="$(printf '%.12s' "$CI_COMMIT_SHA")"
       - kubectl apply -k k8s
+      - kubectl -n default get secret ghcr-secret -o jsonpath='{.data.\.dockerconfigjson}' | base64 -d > /tmp/ghcr-dockerconfigjson
+      - kubectl -n macvice create secret generic ghcr-secret --type=kubernetes.io/dockerconfigjson --from-file=.dockerconfigjson=/tmp/ghcr-dockerconfigjson --dry-run=client -o yaml | kubectl apply -f -
+      - rm -f /tmp/ghcr-dockerconfigjson
       - kubectl -n macvice set image deployment/macvice-website "website=$WEBSITE_IMAGE:$IMAGE_TAG"
       - kubectl -n macvice rollout status deployment/macvice-website --timeout=180s
     backend_options:
