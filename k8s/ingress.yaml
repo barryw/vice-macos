@@ -5,16 +5,8 @@ metadata:
   labels:
     app.kubernetes.io/name: macvice-website
     app.kubernetes.io/component: website
-  annotations:
-    cert-manager.io/cluster-issuer: letsencrypt-production
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
 spec:
-  ingressClassName: nginx
-  tls:
-    - secretName: macvice-com-tls
-      hosts:
-        - macvice.com
-        - www.macvice.com
+  ingressClassName: traefik
   rules:
     - host: macvice.com
       http:

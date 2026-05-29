@@ -2,17 +2,16 @@
 
 These manifests publish the static mac VICE website at:
 
-- `https://macvice.com`
-- `https://www.macvice.com`
+- `http://macvice.com`
+- `http://www.macvice.com`
 
 They assume:
 
 - an image named `ghcr.io/barryw/macvice-website`
-- an nginx-compatible ingress class named `nginx`
-- cert-manager with a `ClusterIssuer` named `letsencrypt-production`
+- a Traefik ingress class named `traefik`
 
-Patch `k8s/ingress.yaml` if your cluster uses a different ingress class or TLS
-issuer.
+Add TLS settings to `k8s/ingress.yaml` after DNS and certificate management are
+ready for the public hostnames.
 
 ## Build
 
@@ -40,8 +39,8 @@ kubectl -n macvice get ingress macvice-website
 ```
 
 Point DNS for `macvice.com` and `www.macvice.com` at the ingress controller's
-external address. cert-manager should create the `macvice-com-tls` secret after
-DNS resolves to the cluster.
+external address. Add a TLS section once the public certificate path is in
+place.
 
 ## Woodpecker
 
