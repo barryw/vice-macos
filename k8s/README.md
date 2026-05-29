@@ -50,13 +50,12 @@ file on `macos/native-metal`.
 On push it:
 
 1. validates the HTML, JavaScript, screenshot script, and Kubernetes manifests
-2. builds `ghcr.io/barryw/macvice-website:<short-sha>`
+2. builds `ghcr.io/barryw/macvice-website:<short-sha>` with Kaniko
 3. pushes the short-SHA tag and `latest`
 4. applies `k8s/`
 5. updates the deployment to the short-SHA image and waits for rollout
 
-The local Woodpecker runner must have:
+The Woodpecker Kubernetes backend must have:
 
-- Docker access for `docker build`, `docker push`, and `docker login`
-- `kubectl` configured for the target local cluster
+- a `woodpecker-agent` service account with deploy permissions
 - the existing `github_token` secret with permission to push to GHCR

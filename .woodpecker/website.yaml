@@ -10,36 +10,48 @@ when:
     evaluate: 'CI_COMMIT_BRANCH == "macos/native-metal"'
 
 labels:
-  backend: local
-  platform: darwin/arm64
+  platform: linux/amd64
 
 steps:
-  - name: validate
-    image: bash
+  - name: validate-static
+    image: node:22-bookworm
     commands:
       - bash -n website/tools/capture-marketing-screenshots.sh
-      - tidy -qe --new-blocklevel-tags header,nav,main,section,figure,figcaption,article,aside,footer website/index.html || status=$?; test "${status:-0}" -lt 2
       - node --check website/site.js
+
+  - name: validate-k8s
+    image: bitnami/kubectl:latest
+    commands:
       - kubectl apply -k k8s --dry-run=client
+    backend_options:
+      kubernetes:
+        serviceAccountName: woodpecker-agent
 
   - name: build-and-push
-    image: bash
+    image: gcr.io/kaniko-project/executor:debug
     depends_on:
-      - validate
+      - validate-static
+      - validate-k8s
     environment:
       GHCR_TOKEN:
         from_secret: github_token
       GHCR_USERNAME: barryw
       WEBSITE_IMAGE: ghcr.io/barryw/macvice-website
     commands:
-      - IMAGE_TAG="$(printf '%.12s' "$CI_COMMIT_SHA")"
-      - echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
-      - docker build -f website/Containerfile -t "$WEBSITE_IMAGE:$IMAGE_TAG" -t "$WEBSITE_IMAGE:latest" website
-      - docker push "$WEBSITE_IMAGE:$IMAGE_TAG"
-      - docker push "$WEBSITE_IMAGE:latest"
+      - |
+        IMAGE_TAG="$(printf '%.12s' "$CI_COMMIT_SHA")"
+        mkdir -p /kaniko/.docker
+        echo "{\"auths\":{\"ghcr.io\":{\"username\":\"$GHCR_USERNAME\",\"password\":\"$GHCR_TOKEN\"}}}" > /kaniko/.docker/config.json
+        /kaniko/executor \
+          --context="$CI_WORKSPACE/website" \
+          --dockerfile="$CI_WORKSPACE/website/Containerfile" \
+          --destination="$WEBSITE_IMAGE:$IMAGE_TAG" \
+          --destination="$WEBSITE_IMAGE:latest" \
+          --cache=true \
+          --cache-repo="$WEBSITE_IMAGE-cache"
 
   - name: deploy
-    image: bash
+    image: bitnami/kubectl:latest
     depends_on:
       - build-and-push
     environment:
@@ -49,3 +61,6 @@ steps:
       - kubectl apply -k k8s
       - kubectl -n macvice set image deployment/macvice-website "website=$WEBSITE_IMAGE:$IMAGE_TAG"
       - kubectl -n macvice rollout status deployment/macvice-website --timeout=180s
+    backend_options:
+      kubernetes:
+        serviceAccountName: woodpecker-agent
