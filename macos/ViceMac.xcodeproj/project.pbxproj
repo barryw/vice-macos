@@ -252,6 +252,206 @@
 		FA0000000000000000000017 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = FA0000000000000000000027 /* Sparkle */; };
 		FA0000000000000000000018 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = FA0000000000000000000028 /* Sparkle */; };
 		FA0000000000000000000019 /* Waveform in Frameworks */ = {isa = PBXBuildFile; productRef = FA0000000000000000000029 /* Waveform */; };
+		AB0101000000000000000000 /* RAMExpansion.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1001000000000000000020 /* RAMExpansion.swift */; };
+		AB0102000000000000000000 /* RAMExpansion.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1001000000000000000020 /* RAMExpansion.swift */; };
+		AB0103000000000000000000 /* RAMExpansion.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1001000000000000000020 /* RAMExpansion.swift */; };
+		AB0104000000000000000000 /* RAMExpansion.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1001000000000000000020 /* RAMExpansion.swift */; };
+		AB0105000000000000000000 /* RAMExpansion.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1001000000000000000020 /* RAMExpansion.swift */; };
+		AB0106000000000000000000 /* RAMExpansion.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1001000000000000000020 /* RAMExpansion.swift */; };
+		AB0107000000000000000000 /* RAMExpansion.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1001000000000000000020 /* RAMExpansion.swift */; };
+		AB0108000000000000000000 /* RAMExpansion.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1001000000000000000020 /* RAMExpansion.swift */; };
+		AB0109000000000000000000 /* RAMExpansion.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1001000000000000000020 /* RAMExpansion.swift */; };
+		AB010A000000000000000000 /* RAMExpansion.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1001000000000000000020 /* RAMExpansion.swift */; };
+		AB0201000000000000000000 /* HayesModemService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1002000000000000000020 /* HayesModemService.swift */; };
+		AB0202000000000000000000 /* HayesModemService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1002000000000000000020 /* HayesModemService.swift */; };
+		AB0203000000000000000000 /* HayesModemService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1002000000000000000020 /* HayesModemService.swift */; };
+		AB0204000000000000000000 /* HayesModemService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1002000000000000000020 /* HayesModemService.swift */; };
+		AB0205000000000000000000 /* HayesModemService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1002000000000000000020 /* HayesModemService.swift */; };
+		AB0206000000000000000000 /* HayesModemService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1002000000000000000020 /* HayesModemService.swift */; };
+		AB0207000000000000000000 /* HayesModemService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1002000000000000000020 /* HayesModemService.swift */; };
+		AB0208000000000000000000 /* HayesModemService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1002000000000000000020 /* HayesModemService.swift */; };
+		AB0209000000000000000000 /* HayesModemService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1002000000000000000020 /* HayesModemService.swift */; };
+		AB020A000000000000000000 /* HayesModemService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1002000000000000000020 /* HayesModemService.swift */; };
+		AB0301000000000000000000 /* PrinterSpoolPrintView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1003000000000000000020 /* PrinterSpoolPrintView.swift */; };
+		AB0302000000000000000000 /* PrinterSpoolPrintView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1003000000000000000020 /* PrinterSpoolPrintView.swift */; };
+		AB0303000000000000000000 /* PrinterSpoolPrintView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1003000000000000000020 /* PrinterSpoolPrintView.swift */; };
+		AB0304000000000000000000 /* PrinterSpoolPrintView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1003000000000000000020 /* PrinterSpoolPrintView.swift */; };
+		AB0305000000000000000000 /* PrinterSpoolPrintView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1003000000000000000020 /* PrinterSpoolPrintView.swift */; };
+		AB0306000000000000000000 /* PrinterSpoolPrintView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1003000000000000000020 /* PrinterSpoolPrintView.swift */; };
+		AB0307000000000000000000 /* PrinterSpoolPrintView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1003000000000000000020 /* PrinterSpoolPrintView.swift */; };
+		AB0308000000000000000000 /* PrinterSpoolPrintView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1003000000000000000020 /* PrinterSpoolPrintView.swift */; };
+		AB0309000000000000000000 /* PrinterSpoolPrintView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1003000000000000000020 /* PrinterSpoolPrintView.swift */; };
+		AB030A000000000000000000 /* PrinterSpoolPrintView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1003000000000000000020 /* PrinterSpoolPrintView.swift */; };
+		AB0401000000000000000000 /* ViceResource.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1004000000000000000020 /* ViceResource.swift */; };
+		AB0402000000000000000000 /* ViceResource.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1004000000000000000020 /* ViceResource.swift */; };
+		AB0403000000000000000000 /* ViceResource.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1004000000000000000020 /* ViceResource.swift */; };
+		AB0404000000000000000000 /* ViceResource.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1004000000000000000020 /* ViceResource.swift */; };
+		AB0405000000000000000000 /* ViceResource.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1004000000000000000020 /* ViceResource.swift */; };
+		AB0406000000000000000000 /* ViceResource.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1004000000000000000020 /* ViceResource.swift */; };
+		AB0407000000000000000000 /* ViceResource.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1004000000000000000020 /* ViceResource.swift */; };
+		AB0408000000000000000000 /* ViceResource.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1004000000000000000020 /* ViceResource.swift */; };
+		AB0409000000000000000000 /* ViceResource.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1004000000000000000020 /* ViceResource.swift */; };
+		AB040A000000000000000000 /* ViceResource.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1004000000000000000020 /* ViceResource.swift */; };
+		AB0501000000000000000000 /* EmulatorSession+DebuggerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1005000000000000000020 /* EmulatorSession+DebuggerBridge.swift */; };
+		AB0502000000000000000000 /* EmulatorSession+DebuggerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1005000000000000000020 /* EmulatorSession+DebuggerBridge.swift */; };
+		AB0503000000000000000000 /* EmulatorSession+DebuggerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1005000000000000000020 /* EmulatorSession+DebuggerBridge.swift */; };
+		AB0504000000000000000000 /* EmulatorSession+DebuggerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1005000000000000000020 /* EmulatorSession+DebuggerBridge.swift */; };
+		AB0505000000000000000000 /* EmulatorSession+DebuggerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1005000000000000000020 /* EmulatorSession+DebuggerBridge.swift */; };
+		AB0506000000000000000000 /* EmulatorSession+DebuggerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1005000000000000000020 /* EmulatorSession+DebuggerBridge.swift */; };
+		AB0507000000000000000000 /* EmulatorSession+DebuggerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1005000000000000000020 /* EmulatorSession+DebuggerBridge.swift */; };
+		AB0508000000000000000000 /* EmulatorSession+DebuggerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1005000000000000000020 /* EmulatorSession+DebuggerBridge.swift */; };
+		AB0509000000000000000000 /* EmulatorSession+DebuggerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1005000000000000000020 /* EmulatorSession+DebuggerBridge.swift */; };
+		AB050A000000000000000000 /* EmulatorSession+DebuggerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1005000000000000000020 /* EmulatorSession+DebuggerBridge.swift */; };
+		AB0601000000000000000000 /* EmulatorSession+Printing.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1006000000000000000020 /* EmulatorSession+Printing.swift */; };
+		AB0602000000000000000000 /* EmulatorSession+Printing.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1006000000000000000020 /* EmulatorSession+Printing.swift */; };
+		AB0603000000000000000000 /* EmulatorSession+Printing.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1006000000000000000020 /* EmulatorSession+Printing.swift */; };
+		AB0604000000000000000000 /* EmulatorSession+Printing.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1006000000000000000020 /* EmulatorSession+Printing.swift */; };
+		AB0605000000000000000000 /* EmulatorSession+Printing.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1006000000000000000020 /* EmulatorSession+Printing.swift */; };
+		AB0606000000000000000000 /* EmulatorSession+Printing.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1006000000000000000020 /* EmulatorSession+Printing.swift */; };
+		AB0607000000000000000000 /* EmulatorSession+Printing.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1006000000000000000020 /* EmulatorSession+Printing.swift */; };
+		AB0608000000000000000000 /* EmulatorSession+Printing.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1006000000000000000020 /* EmulatorSession+Printing.swift */; };
+		AB0609000000000000000000 /* EmulatorSession+Printing.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1006000000000000000020 /* EmulatorSession+Printing.swift */; };
+		AB060A000000000000000000 /* EmulatorSession+Printing.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1006000000000000000020 /* EmulatorSession+Printing.swift */; };
+		AB0701000000000000000000 /* EmulatorSession+Networking.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1007000000000000000020 /* EmulatorSession+Networking.swift */; };
+		AB0702000000000000000000 /* EmulatorSession+Networking.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1007000000000000000020 /* EmulatorSession+Networking.swift */; };
+		AB0703000000000000000000 /* EmulatorSession+Networking.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1007000000000000000020 /* EmulatorSession+Networking.swift */; };
+		AB0704000000000000000000 /* EmulatorSession+Networking.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1007000000000000000020 /* EmulatorSession+Networking.swift */; };
+		AB0705000000000000000000 /* EmulatorSession+Networking.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1007000000000000000020 /* EmulatorSession+Networking.swift */; };
+		AB0706000000000000000000 /* EmulatorSession+Networking.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1007000000000000000020 /* EmulatorSession+Networking.swift */; };
+		AB0707000000000000000000 /* EmulatorSession+Networking.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1007000000000000000020 /* EmulatorSession+Networking.swift */; };
+		AB0708000000000000000000 /* EmulatorSession+Networking.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1007000000000000000020 /* EmulatorSession+Networking.swift */; };
+		AB0709000000000000000000 /* EmulatorSession+Networking.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1007000000000000000020 /* EmulatorSession+Networking.swift */; };
+		AB070A000000000000000000 /* EmulatorSession+Networking.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1007000000000000000020 /* EmulatorSession+Networking.swift */; };
+		AC0101000000000000000000 /* CPMDiskImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1001000000000000000000 /* CPMDiskImage.swift */; };
+		AC0102000000000000000000 /* CPMDiskImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1001000000000000000000 /* CPMDiskImage.swift */; };
+		AC0103000000000000000000 /* CPMDiskImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1001000000000000000000 /* CPMDiskImage.swift */; };
+		AC0104000000000000000000 /* CPMDiskImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1001000000000000000000 /* CPMDiskImage.swift */; };
+		AC0105000000000000000000 /* CPMDiskImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1001000000000000000000 /* CPMDiskImage.swift */; };
+		AC0106000000000000000000 /* CPMDiskImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1001000000000000000000 /* CPMDiskImage.swift */; };
+		AC0107000000000000000000 /* CPMDiskImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1001000000000000000000 /* CPMDiskImage.swift */; };
+		AC0108000000000000000000 /* CPMDiskImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1001000000000000000000 /* CPMDiskImage.swift */; };
+		AC0109000000000000000000 /* CPMDiskImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1001000000000000000000 /* CPMDiskImage.swift */; };
+		AC010A000000000000000000 /* CPMDiskImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1001000000000000000000 /* CPMDiskImage.swift */; };
+		AC0201000000000000000000 /* GEOSPackageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1002000000000000000000 /* GEOSPackageService.swift */; };
+		AC0202000000000000000000 /* GEOSPackageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1002000000000000000000 /* GEOSPackageService.swift */; };
+		AC0203000000000000000000 /* GEOSPackageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1002000000000000000000 /* GEOSPackageService.swift */; };
+		AC0204000000000000000000 /* GEOSPackageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1002000000000000000000 /* GEOSPackageService.swift */; };
+		AC0205000000000000000000 /* GEOSPackageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1002000000000000000000 /* GEOSPackageService.swift */; };
+		AC0206000000000000000000 /* GEOSPackageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1002000000000000000000 /* GEOSPackageService.swift */; };
+		AC0207000000000000000000 /* GEOSPackageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1002000000000000000000 /* GEOSPackageService.swift */; };
+		AC0208000000000000000000 /* GEOSPackageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1002000000000000000000 /* GEOSPackageService.swift */; };
+		AC0209000000000000000000 /* GEOSPackageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1002000000000000000000 /* GEOSPackageService.swift */; };
+		AC020A000000000000000000 /* GEOSPackageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1002000000000000000000 /* GEOSPackageService.swift */; };
+		AC0301000000000000000000 /* DiskImageManagerModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1003000000000000000000 /* DiskImageManagerModel.swift */; };
+		AC0302000000000000000000 /* DiskImageManagerModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1003000000000000000000 /* DiskImageManagerModel.swift */; };
+		AC0303000000000000000000 /* DiskImageManagerModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1003000000000000000000 /* DiskImageManagerModel.swift */; };
+		AC0304000000000000000000 /* DiskImageManagerModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1003000000000000000000 /* DiskImageManagerModel.swift */; };
+		AC0305000000000000000000 /* DiskImageManagerModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1003000000000000000000 /* DiskImageManagerModel.swift */; };
+		AC0306000000000000000000 /* DiskImageManagerModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1003000000000000000000 /* DiskImageManagerModel.swift */; };
+		AC0307000000000000000000 /* DiskImageManagerModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1003000000000000000000 /* DiskImageManagerModel.swift */; };
+		AC0308000000000000000000 /* DiskImageManagerModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1003000000000000000000 /* DiskImageManagerModel.swift */; };
+		AC0309000000000000000000 /* DiskImageManagerModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1003000000000000000000 /* DiskImageManagerModel.swift */; };
+		AC030A000000000000000000 /* DiskImageManagerModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1003000000000000000000 /* DiskImageManagerModel.swift */; };
+		AC0401000000000000000000 /* ContentView+DriveIndicators.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1004000000000000000000 /* ContentView+DriveIndicators.swift */; };
+		AC0402000000000000000000 /* ContentView+DriveIndicators.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1004000000000000000000 /* ContentView+DriveIndicators.swift */; };
+		AC0403000000000000000000 /* ContentView+DriveIndicators.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1004000000000000000000 /* ContentView+DriveIndicators.swift */; };
+		AC0404000000000000000000 /* ContentView+DriveIndicators.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1004000000000000000000 /* ContentView+DriveIndicators.swift */; };
+		AC0405000000000000000000 /* ContentView+DriveIndicators.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1004000000000000000000 /* ContentView+DriveIndicators.swift */; };
+		AC0406000000000000000000 /* ContentView+DriveIndicators.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1004000000000000000000 /* ContentView+DriveIndicators.swift */; };
+		AC0407000000000000000000 /* ContentView+DriveIndicators.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1004000000000000000000 /* ContentView+DriveIndicators.swift */; };
+		AC0408000000000000000000 /* ContentView+DriveIndicators.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1004000000000000000000 /* ContentView+DriveIndicators.swift */; };
+		AC0409000000000000000000 /* ContentView+DriveIndicators.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1004000000000000000000 /* ContentView+DriveIndicators.swift */; };
+		AC040A000000000000000000 /* ContentView+DriveIndicators.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1004000000000000000000 /* ContentView+DriveIndicators.swift */; };
+		AC0501000000000000000000 /* KeyboardSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1005000000000000000000 /* KeyboardSettingsPane.swift */; };
+		AC0502000000000000000000 /* KeyboardSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1005000000000000000000 /* KeyboardSettingsPane.swift */; };
+		AC0503000000000000000000 /* KeyboardSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1005000000000000000000 /* KeyboardSettingsPane.swift */; };
+		AC0504000000000000000000 /* KeyboardSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1005000000000000000000 /* KeyboardSettingsPane.swift */; };
+		AC0505000000000000000000 /* KeyboardSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1005000000000000000000 /* KeyboardSettingsPane.swift */; };
+		AC0506000000000000000000 /* KeyboardSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1005000000000000000000 /* KeyboardSettingsPane.swift */; };
+		AC0507000000000000000000 /* KeyboardSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1005000000000000000000 /* KeyboardSettingsPane.swift */; };
+		AC0508000000000000000000 /* KeyboardSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1005000000000000000000 /* KeyboardSettingsPane.swift */; };
+		AC0509000000000000000000 /* KeyboardSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1005000000000000000000 /* KeyboardSettingsPane.swift */; };
+		AC050A000000000000000000 /* KeyboardSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1005000000000000000000 /* KeyboardSettingsPane.swift */; };
+		AC0601000000000000000000 /* CommonUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1006000000000000000000 /* CommonUI.swift */; };
+		AC0602000000000000000000 /* CommonUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1006000000000000000000 /* CommonUI.swift */; };
+		AC0603000000000000000000 /* CommonUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1006000000000000000000 /* CommonUI.swift */; };
+		AC0604000000000000000000 /* CommonUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1006000000000000000000 /* CommonUI.swift */; };
+		AC0605000000000000000000 /* CommonUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1006000000000000000000 /* CommonUI.swift */; };
+		AC0606000000000000000000 /* CommonUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1006000000000000000000 /* CommonUI.swift */; };
+		AC0607000000000000000000 /* CommonUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1006000000000000000000 /* CommonUI.swift */; };
+		AC0608000000000000000000 /* CommonUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1006000000000000000000 /* CommonUI.swift */; };
+		AC0609000000000000000000 /* CommonUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1006000000000000000000 /* CommonUI.swift */; };
+		AC060A000000000000000000 /* CommonUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1006000000000000000000 /* CommonUI.swift */; };
+		AC0701000000000000000000 /* EmulatorSession+State.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1007000000000000000000 /* EmulatorSession+State.swift */; };
+		AC0702000000000000000000 /* EmulatorSession+State.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1007000000000000000000 /* EmulatorSession+State.swift */; };
+		AC0703000000000000000000 /* EmulatorSession+State.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1007000000000000000000 /* EmulatorSession+State.swift */; };
+		AC0704000000000000000000 /* EmulatorSession+State.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1007000000000000000000 /* EmulatorSession+State.swift */; };
+		AC0705000000000000000000 /* EmulatorSession+State.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1007000000000000000000 /* EmulatorSession+State.swift */; };
+		AC0706000000000000000000 /* EmulatorSession+State.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1007000000000000000000 /* EmulatorSession+State.swift */; };
+		AC0707000000000000000000 /* EmulatorSession+State.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1007000000000000000000 /* EmulatorSession+State.swift */; };
+		AC0708000000000000000000 /* EmulatorSession+State.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1007000000000000000000 /* EmulatorSession+State.swift */; };
+		AC0709000000000000000000 /* EmulatorSession+State.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1007000000000000000000 /* EmulatorSession+State.swift */; };
+		AC070A000000000000000000 /* EmulatorSession+State.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1007000000000000000000 /* EmulatorSession+State.swift */; };
+		AC0801000000000000000000 /* EmulatorSession+InputControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1008000000000000000000 /* EmulatorSession+InputControl.swift */; };
+		AC0802000000000000000000 /* EmulatorSession+InputControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1008000000000000000000 /* EmulatorSession+InputControl.swift */; };
+		AC0803000000000000000000 /* EmulatorSession+InputControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1008000000000000000000 /* EmulatorSession+InputControl.swift */; };
+		AC0804000000000000000000 /* EmulatorSession+InputControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1008000000000000000000 /* EmulatorSession+InputControl.swift */; };
+		AC0805000000000000000000 /* EmulatorSession+InputControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1008000000000000000000 /* EmulatorSession+InputControl.swift */; };
+		AC0806000000000000000000 /* EmulatorSession+InputControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1008000000000000000000 /* EmulatorSession+InputControl.swift */; };
+		AC0807000000000000000000 /* EmulatorSession+InputControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1008000000000000000000 /* EmulatorSession+InputControl.swift */; };
+		AC0808000000000000000000 /* EmulatorSession+InputControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1008000000000000000000 /* EmulatorSession+InputControl.swift */; };
+		AC0809000000000000000000 /* EmulatorSession+InputControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1008000000000000000000 /* EmulatorSession+InputControl.swift */; };
+		AC080A000000000000000000 /* EmulatorSession+InputControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1008000000000000000000 /* EmulatorSession+InputControl.swift */; };
+		AC0901000000000000000000 /* EmulatorSession+Lifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1009000000000000000000 /* EmulatorSession+Lifecycle.swift */; };
+		AC0902000000000000000000 /* EmulatorSession+Lifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1009000000000000000000 /* EmulatorSession+Lifecycle.swift */; };
+		AC0903000000000000000000 /* EmulatorSession+Lifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1009000000000000000000 /* EmulatorSession+Lifecycle.swift */; };
+		AC0904000000000000000000 /* EmulatorSession+Lifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1009000000000000000000 /* EmulatorSession+Lifecycle.swift */; };
+		AC0905000000000000000000 /* EmulatorSession+Lifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1009000000000000000000 /* EmulatorSession+Lifecycle.swift */; };
+		AC0906000000000000000000 /* EmulatorSession+Lifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1009000000000000000000 /* EmulatorSession+Lifecycle.swift */; };
+		AC0907000000000000000000 /* EmulatorSession+Lifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1009000000000000000000 /* EmulatorSession+Lifecycle.swift */; };
+		AC0908000000000000000000 /* EmulatorSession+Lifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1009000000000000000000 /* EmulatorSession+Lifecycle.swift */; };
+		AC0909000000000000000000 /* EmulatorSession+Lifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1009000000000000000000 /* EmulatorSession+Lifecycle.swift */; };
+		AC090A000000000000000000 /* EmulatorSession+Lifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1009000000000000000000 /* EmulatorSession+Lifecycle.swift */; };
+		AC0A01000000000000000000 /* EmulatorSession+Media.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100A000000000000000000 /* EmulatorSession+Media.swift */; };
+		AC0A02000000000000000000 /* EmulatorSession+Media.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100A000000000000000000 /* EmulatorSession+Media.swift */; };
+		AC0A03000000000000000000 /* EmulatorSession+Media.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100A000000000000000000 /* EmulatorSession+Media.swift */; };
+		AC0A04000000000000000000 /* EmulatorSession+Media.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100A000000000000000000 /* EmulatorSession+Media.swift */; };
+		AC0A05000000000000000000 /* EmulatorSession+Media.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100A000000000000000000 /* EmulatorSession+Media.swift */; };
+		AC0A06000000000000000000 /* EmulatorSession+Media.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100A000000000000000000 /* EmulatorSession+Media.swift */; };
+		AC0A07000000000000000000 /* EmulatorSession+Media.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100A000000000000000000 /* EmulatorSession+Media.swift */; };
+		AC0A08000000000000000000 /* EmulatorSession+Media.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100A000000000000000000 /* EmulatorSession+Media.swift */; };
+		AC0A09000000000000000000 /* EmulatorSession+Media.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100A000000000000000000 /* EmulatorSession+Media.swift */; };
+		AC0A0A000000000000000000 /* EmulatorSession+Media.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100A000000000000000000 /* EmulatorSession+Media.swift */; };
+		AC0B01000000000000000000 /* EmulatorSession+RuntimeConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100B000000000000000000 /* EmulatorSession+RuntimeConfiguration.swift */; };
+		AC0B02000000000000000000 /* EmulatorSession+RuntimeConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100B000000000000000000 /* EmulatorSession+RuntimeConfiguration.swift */; };
+		AC0B03000000000000000000 /* EmulatorSession+RuntimeConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100B000000000000000000 /* EmulatorSession+RuntimeConfiguration.swift */; };
+		AC0B04000000000000000000 /* EmulatorSession+RuntimeConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100B000000000000000000 /* EmulatorSession+RuntimeConfiguration.swift */; };
+		AC0B05000000000000000000 /* EmulatorSession+RuntimeConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100B000000000000000000 /* EmulatorSession+RuntimeConfiguration.swift */; };
+		AC0B06000000000000000000 /* EmulatorSession+RuntimeConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100B000000000000000000 /* EmulatorSession+RuntimeConfiguration.swift */; };
+		AC0B07000000000000000000 /* EmulatorSession+RuntimeConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100B000000000000000000 /* EmulatorSession+RuntimeConfiguration.swift */; };
+		AC0B08000000000000000000 /* EmulatorSession+RuntimeConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100B000000000000000000 /* EmulatorSession+RuntimeConfiguration.swift */; };
+		AC0B09000000000000000000 /* EmulatorSession+RuntimeConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100B000000000000000000 /* EmulatorSession+RuntimeConfiguration.swift */; };
+		AC0B0A000000000000000000 /* EmulatorSession+RuntimeConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100B000000000000000000 /* EmulatorSession+RuntimeConfiguration.swift */; };
+		AC0C01000000000000000000 /* DebuggerModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100C000000000000000000 /* DebuggerModels.swift */; };
+		AC0C02000000000000000000 /* DebuggerModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100C000000000000000000 /* DebuggerModels.swift */; };
+		AC0C03000000000000000000 /* DebuggerModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100C000000000000000000 /* DebuggerModels.swift */; };
+		AC0C04000000000000000000 /* DebuggerModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100C000000000000000000 /* DebuggerModels.swift */; };
+		AC0C05000000000000000000 /* DebuggerModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100C000000000000000000 /* DebuggerModels.swift */; };
+		AC0C06000000000000000000 /* DebuggerModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100C000000000000000000 /* DebuggerModels.swift */; };
+		AC0C07000000000000000000 /* DebuggerModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100C000000000000000000 /* DebuggerModels.swift */; };
+		AC0C08000000000000000000 /* DebuggerModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100C000000000000000000 /* DebuggerModels.swift */; };
+		AC0C09000000000000000000 /* DebuggerModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100C000000000000000000 /* DebuggerModels.swift */; };
+		AC0C0A000000000000000000 /* DebuggerModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100C000000000000000000 /* DebuggerModels.swift */; };
+		AC0D01000000000000000000 /* SettingsCommonUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100D000000000000000000 /* SettingsCommonUI.swift */; };
+		AC0D02000000000000000000 /* SettingsCommonUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100D000000000000000000 /* SettingsCommonUI.swift */; };
+		AC0D03000000000000000000 /* SettingsCommonUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100D000000000000000000 /* SettingsCommonUI.swift */; };
+		AC0D04000000000000000000 /* SettingsCommonUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100D000000000000000000 /* SettingsCommonUI.swift */; };
+		AC0D05000000000000000000 /* SettingsCommonUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100D000000000000000000 /* SettingsCommonUI.swift */; };
+		AC0D06000000000000000000 /* SettingsCommonUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100D000000000000000000 /* SettingsCommonUI.swift */; };
+		AC0D07000000000000000000 /* SettingsCommonUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100D000000000000000000 /* SettingsCommonUI.swift */; };
+		AC0D08000000000000000000 /* SettingsCommonUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100D000000000000000000 /* SettingsCommonUI.swift */; };
+		AC0D09000000000000000000 /* SettingsCommonUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100D000000000000000000 /* SettingsCommonUI.swift */; };
+		AC0D0A000000000000000000 /* SettingsCommonUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100D000000000000000000 /* SettingsCommonUI.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -296,6 +496,26 @@
 		F60000000000000000000020 /* ModelConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelConfigurationTests.swift; sourceTree = "<group>"; };
 		F60000000000000000000027 /* ViceMacTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ViceMacTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		F6000000000000000000002F /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
+		AB1001000000000000000020 /* RAMExpansion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RAMExpansion.swift; sourceTree = "<group>"; };
+		AB1002000000000000000020 /* HayesModemService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HayesModemService.swift; sourceTree = "<group>"; };
+		AB1003000000000000000020 /* PrinterSpoolPrintView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrinterSpoolPrintView.swift; sourceTree = "<group>"; };
+		AB1004000000000000000020 /* ViceResource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViceResource.swift; sourceTree = "<group>"; };
+		AB1005000000000000000020 /* EmulatorSession+DebuggerBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EmulatorSession+DebuggerBridge.swift"; sourceTree = "<group>"; };
+		AB1006000000000000000020 /* EmulatorSession+Printing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EmulatorSession+Printing.swift"; sourceTree = "<group>"; };
+		AB1007000000000000000020 /* EmulatorSession+Networking.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EmulatorSession+Networking.swift"; sourceTree = "<group>"; };
+		AC1001000000000000000000 /* CPMDiskImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CPMDiskImage.swift"; sourceTree = "<group>"; };
+		AC1002000000000000000000 /* GEOSPackageService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GEOSPackageService.swift"; sourceTree = "<group>"; };
+		AC1003000000000000000000 /* DiskImageManagerModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DiskImageManagerModel.swift"; sourceTree = "<group>"; };
+		AC1004000000000000000000 /* ContentView+DriveIndicators.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+DriveIndicators.swift"; sourceTree = "<group>"; };
+		AC1005000000000000000000 /* KeyboardSettingsPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "KeyboardSettingsPane.swift"; sourceTree = "<group>"; };
+		AC1006000000000000000000 /* CommonUI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CommonUI.swift"; sourceTree = "<group>"; };
+		AC1007000000000000000000 /* EmulatorSession+State.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EmulatorSession+State.swift"; sourceTree = "<group>"; };
+		AC1008000000000000000000 /* EmulatorSession+InputControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EmulatorSession+InputControl.swift"; sourceTree = "<group>"; };
+		AC1009000000000000000000 /* EmulatorSession+Lifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EmulatorSession+Lifecycle.swift"; sourceTree = "<group>"; };
+		AC100A000000000000000000 /* EmulatorSession+Media.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EmulatorSession+Media.swift"; sourceTree = "<group>"; };
+		AC100B000000000000000000 /* EmulatorSession+RuntimeConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EmulatorSession+RuntimeConfiguration.swift"; sourceTree = "<group>"; };
+		AC100C000000000000000000 /* DebuggerModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DebuggerModels.swift"; sourceTree = "<group>"; };
+		AC100D000000000000000000 /* SettingsCommonUI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SettingsCommonUI.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -399,13 +619,30 @@
 				A10000000000000000000020 /* ViceMacApp.swift */,
 				A10000000000000000000037 /* EmulatedMachine.swift */,
 				A10000000000000000000021 /* EmulatorSession.swift */,
+				AC1007000000000000000000 /* EmulatorSession+State.swift */,
+				AC1008000000000000000000 /* EmulatorSession+InputControl.swift */,
+				AC1009000000000000000000 /* EmulatorSession+Lifecycle.swift */,
+				AC100A000000000000000000 /* EmulatorSession+Media.swift */,
+				AC100B000000000000000000 /* EmulatorSession+RuntimeConfiguration.swift */,
+				AB1007000000000000000020 /* EmulatorSession+Networking.swift */,
+				AB1006000000000000000020 /* EmulatorSession+Printing.swift */,
+				AB1005000000000000000020 /* EmulatorSession+DebuggerBridge.swift */,
+				AB1001000000000000000020 /* RAMExpansion.swift */,
+				AB1002000000000000000020 /* HayesModemService.swift */,
+				AB1003000000000000000020 /* PrinterSpoolPrintView.swift */,
+				AB1004000000000000000020 /* ViceResource.swift */,
+				AC1006000000000000000000 /* CommonUI.swift */,
 				A1000000000000000000003E /* AIAssistantConfiguration.swift */,
 				A1000000000000000000003F /* DebuggerView.swift */,
+				AC100C000000000000000000 /* DebuggerModels.swift */,
 				AA1000000000000000000020 /* CommodoreDiskImage.swift */,
 				AA1000000000000000000022 /* DiskImageService.swift */,
+				AC1002000000000000000000 /* GEOSPackageService.swift */,
+				AC1001000000000000000000 /* CPMDiskImage.swift */,
 				1A0000000000000000000020 /* SIDFile.swift */,
 				1A0000000000000000000021 /* VSIDPlayerView.swift */,
 				A1000000000000000000003B /* ControlConfiguration.swift */,
+				AC1003000000000000000000 /* DiskImageManagerModel.swift */,
 				AA1000000000000000000021 /* DiskImageManagerView.swift */,
 				A1000000000000000000003C /* DriveConfiguration.swift */,
 				A10000000000000000000038 /* EmulatorDefaults.swift */,
@@ -416,6 +653,7 @@
 				A1000000000000000000002B /* VideoFilterSettings.swift */,
 				A1000000000000000000002C /* VideoFilterControls.swift */,
 				A10000000000000000000022 /* ContentView.swift */,
+				AC1004000000000000000000 /* ContentView+DriveIndicators.swift */,
 				A10000000000000000000036 /* Engine */,
 				A10000000000000000000032 /* Metal */,
 				A10000000000000000000033 /* Settings */,
@@ -439,6 +677,8 @@
 			isa = PBXGroup;
 			children = (
 				A10000000000000000000025 /* SettingsView.swift */,
+				AC1005000000000000000000 /* KeyboardSettingsPane.swift */,
+				AC100D000000000000000000 /* SettingsCommonUI.swift */,
 			);
 			path = Settings;
 			sourceTree = "<group>";
@@ -1061,9 +1301,29 @@
 				A10000000000000000000010 /* ViceMacApp.swift in Sources */,
 				A10000000000000000000056 /* AIAssistantConfiguration.swift in Sources */,
 				A10000000000000000000057 /* DebuggerView.swift in Sources */,
+				AC0C01000000000000000000 /* DebuggerModels.swift in Sources */,
 				AA2000000000000000000010 /* CommodoreDiskImage.swift in Sources */,
 				AA2000000000000000000012 /* DiskImageService.swift in Sources */,
+				AC0101000000000000000000 /* CPMDiskImage.swift in Sources */,
+				AC0201000000000000000000 /* GEOSPackageService.swift in Sources */,
+				AC0301000000000000000000 /* DiskImageManagerModel.swift in Sources */,
+				AC0401000000000000000000 /* ContentView+DriveIndicators.swift in Sources */,
+				AC0501000000000000000000 /* KeyboardSettingsPane.swift in Sources */,
+				AC0D01000000000000000000 /* SettingsCommonUI.swift in Sources */,
 				A10000000000000000000011 /* EmulatorSession.swift in Sources */,
+				AC0601000000000000000000 /* CommonUI.swift in Sources */,
+				AC0701000000000000000000 /* EmulatorSession+State.swift in Sources */,
+				AC0801000000000000000000 /* EmulatorSession+InputControl.swift in Sources */,
+				AC0901000000000000000000 /* EmulatorSession+Lifecycle.swift in Sources */,
+				AC0A01000000000000000000 /* EmulatorSession+Media.swift in Sources */,
+				AC0B01000000000000000000 /* EmulatorSession+RuntimeConfiguration.swift in Sources */,
+				AB0701000000000000000000 /* EmulatorSession+Networking.swift in Sources */,
+				AB0601000000000000000000 /* EmulatorSession+Printing.swift in Sources */,
+				AB0501000000000000000000 /* EmulatorSession+DebuggerBridge.swift in Sources */,
+				AB0101000000000000000000 /* RAMExpansion.swift in Sources */,
+				AB0201000000000000000000 /* HayesModemService.swift in Sources */,
+				AB0301000000000000000000 /* PrinterSpoolPrintView.swift in Sources */,
+				AB0401000000000000000000 /* ViceResource.swift in Sources */,
 				A10000000000000000000050 /* EmulatorDefaults.swift in Sources */,
 				A10000000000000000000053 /* ControlConfiguration.swift in Sources */,
 				AA2000000000000000000011 /* DiskImageManagerView.swift in Sources */,
@@ -1091,9 +1351,29 @@
 				B20000000000000000000010 /* ViceMacApp.swift in Sources */,
 				B20000000000000000000056 /* AIAssistantConfiguration.swift in Sources */,
 				B20000000000000000000057 /* DebuggerView.swift in Sources */,
+				AC0C02000000000000000000 /* DebuggerModels.swift in Sources */,
 				B20000000000000000000070 /* CommodoreDiskImage.swift in Sources */,
 				B20000000000000000000072 /* DiskImageService.swift in Sources */,
+				AC0102000000000000000000 /* CPMDiskImage.swift in Sources */,
+				AC0202000000000000000000 /* GEOSPackageService.swift in Sources */,
+				AC0302000000000000000000 /* DiskImageManagerModel.swift in Sources */,
+				AC0402000000000000000000 /* ContentView+DriveIndicators.swift in Sources */,
+				AC0502000000000000000000 /* KeyboardSettingsPane.swift in Sources */,
+				AC0D02000000000000000000 /* SettingsCommonUI.swift in Sources */,
 				B20000000000000000000011 /* EmulatorSession.swift in Sources */,
+				AC0602000000000000000000 /* CommonUI.swift in Sources */,
+				AC0702000000000000000000 /* EmulatorSession+State.swift in Sources */,
+				AC0802000000000000000000 /* EmulatorSession+InputControl.swift in Sources */,
+				AC0902000000000000000000 /* EmulatorSession+Lifecycle.swift in Sources */,
+				AC0A02000000000000000000 /* EmulatorSession+Media.swift in Sources */,
+				AC0B02000000000000000000 /* EmulatorSession+RuntimeConfiguration.swift in Sources */,
+				AB0702000000000000000000 /* EmulatorSession+Networking.swift in Sources */,
+				AB0602000000000000000000 /* EmulatorSession+Printing.swift in Sources */,
+				AB0502000000000000000000 /* EmulatorSession+DebuggerBridge.swift in Sources */,
+				AB0102000000000000000000 /* RAMExpansion.swift in Sources */,
+				AB0202000000000000000000 /* HayesModemService.swift in Sources */,
+				AB0302000000000000000000 /* PrinterSpoolPrintView.swift in Sources */,
+				AB0402000000000000000000 /* ViceResource.swift in Sources */,
 				B20000000000000000000050 /* EmulatorDefaults.swift in Sources */,
 				B20000000000000000000053 /* ControlConfiguration.swift in Sources */,
 				B20000000000000000000071 /* DiskImageManagerView.swift in Sources */,
@@ -1121,9 +1401,29 @@
 				C30000000000000000000010 /* ViceMacApp.swift in Sources */,
 				C30000000000000000000056 /* AIAssistantConfiguration.swift in Sources */,
 				C30000000000000000000057 /* DebuggerView.swift in Sources */,
+				AC0C03000000000000000000 /* DebuggerModels.swift in Sources */,
 				C30000000000000000000070 /* CommodoreDiskImage.swift in Sources */,
 				C30000000000000000000072 /* DiskImageService.swift in Sources */,
+				AC0103000000000000000000 /* CPMDiskImage.swift in Sources */,
+				AC0203000000000000000000 /* GEOSPackageService.swift in Sources */,
+				AC0303000000000000000000 /* DiskImageManagerModel.swift in Sources */,
+				AC0403000000000000000000 /* ContentView+DriveIndicators.swift in Sources */,
+				AC0503000000000000000000 /* KeyboardSettingsPane.swift in Sources */,
+				AC0D03000000000000000000 /* SettingsCommonUI.swift in Sources */,
 				C30000000000000000000011 /* EmulatorSession.swift in Sources */,
+				AC0603000000000000000000 /* CommonUI.swift in Sources */,
+				AC0703000000000000000000 /* EmulatorSession+State.swift in Sources */,
+				AC0803000000000000000000 /* EmulatorSession+InputControl.swift in Sources */,
+				AC0903000000000000000000 /* EmulatorSession+Lifecycle.swift in Sources */,
+				AC0A03000000000000000000 /* EmulatorSession+Media.swift in Sources */,
+				AC0B03000000000000000000 /* EmulatorSession+RuntimeConfiguration.swift in Sources */,
+				AB0703000000000000000000 /* EmulatorSession+Networking.swift in Sources */,
+				AB0603000000000000000000 /* EmulatorSession+Printing.swift in Sources */,
+				AB0503000000000000000000 /* EmulatorSession+DebuggerBridge.swift in Sources */,
+				AB0103000000000000000000 /* RAMExpansion.swift in Sources */,
+				AB0203000000000000000000 /* HayesModemService.swift in Sources */,
+				AB0303000000000000000000 /* PrinterSpoolPrintView.swift in Sources */,
+				AB0403000000000000000000 /* ViceResource.swift in Sources */,
 				C30000000000000000000050 /* EmulatorDefaults.swift in Sources */,
 				C30000000000000000000053 /* ControlConfiguration.swift in Sources */,
 				C30000000000000000000071 /* DiskImageManagerView.swift in Sources */,
@@ -1151,9 +1451,29 @@
 				D40000000000000000000010 /* ViceMacApp.swift in Sources */,
 				D40000000000000000000056 /* AIAssistantConfiguration.swift in Sources */,
 				D40000000000000000000057 /* DebuggerView.swift in Sources */,
+				AC0C04000000000000000000 /* DebuggerModels.swift in Sources */,
 				D40000000000000000000070 /* CommodoreDiskImage.swift in Sources */,
 				D40000000000000000000072 /* DiskImageService.swift in Sources */,
+				AC0104000000000000000000 /* CPMDiskImage.swift in Sources */,
+				AC0204000000000000000000 /* GEOSPackageService.swift in Sources */,
+				AC0304000000000000000000 /* DiskImageManagerModel.swift in Sources */,
+				AC0404000000000000000000 /* ContentView+DriveIndicators.swift in Sources */,
+				AC0504000000000000000000 /* KeyboardSettingsPane.swift in Sources */,
+				AC0D04000000000000000000 /* SettingsCommonUI.swift in Sources */,
 				D40000000000000000000011 /* EmulatorSession.swift in Sources */,
+				AC0604000000000000000000 /* CommonUI.swift in Sources */,
+				AC0704000000000000000000 /* EmulatorSession+State.swift in Sources */,
+				AC0804000000000000000000 /* EmulatorSession+InputControl.swift in Sources */,
+				AC0904000000000000000000 /* EmulatorSession+Lifecycle.swift in Sources */,
+				AC0A04000000000000000000 /* EmulatorSession+Media.swift in Sources */,
+				AC0B04000000000000000000 /* EmulatorSession+RuntimeConfiguration.swift in Sources */,
+				AB0704000000000000000000 /* EmulatorSession+Networking.swift in Sources */,
+				AB0604000000000000000000 /* EmulatorSession+Printing.swift in Sources */,
+				AB0504000000000000000000 /* EmulatorSession+DebuggerBridge.swift in Sources */,
+				AB0104000000000000000000 /* RAMExpansion.swift in Sources */,
+				AB0204000000000000000000 /* HayesModemService.swift in Sources */,
+				AB0304000000000000000000 /* PrinterSpoolPrintView.swift in Sources */,
+				AB0404000000000000000000 /* ViceResource.swift in Sources */,
 				D40000000000000000000050 /* EmulatorDefaults.swift in Sources */,
 				D40000000000000000000053 /* ControlConfiguration.swift in Sources */,
 				D40000000000000000000071 /* DiskImageManagerView.swift in Sources */,
@@ -1181,9 +1501,29 @@
 				E50000000000000000000010 /* ViceMacApp.swift in Sources */,
 				E50000000000000000000056 /* AIAssistantConfiguration.swift in Sources */,
 				E50000000000000000000057 /* DebuggerView.swift in Sources */,
+				AC0C05000000000000000000 /* DebuggerModels.swift in Sources */,
 				E50000000000000000000070 /* CommodoreDiskImage.swift in Sources */,
 				E50000000000000000000072 /* DiskImageService.swift in Sources */,
+				AC0105000000000000000000 /* CPMDiskImage.swift in Sources */,
+				AC0205000000000000000000 /* GEOSPackageService.swift in Sources */,
+				AC0305000000000000000000 /* DiskImageManagerModel.swift in Sources */,
+				AC0405000000000000000000 /* ContentView+DriveIndicators.swift in Sources */,
+				AC0505000000000000000000 /* KeyboardSettingsPane.swift in Sources */,
+				AC0D05000000000000000000 /* SettingsCommonUI.swift in Sources */,
 				E50000000000000000000011 /* EmulatorSession.swift in Sources */,
+				AC0605000000000000000000 /* CommonUI.swift in Sources */,
+				AC0705000000000000000000 /* EmulatorSession+State.swift in Sources */,
+				AC0805000000000000000000 /* EmulatorSession+InputControl.swift in Sources */,
+				AC0905000000000000000000 /* EmulatorSession+Lifecycle.swift in Sources */,
+				AC0A05000000000000000000 /* EmulatorSession+Media.swift in Sources */,
+				AC0B05000000000000000000 /* EmulatorSession+RuntimeConfiguration.swift in Sources */,
+				AB0705000000000000000000 /* EmulatorSession+Networking.swift in Sources */,
+				AB0605000000000000000000 /* EmulatorSession+Printing.swift in Sources */,
+				AB0505000000000000000000 /* EmulatorSession+DebuggerBridge.swift in Sources */,
+				AB0105000000000000000000 /* RAMExpansion.swift in Sources */,
+				AB0205000000000000000000 /* HayesModemService.swift in Sources */,
+				AB0305000000000000000000 /* PrinterSpoolPrintView.swift in Sources */,
+				AB0405000000000000000000 /* ViceResource.swift in Sources */,
 				E50000000000000000000050 /* EmulatorDefaults.swift in Sources */,
 				E50000000000000000000053 /* ControlConfiguration.swift in Sources */,
 				E50000000000000000000071 /* DiskImageManagerView.swift in Sources */,
@@ -1211,9 +1551,29 @@
 				170000000000000000000010 /* ViceMacApp.swift in Sources */,
 				170000000000000000000056 /* AIAssistantConfiguration.swift in Sources */,
 				170000000000000000000057 /* DebuggerView.swift in Sources */,
+				AC0C06000000000000000000 /* DebuggerModels.swift in Sources */,
 				170000000000000000000070 /* CommodoreDiskImage.swift in Sources */,
 				170000000000000000000072 /* DiskImageService.swift in Sources */,
+				AC0106000000000000000000 /* CPMDiskImage.swift in Sources */,
+				AC0206000000000000000000 /* GEOSPackageService.swift in Sources */,
+				AC0306000000000000000000 /* DiskImageManagerModel.swift in Sources */,
+				AC0406000000000000000000 /* ContentView+DriveIndicators.swift in Sources */,
+				AC0506000000000000000000 /* KeyboardSettingsPane.swift in Sources */,
+				AC0D06000000000000000000 /* SettingsCommonUI.swift in Sources */,
 				170000000000000000000011 /* EmulatorSession.swift in Sources */,
+				AC0606000000000000000000 /* CommonUI.swift in Sources */,
+				AC0706000000000000000000 /* EmulatorSession+State.swift in Sources */,
+				AC0806000000000000000000 /* EmulatorSession+InputControl.swift in Sources */,
+				AC0906000000000000000000 /* EmulatorSession+Lifecycle.swift in Sources */,
+				AC0A06000000000000000000 /* EmulatorSession+Media.swift in Sources */,
+				AC0B06000000000000000000 /* EmulatorSession+RuntimeConfiguration.swift in Sources */,
+				AB0706000000000000000000 /* EmulatorSession+Networking.swift in Sources */,
+				AB0606000000000000000000 /* EmulatorSession+Printing.swift in Sources */,
+				AB0506000000000000000000 /* EmulatorSession+DebuggerBridge.swift in Sources */,
+				AB0106000000000000000000 /* RAMExpansion.swift in Sources */,
+				AB0206000000000000000000 /* HayesModemService.swift in Sources */,
+				AB0306000000000000000000 /* PrinterSpoolPrintView.swift in Sources */,
+				AB0406000000000000000000 /* ViceResource.swift in Sources */,
 				170000000000000000000050 /* EmulatorDefaults.swift in Sources */,
 				170000000000000000000053 /* ControlConfiguration.swift in Sources */,
 				170000000000000000000071 /* DiskImageManagerView.swift in Sources */,
@@ -1241,9 +1601,29 @@
 				180000000000000000000010 /* ViceMacApp.swift in Sources */,
 				180000000000000000000056 /* AIAssistantConfiguration.swift in Sources */,
 				180000000000000000000057 /* DebuggerView.swift in Sources */,
+				AC0C07000000000000000000 /* DebuggerModels.swift in Sources */,
 				180000000000000000000070 /* CommodoreDiskImage.swift in Sources */,
 				180000000000000000000072 /* DiskImageService.swift in Sources */,
+				AC0107000000000000000000 /* CPMDiskImage.swift in Sources */,
+				AC0207000000000000000000 /* GEOSPackageService.swift in Sources */,
+				AC0307000000000000000000 /* DiskImageManagerModel.swift in Sources */,
+				AC0407000000000000000000 /* ContentView+DriveIndicators.swift in Sources */,
+				AC0507000000000000000000 /* KeyboardSettingsPane.swift in Sources */,
+				AC0D07000000000000000000 /* SettingsCommonUI.swift in Sources */,
 				180000000000000000000011 /* EmulatorSession.swift in Sources */,
+				AC0607000000000000000000 /* CommonUI.swift in Sources */,
+				AC0707000000000000000000 /* EmulatorSession+State.swift in Sources */,
+				AC0807000000000000000000 /* EmulatorSession+InputControl.swift in Sources */,
+				AC0907000000000000000000 /* EmulatorSession+Lifecycle.swift in Sources */,
+				AC0A07000000000000000000 /* EmulatorSession+Media.swift in Sources */,
+				AC0B07000000000000000000 /* EmulatorSession+RuntimeConfiguration.swift in Sources */,
+				AB0707000000000000000000 /* EmulatorSession+Networking.swift in Sources */,
+				AB0607000000000000000000 /* EmulatorSession+Printing.swift in Sources */,
+				AB0507000000000000000000 /* EmulatorSession+DebuggerBridge.swift in Sources */,
+				AB0107000000000000000000 /* RAMExpansion.swift in Sources */,
+				AB0207000000000000000000 /* HayesModemService.swift in Sources */,
+				AB0307000000000000000000 /* PrinterSpoolPrintView.swift in Sources */,
+				AB0407000000000000000000 /* ViceResource.swift in Sources */,
 				180000000000000000000050 /* EmulatorDefaults.swift in Sources */,
 				180000000000000000000053 /* ControlConfiguration.swift in Sources */,
 				180000000000000000000071 /* DiskImageManagerView.swift in Sources */,
@@ -1271,9 +1651,29 @@
 				190000000000000000000010 /* ViceMacApp.swift in Sources */,
 				190000000000000000000056 /* AIAssistantConfiguration.swift in Sources */,
 				190000000000000000000057 /* DebuggerView.swift in Sources */,
+				AC0C08000000000000000000 /* DebuggerModels.swift in Sources */,
 				190000000000000000000070 /* CommodoreDiskImage.swift in Sources */,
 				190000000000000000000072 /* DiskImageService.swift in Sources */,
+				AC0108000000000000000000 /* CPMDiskImage.swift in Sources */,
+				AC0208000000000000000000 /* GEOSPackageService.swift in Sources */,
+				AC0308000000000000000000 /* DiskImageManagerModel.swift in Sources */,
+				AC0408000000000000000000 /* ContentView+DriveIndicators.swift in Sources */,
+				AC0508000000000000000000 /* KeyboardSettingsPane.swift in Sources */,
+				AC0D08000000000000000000 /* SettingsCommonUI.swift in Sources */,
 				190000000000000000000011 /* EmulatorSession.swift in Sources */,
+				AC0608000000000000000000 /* CommonUI.swift in Sources */,
+				AC0708000000000000000000 /* EmulatorSession+State.swift in Sources */,
+				AC0808000000000000000000 /* EmulatorSession+InputControl.swift in Sources */,
+				AC0908000000000000000000 /* EmulatorSession+Lifecycle.swift in Sources */,
+				AC0A08000000000000000000 /* EmulatorSession+Media.swift in Sources */,
+				AC0B08000000000000000000 /* EmulatorSession+RuntimeConfiguration.swift in Sources */,
+				AB0708000000000000000000 /* EmulatorSession+Networking.swift in Sources */,
+				AB0608000000000000000000 /* EmulatorSession+Printing.swift in Sources */,
+				AB0508000000000000000000 /* EmulatorSession+DebuggerBridge.swift in Sources */,
+				AB0108000000000000000000 /* RAMExpansion.swift in Sources */,
+				AB0208000000000000000000 /* HayesModemService.swift in Sources */,
+				AB0308000000000000000000 /* PrinterSpoolPrintView.swift in Sources */,
+				AB0408000000000000000000 /* ViceResource.swift in Sources */,
 				190000000000000000000050 /* EmulatorDefaults.swift in Sources */,
 				190000000000000000000053 /* ControlConfiguration.swift in Sources */,
 				190000000000000000000071 /* DiskImageManagerView.swift in Sources */,
@@ -1301,11 +1701,31 @@
 				1A0000000000000000000010 /* ViceMacApp.swift in Sources */,
 				1A0000000000000000000056 /* AIAssistantConfiguration.swift in Sources */,
 				1A0000000000000000000057 /* DebuggerView.swift in Sources */,
+				AC0C09000000000000000000 /* DebuggerModels.swift in Sources */,
 				1A0000000000000000000070 /* CommodoreDiskImage.swift in Sources */,
 				1A0000000000000000000072 /* DiskImageService.swift in Sources */,
+				AC0109000000000000000000 /* CPMDiskImage.swift in Sources */,
+				AC0209000000000000000000 /* GEOSPackageService.swift in Sources */,
+				AC0309000000000000000000 /* DiskImageManagerModel.swift in Sources */,
+				AC0409000000000000000000 /* ContentView+DriveIndicators.swift in Sources */,
+				AC0509000000000000000000 /* KeyboardSettingsPane.swift in Sources */,
+				AC0D09000000000000000000 /* SettingsCommonUI.swift in Sources */,
 				1A0000000000000000000073 /* SIDFile.swift in Sources */,
 				1A0000000000000000000074 /* VSIDPlayerView.swift in Sources */,
 				1A0000000000000000000011 /* EmulatorSession.swift in Sources */,
+				AC0609000000000000000000 /* CommonUI.swift in Sources */,
+				AC0709000000000000000000 /* EmulatorSession+State.swift in Sources */,
+				AC0809000000000000000000 /* EmulatorSession+InputControl.swift in Sources */,
+				AC0909000000000000000000 /* EmulatorSession+Lifecycle.swift in Sources */,
+				AC0A09000000000000000000 /* EmulatorSession+Media.swift in Sources */,
+				AC0B09000000000000000000 /* EmulatorSession+RuntimeConfiguration.swift in Sources */,
+				AB0709000000000000000000 /* EmulatorSession+Networking.swift in Sources */,
+				AB0609000000000000000000 /* EmulatorSession+Printing.swift in Sources */,
+				AB0509000000000000000000 /* EmulatorSession+DebuggerBridge.swift in Sources */,
+				AB0109000000000000000000 /* RAMExpansion.swift in Sources */,
+				AB0209000000000000000000 /* HayesModemService.swift in Sources */,
+				AB0309000000000000000000 /* PrinterSpoolPrintView.swift in Sources */,
+				AB0409000000000000000000 /* ViceResource.swift in Sources */,
 				1A0000000000000000000050 /* EmulatorDefaults.swift in Sources */,
 				1A0000000000000000000053 /* ControlConfiguration.swift in Sources */,
 				1A0000000000000000000071 /* DiskImageManagerView.swift in Sources */,
@@ -1332,9 +1752,29 @@
 			files = (
 				F60000000000000000000010 /* ModelConfigurationTests.swift in Sources */,
 				F60000000000000000000056 /* AIAssistantConfiguration.swift in Sources */,
+				AC0C0A000000000000000000 /* DebuggerModels.swift in Sources */,
 				F60000000000000000000070 /* CommodoreDiskImage.swift in Sources */,
 				F60000000000000000000071 /* DiskImageService.swift in Sources */,
+				AC010A000000000000000000 /* CPMDiskImage.swift in Sources */,
+				AC020A000000000000000000 /* GEOSPackageService.swift in Sources */,
+				AC030A000000000000000000 /* DiskImageManagerModel.swift in Sources */,
+				AC040A000000000000000000 /* ContentView+DriveIndicators.swift in Sources */,
+				AC050A000000000000000000 /* KeyboardSettingsPane.swift in Sources */,
+				AC0D0A000000000000000000 /* SettingsCommonUI.swift in Sources */,
 				F60000000000000000000011 /* EmulatorSession.swift in Sources */,
+				AC060A000000000000000000 /* CommonUI.swift in Sources */,
+				AC070A000000000000000000 /* EmulatorSession+State.swift in Sources */,
+				AC080A000000000000000000 /* EmulatorSession+InputControl.swift in Sources */,
+				AC090A000000000000000000 /* EmulatorSession+Lifecycle.swift in Sources */,
+				AC0A0A000000000000000000 /* EmulatorSession+Media.swift in Sources */,
+				AC0B0A000000000000000000 /* EmulatorSession+RuntimeConfiguration.swift in Sources */,
+				AB070A000000000000000000 /* EmulatorSession+Networking.swift in Sources */,
+				AB060A000000000000000000 /* EmulatorSession+Printing.swift in Sources */,
+				AB050A000000000000000000 /* EmulatorSession+DebuggerBridge.swift in Sources */,
+				AB010A000000000000000000 /* RAMExpansion.swift in Sources */,
+				AB020A000000000000000000 /* HayesModemService.swift in Sources */,
+				AB030A000000000000000000 /* PrinterSpoolPrintView.swift in Sources */,
+				AB040A000000000000000000 /* ViceResource.swift in Sources */,
 				F60000000000000000000050 /* EmulatorDefaults.swift in Sources */,
 				F60000000000000000000053 /* ControlConfiguration.swift in Sources */,
 				F60000000000000000000054 /* DriveConfiguration.swift in Sources */,

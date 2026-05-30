@@ -354,6 +354,42 @@ struct DriveActivity: Identifiable, Equatable {
         return "T\(Self.paddedHeadValue(track))"
     }
 
+    var headDetailText: String? {
+        guard let track else {
+            return nil
+        }
+
+        var components = ["Track \(Self.paddedHeadValue(track))"]
+        if let halfTrack, halfTrack != 0 {
+            components.append("+\(halfTrack)/2")
+        }
+        if diskSide > 0 {
+            components.append("Side \(diskSide + 1)")
+        }
+        return components.joined(separator: " ")
+    }
+
+    var resolvedStatusText: String {
+        if let driveStatusText,
+           !driveStatusText.isEmpty {
+            if !hasErrorStatus {
+                return "Ready"
+            }
+
+            return driveStatusText
+        }
+
+        if hasErrorStatus {
+            return "Error \(driveStatusCode)"
+        }
+
+        return hasDiskImage ? "Ready" : "No disk"
+    }
+
+    var hasDiskImage: Bool {
+        slots.contains { $0.hasDiskImage }
+    }
+
     private static func paddedHeadValue(_ value: UInt32) -> String {
         String(format: "%02u", value)
     }

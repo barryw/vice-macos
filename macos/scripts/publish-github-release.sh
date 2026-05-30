@@ -200,6 +200,7 @@ write_release_notes() {
     local category
     local category_file
     local commit_count=0
+    local scan_limit="${VICE_MAC_RELEASE_NOTE_SCAN_LIMIT:-500}"
 
     release_ref="$(release_note_ref "$tag")"
     release_commit="$(git -C "$REPO_ROOT" rev-parse "$release_ref^{commit}")"
@@ -213,6 +214,10 @@ write_release_notes() {
     fi
 
     while IFS= read -r commit; do
+        if ! release_note_is_relevant_commit "$commit"; then
+            continue
+        fi
+
         subject="$(git -C "$REPO_ROOT" show -s --format=%s "$commit")"
         category="$(release_note_category "$subject")"
         category_file="$notes_dir/$category.html"
@@ -222,14 +227,47 @@ write_release_notes() {
             "$(release_note_source_badge "$commit")" \
             >> "$category_file"
         commit_count=$((commit_count + 1))
-    done < <(git -C "$REPO_ROOT" rev-list --no-merges --max-count=20 "${rev_args[@]}")
+        if [[ "$commit_count" -ge 20 ]]; then
+            break
+        fi
+    done < <(git -C "$REPO_ROOT" rev-list --no-merges --max-count="$scan_limit" "${rev_args[@]}")
 
     if [[ "$commit_count" -eq 0 ]]; then
-        printf '            <li>No source changes since the previous VICE Mac release.</li>\n' >> "$notes_dir/changed.html"
+        printf '            <li>No emulator-facing changes since the previous VICE Mac release.</li>\n' >> "$notes_dir/changed.html"
     fi
 
     write_release_notes_html "$release_label" "$notes_dir" > "$notes_file"
     rm -rf "$notes_dir"
+}
+
+release_note_is_relevant_commit() {
+    local commit="$1"
+    local path
+
+    if release_note_is_upstream_commit "$commit"; then
+        return 0
+    fi
+
+    while IFS= read -r path; do
+        if release_note_is_machine_path "$path"; then
+            return 0
+        fi
+    done < <(git -C "$REPO_ROOT" diff-tree --no-commit-id --name-only -r "$commit")
+
+    return 1
+}
+
+release_note_is_machine_path() {
+    local path="$1"
+
+    case "$path" in
+        macos/ViceMac/*|macos/ViceMac.xcodeproj/*|commodore-utils/*|vice/*)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
 }
 
 release_note_ref() {
@@ -426,68 +464,74 @@ EOF
 EOF
 }
 
-require_tool gh "Install GitHub CLI with: brew install gh"
-require_tool plutil "plutil ships with macOS."
+publish_github_release_main() {
+    require_tool gh "Install GitHub CLI with: brew install gh"
+    require_tool plutil "plutil ships with macOS."
 
-fetch_release_note_refs
+    fetch_release_note_refs
 
-if [[ ! -d "$DIST_DIR" ]]; then
-    echo "Release artifacts are missing at $DIST_DIR." >&2
-    exit 1
-fi
+    if [[ ! -d "$DIST_DIR" ]]; then
+        echo "Release artifacts are missing at $DIST_DIR." >&2
+        exit 1
+    fi
 
-shopt -s nullglob
-dmg_artifacts=("$DIST_DIR"/*.dmg)
-if [[ "${#dmg_artifacts[@]}" -eq 0 ]]; then
-    echo "No release artifacts found in $DIST_DIR." >&2
-    exit 1
-fi
-if [[ "${#dmg_artifacts[@]}" -ne 1 ]]; then
-    echo "Expected exactly one release DMG in $DIST_DIR, found ${#dmg_artifacts[@]}." >&2
-    exit 1
-fi
+    shopt -s nullglob
+    dmg_artifacts=("$DIST_DIR"/*.dmg)
+    if [[ "${#dmg_artifacts[@]}" -eq 0 ]]; then
+        echo "No release artifacts found in $DIST_DIR." >&2
+        exit 1
+    fi
+    if [[ "${#dmg_artifacts[@]}" -ne 1 ]]; then
+        echo "Expected exactly one release DMG in $DIST_DIR, found ${#dmg_artifacts[@]}." >&2
+        exit 1
+    fi
 
-tag="$(release_tag)"
-if [[ "$tag" != vice-mac-* ]]; then
-    echo "VICE Mac release tags must start with 'vice-mac-'." >&2
-    echo "Refusing to publish release for tag '$tag'." >&2
-    exit 1
-fi
+    tag="$(release_tag)"
+    if [[ "$tag" != vice-mac-* ]]; then
+        echo "VICE Mac release tags must start with 'vice-mac-'." >&2
+        echo "Refusing to publish release for tag '$tag'." >&2
+        exit 1
+    fi
 
-release_label="${tag#vice-mac-}"
-notes_file="$DIST_DIR/release-notes.md"
-appcast_file="$DIST_DIR/appcast.xml"
-repo_args=()
-target_args=()
+    release_label="${tag#vice-mac-}"
+    notes_file="$DIST_DIR/release-notes.md"
+    appcast_file="$DIST_DIR/appcast.xml"
+    repo_args=()
+    target_args=()
 
-while IFS= read -r arg; do
-    repo_args+=("$arg")
-done < <(github_repo_args)
+    while IFS= read -r arg; do
+        repo_args+=("$arg")
+    done < <(github_repo_args)
 
-while IFS= read -r arg; do
-    target_args+=("$arg")
-done < <(release_target_args)
+    while IFS= read -r arg; do
+        target_args+=("$arg")
+    done < <(release_target_args)
 
-write_release_notes "$tag" "$notes_file"
-write_appcast "$tag" "$release_label" "$notes_file" "${dmg_artifacts[0]}" "$appcast_file"
+    write_release_notes "$tag" "$notes_file"
+    write_appcast "$tag" "$release_label" "$notes_file" "${dmg_artifacts[0]}" "$appcast_file"
 
-artifacts=("${dmg_artifacts[@]}")
-if [[ -f "$DIST_DIR/SHA256SUMS.txt" ]]; then
-    artifacts+=("$DIST_DIR/SHA256SUMS.txt")
-fi
-artifacts+=("$appcast_file")
+    artifacts=("${dmg_artifacts[@]}")
+    if [[ -f "$DIST_DIR/SHA256SUMS.txt" ]]; then
+        artifacts+=("$DIST_DIR/SHA256SUMS.txt")
+    fi
+    artifacts+=("$appcast_file")
 
-if ! gh release view "$tag" "${repo_args[@]}" >/dev/null 2>&1; then
-    gh release create "$tag" "${repo_args[@]}" "${target_args[@]}" \
+    if ! gh release view "$tag" "${repo_args[@]}" >/dev/null 2>&1; then
+        gh release create "$tag" "${repo_args[@]}" "${target_args[@]}" \
+            --title "VICE Mac $release_label" \
+            --notes-file "$notes_file" \
+            --draft
+    fi
+
+    gh release upload "$tag" "${repo_args[@]}" --clobber "${artifacts[@]}"
+    gh release edit "$tag" "${repo_args[@]}" \
         --title "VICE Mac $release_label" \
         --notes-file "$notes_file" \
-        --draft
-fi
+        --draft=false \
+        --prerelease=false \
+        --latest
+}
 
-gh release upload "$tag" "${repo_args[@]}" --clobber "${artifacts[@]}"
-gh release edit "$tag" "${repo_args[@]}" \
-    --title "VICE Mac $release_label" \
-    --notes-file "$notes_file" \
-    --draft=false \
-    --prerelease=false \
-    --latest
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    publish_github_release_main "$@"
+fi

@@ -817,6 +817,34 @@ final class ModelConfigurationTests: XCTestCase {
         XCTAssertTrue(arguments.contains("-attach8d1ro"))
     }
 
+    func testDriveActivitySummariesExposeParsedStatusFields() {
+        let activity = DriveActivity(unit: 8,
+                                     isConfigured: true,
+                                     driveType: .c1571,
+                                     accessMode: .native,
+                                     activeDriveNumber: 0,
+                                     slots: [
+                                        DriveSlotActivity(driveNumber: 0,
+                                                          ledColor: .green,
+                                                          ledIntensity: 100,
+                                                          imagePath: "/tmp/work.d71")
+                                     ],
+                                     ledColor: .green,
+                                     ledIntensity: 100,
+                                     errorIntensity: 0,
+                                     track: 18,
+                                     halfTrack: 1,
+                                     diskSide: 1,
+                                     driveStatusCode: 74,
+                                     driveStatusText: "DRIVE NOT READY",
+                                     imagePath: "/tmp/work.d71")
+
+        XCTAssertEqual(activity.headPositionText, "T18")
+        XCTAssertEqual(activity.headDetailText, "Track 18 +1/2 Side 2")
+        XCTAssertEqual(activity.resolvedStatusText, "DRIVE NOT READY")
+        XCTAssertTrue(activity.hasDiskImage)
+    }
+
     func testMediaAndTapeStartupOptionsUseMacSettings() {
         let machine = EmulatedMachine.x64sc
         let mediaBehavior = MediaBehaviorConfiguration(openBehavior: .load,
@@ -850,6 +878,21 @@ final class ModelConfigurationTests: XCTestCase {
         XCTAssertEqual(arguments.value(after: "-pr4txtdev"), "0")
         XCTAssertEqual(arguments.value(after: "-pr4drv"), "mps803")
         XCTAssertEqual(arguments.value(after: "-pr4output"), "graphics")
+    }
+
+    func testPrinterPreviewAvailabilityRequiresEnabledGraphicsPrinter() {
+        XCTAssertTrue(PrinterConfiguration(isEnabled: true,
+                                           deviceNumber: 4,
+                                           model: .mps803).canPreviewPages)
+        XCTAssertTrue(PrinterConfiguration(isEnabled: true,
+                                           deviceNumber: 4,
+                                           model: .nl10).canPreviewPages)
+        XCTAssertFalse(PrinterConfiguration(isEnabled: false,
+                                            deviceNumber: 4,
+                                            model: .mps803).canPreviewPages)
+        XCTAssertFalse(PrinterConfiguration(isEnabled: true,
+                                            deviceNumber: 4,
+                                            model: .ascii).canPreviewPages)
     }
 
     func testDisabledPrinterStartupOptionsLeaveDeviceOff() {
@@ -972,6 +1015,42 @@ final class ModelConfigurationTests: XCTestCase {
         XCTAssertEqual(chunks[0].count, EmulatorSession.maxKeyboardTextChunkLength)
         XCTAssertEqual(chunks[1].count, 5)
         XCTAssertTrue(chunks.allSatisfy { $0.utf8.count <= EmulatorSession.maxKeyboardTextChunkLength })
+    }
+
+    func testDebuggerSnapshotFormatsRawMemorySpace() {
+        var raw = ViceEngineDebuggerSnapshot()
+        raw.memorySpace = 5
+        raw.cpuType = 5
+        raw.bank = -1
+        raw.programCounter = 0xc000
+
+        let snapshot = DebuggerSnapshot(raw)
+
+        XCTAssertEqual(snapshot.memorySpaceText, "Drive 11")
+        XCTAssertEqual(snapshot.pcText, "C000")
+        XCTAssertEqual(snapshot.bankText, "Current")
+        XCTAssertEqual(DebuggerFormatter.memorySpaceTitle(99), "Memory 99")
+    }
+
+    func testDebuggerCheckpointDetailTextSurfacesParsedOptions() {
+        var raw = ViceEngineDebuggerCheckpoint()
+        raw.id = 7
+        raw.memorySpace = 3
+        raw.startAddress = 0xc000
+        raw.endAddress = 0xc002
+        raw.operations = DebuggerOperations.read.rawValue | DebuggerOperations.write.rawValue
+        raw.enabled = 1
+        raw.stops = 0
+        raw.temporary = 1
+        raw.hitCount = 2
+        raw.ignoreCount = 4
+
+        let checkpoint = DebuggerCheckpoint(raw)
+
+        XCTAssertEqual(checkpoint.rangeText, "C000-C002")
+        XCTAssertEqual(checkpoint.memorySpaceText, "Drive 9")
+        XCTAssertEqual(checkpoint.detailText, "Drive 9 - Logs - Temporary - Ignore 4")
+        XCTAssertEqual(checkpoint.addresses, [0xc000, 0xc001, 0xc002])
     }
 
     func testVICEKeymapParserExpandsIncludesAndMatrixLabels() throws {
@@ -1512,6 +1591,33 @@ final class ModelConfigurationTests: XCTestCase {
         XCTAssertEqual(try image.directoryEntries(), [])
         XCTAssertEqual(image.header.blocksFree, 664)
         XCTAssertTrue(image.isModified)
+    }
+
+    func testDiskImageDirectoryEntryBadgesExposeProtectionAttributes() {
+        let commodore = CommodoreDiskDirectoryEntry(id: "cbm",
+                                                    name: "LOCKED",
+                                                    rawName: [],
+                                                    type: .prg,
+                                                    isClosed: false,
+                                                    isLocked: true,
+                                                    start: CommodoreDiskAddress(track: 1, sector: 0),
+                                                    blocks: 1,
+                                                    directoryAddress: CommodoreDiskAddress(track: 18, sector: 1),
+                                                    slotIndex: 0)
+        let cpm = CPMDirectoryEntry(id: "cpm",
+                                    user: 0,
+                                    fileName: "PROFILE",
+                                    fileExtension: "SUB",
+                                    records: 1,
+                                    allocationBlocks: [2],
+                                    directorySlots: [0],
+                                    isReadOnly: true,
+                                    isSystem: true,
+                                    isArchived: true,
+                                    startAddress: CommodoreDiskAddress(track: 1, sector: 0))
+
+        XCTAssertEqual(DiskImageDirectoryEntry.commodore(commodore).statusBadges, [.open, .locked])
+        XCTAssertEqual(DiskImageDirectoryEntry.cpm(cpm).statusBadges, [.readOnly, .system, .archived])
     }
 
     func testCommodoreDiskImageRejectsDuplicateImportedNames() throws {

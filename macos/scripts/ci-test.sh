@@ -36,3 +36,5 @@ xcodebuild \
     -configuration "$CONFIGURATION" \
     -destination "$DESTINATION" \
     -derivedDataPath "$DERIVED_DATA"
+
+bash "$SCRIPT_DIR/test-release-notes.sh"
