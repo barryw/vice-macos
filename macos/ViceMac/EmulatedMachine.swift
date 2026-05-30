@@ -587,10 +587,15 @@ struct MachineCapabilities: Equatable {
     let supportsRAMExpansion: Bool
     var supportsSystemTimeSync = false
     var supportsTape = true
+    var supportedModemInterfaces: [NetworkModemInterface] = []
     let controlPorts: [ControlPort]
     let driveUnits: [Int]
     let driveTypes: [DriveType]
     let defaultDriveType: DriveType
+
+    var supportsNetworking: Bool {
+        !supportedModemInterfaces.isEmpty
+    }
 }
 
 struct MachineStartupConfiguration {
@@ -612,6 +617,8 @@ struct MachineStartupConfiguration {
     let printerOutputBasePath: String
     let driveConfigurations: [DriveConfiguration]
     let syncSystemTime: Bool
+    let networkModem: NetworkModemConfiguration
+    let networkLocalPort: Int?
 }
 
 struct ViceIntResourceAssignment: Equatable {
@@ -633,10 +640,6 @@ struct EmulatedMachine: Identifiable, Equatable {
     let ramExpansions: [RAMExpansion]
     let capabilities: MachineCapabilities
     let videoStandardResources: [EmulatorSession.VideoStandard: [ViceIntResourceAssignment]]
-
-    var bootFrame: MachineBootFrame {
-        displayProfile.bootFrame
-    }
 
     var family: MachineFamily {
         model.family
@@ -692,6 +695,8 @@ struct EmulatedMachine: Identifiable, Equatable {
         arguments += mediaStartupOptions(for: configuration.mediaBehavior)
         arguments += printerStartupOptions(configuration: configuration.printerConfiguration,
                                            outputBasePath: configuration.printerOutputBasePath)
+        arguments += networkModemStartupOptions(configuration: configuration.networkModem,
+                                                localPort: configuration.networkLocalPort)
 
         if let startupOption = configuration.displayOutput.startupOption {
             arguments.append(startupOption)
@@ -709,7 +714,9 @@ struct EmulatedMachine: Identifiable, Equatable {
             arguments += tapeStartupOptions(for: configuration.tapeConfiguration)
         }
 
-        if capabilities.supportsSystemTimeSync && configuration.syncSystemTime {
+        if capabilities.supportsSystemTimeSync
+            && configuration.syncSystemTime
+            && !configuration.networkModem.usesActiveUserPort {
             arguments += [
                 "+userportrtcds1307save",
                 "-userportdevice",
@@ -800,6 +807,47 @@ struct EmulatedMachine: Identifiable, Equatable {
             outputOption,
             configuration.model.outputMode
         ]
+    }
+
+    private func networkModemStartupOptions(configuration: NetworkModemConfiguration,
+                                           localPort: Int?) -> [String] {
+        let modem = configuration.normalized(for: self)
+        guard modem.isEnabled,
+              let localPort,
+              capabilities.supportedModemInterfaces.contains(modem.interface) else {
+            return []
+        }
+
+        var options = [
+            "-rsdev3",
+            "127.0.0.1:\(localPort)",
+            modem.interface.usesIP232Control ? "-rsdev3ip232" : "+rsdev3ip232"
+        ]
+
+        switch modem.interface {
+        case .userPort:
+            options += [
+                "-userportdevice",
+                "modem",
+                "-rsuserdev",
+                "2",
+                "-rsuserbaud",
+                "\(modem.baudRate)",
+                "+acia1"
+            ]
+        case .swiftLink, .turbo232:
+            options += [
+                "-acia1",
+                "-myaciadev",
+                "2",
+                "-acia1mode",
+                "\(modem.interface.aciaMode ?? 1)",
+                "-acia1base",
+                "\(modem.aciaBaseAddress.rawValue)"
+            ]
+        }
+
+        return options
     }
 
     private func driveStartupOptions(for configurations: [DriveConfiguration]) -> [String] {
@@ -1086,6 +1134,7 @@ extension EmulatedMachine {
                                               supportsCartridges: true,
                                               supportsRAMExpansion: true,
                                               supportsSystemTimeSync: true,
+                                              supportedModemInterfaces: [.userPort, .swiftLink, .turbo232],
                                               controlPorts: [.one, .two],
                                               driveUnits: [8, 9, 10, 11],
                                               driveTypes: DriveType.iecOptions,
@@ -1125,6 +1174,7 @@ extension EmulatedMachine {
                                               supportsCartridges: true,
                                               supportsRAMExpansion: true,
                                               supportsSystemTimeSync: true,
+                                              supportedModemInterfaces: [.userPort, .swiftLink, .turbo232],
                                               controlPorts: [.one, .two],
                                               driveUnits: [8, 9, 10, 11],
                                               driveTypes: DriveType.c128Options,
@@ -1168,6 +1218,7 @@ extension EmulatedMachine {
                                               supportsCartridges: true,
                                               supportsRAMExpansion: true,
                                               supportsSystemTimeSync: true,
+                                              supportedModemInterfaces: [.userPort, .swiftLink, .turbo232],
                                               controlPorts: [.one],
                                               driveUnits: [8, 9, 10, 11],
                                               driveTypes: DriveType.iecOptions,
@@ -1304,25 +1355,6 @@ extension EmulatedMachine {
         #endif
     }
 
-    static var planned: [EmulatedMachine] {
-        #if VICE_MAC_MACHINE_X128
-        return [.x64sc, .xvic, .xpet, .xplus4, .xc16, .xc232, .xv364, .x128]
-        #elseif VICE_MAC_MACHINE_XV364
-        return [.x64sc, .xvic, .xpet, .xplus4, .xc16, .xc232, .xv364]
-        #elseif VICE_MAC_MACHINE_XC232
-        return [.x64sc, .xvic, .xpet, .xplus4, .xc16, .xc232]
-        #elseif VICE_MAC_MACHINE_XC16
-        return [.x64sc, .xvic, .xpet, .xplus4, .xc16]
-        #elseif VICE_MAC_MACHINE_XPLUS4
-        return [.x64sc, .xvic, .xpet, .xplus4]
-        #elseif VICE_MAC_MACHINE_XPET
-        return [.x64sc, .xvic, .xpet]
-        #elseif VICE_MAC_MACHINE_XVIC
-        return [.x64sc, .xvic]
-        #else
-        return [.x64sc]
-        #endif
-    }
 }
 
 private enum ViceVICIIModel {

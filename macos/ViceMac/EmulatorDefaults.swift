@@ -27,6 +27,7 @@ enum EmulatorDefaults {
     private static let driveConfigurationsKey = "vice.driveConfigurations"
     private static let keyboardMappingKey = "vice.keyboardMapping"
     private static let syncSystemTimeKey = "vice.syncSystemTime"
+    private static let networkModemKey = "vice.networkModem"
 
     static func loadVideoStandard(for machine: EmulatedMachine) -> EmulatorSession.VideoStandard {
         guard let rawValue = UserDefaults.standard.string(forKey: key(videoStandardKey, machine: machine))
@@ -432,6 +433,27 @@ enum EmulatorDefaults {
         }
 
         UserDefaults.standard.set(data, forKey: key(keyboardMappingKey, machine: machine))
+    }
+
+    static func loadNetworkModem(for machine: EmulatedMachine) -> NetworkModemConfiguration {
+        guard machine.capabilities.supportsNetworking,
+              let data = UserDefaults.standard.data(forKey: key(networkModemKey, machine: machine))
+                ?? legacyData(forKey: networkModemKey, machine: machine),
+              let configuration = try? JSONDecoder().decode(NetworkModemConfiguration.self, from: data) else {
+            return .standard.normalized(for: machine)
+        }
+
+        return configuration.normalized(for: machine)
+    }
+
+    static func saveNetworkModem(_ configuration: NetworkModemConfiguration,
+                                 for machine: EmulatedMachine) {
+        guard machine.capabilities.supportsNetworking,
+              let data = try? JSONEncoder().encode(configuration.normalized(for: machine)) else {
+            return
+        }
+
+        UserDefaults.standard.set(data, forKey: key(networkModemKey, machine: machine))
     }
 
     static func loadSyncSystemTime(for machine: EmulatedMachine) -> Bool {

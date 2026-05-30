@@ -1,6 +1,8 @@
 import AppKit
 import CoreGraphics
+import Darwin
 import Foundation
+@preconcurrency import Network
 import XCTest
 
 final class ModelConfigurationTests: XCTestCase {
@@ -256,6 +258,477 @@ final class ModelConfigurationTests: XCTestCase {
 
         XCTAssertTrue(arguments.contains("+userportrtcds1307save"))
         XCTAssertEqual(arguments.value(after: "-userportdevice"), "ds1307")
+    }
+
+    func testUserPortModemStartupArgumentsDisableRTCUserPortConflict() {
+        let machine = EmulatedMachine.x64sc
+        let modem = NetworkModemConfiguration(isEnabled: true,
+                                              interface: .userPort,
+                                              baudRate: 2400,
+                                              transportMode: .telnet,
+                                              acceptsIncomingCalls: true,
+                                              incomingPort: 6400,
+                                              autoAnswerRings: 0,
+                                              echoCommands: true,
+                                              verboseResultCodes: true,
+                                              defaultDialPort: 23)
+        let arguments = machine.startupArguments(configuration: startupConfiguration(for: machine,
+                                                                                     syncSystemTime: true,
+                                                                                     networkModem: modem,
+                                                                                     networkLocalPort: 25232))
+
+        XCTAssertEqual(arguments.value(after: "-rsdev3"), "127.0.0.1:25232")
+        XCTAssertTrue(arguments.contains("+rsdev3ip232"))
+        XCTAssertFalse(arguments.contains("-rsdev3ip232"))
+        XCTAssertEqual(arguments.value(after: "-userportdevice"), "modem")
+        XCTAssertEqual(arguments.value(after: "-rsuserdev"), "2")
+        XCTAssertEqual(arguments.value(after: "-rsuserbaud"), "2400")
+        XCTAssertFalse(arguments.contains("+userportrtcds1307save"))
+        XCTAssertFalse(arguments.contains("ds1307"))
+    }
+
+    func testSwiftLinkModemStartupArgumentsPreserveRTC() {
+        let machine = EmulatedMachine.x128
+        let modem = NetworkModemConfiguration(isEnabled: true,
+                                              interface: .swiftLink,
+                                              baudRate: 9600,
+                                              transportMode: .telnet,
+                                              acceptsIncomingCalls: false,
+                                              incomingPort: 6400,
+                                              autoAnswerRings: 0,
+                                              echoCommands: true,
+                                              verboseResultCodes: true,
+                                              defaultDialPort: 23)
+        let arguments = machine.startupArguments(configuration: startupConfiguration(for: machine,
+                                                                                     syncSystemTime: true,
+                                                                                     networkModem: modem,
+                                                                                     networkLocalPort: 25232))
+
+        XCTAssertEqual(arguments.value(after: "-rsdev3"), "127.0.0.1:25232")
+        XCTAssertTrue(arguments.contains("-rsdev3ip232"))
+        XCTAssertTrue(arguments.contains("-acia1"))
+        XCTAssertEqual(arguments.value(after: "-myaciadev"), "2")
+        XCTAssertEqual(arguments.value(after: "-acia1mode"), "1")
+        XCTAssertEqual(arguments.value(after: "-acia1base"), "\(0xde00)")
+        XCTAssertTrue(arguments.contains("+userportrtcds1307save"))
+        XCTAssertEqual(arguments.value(after: "-userportdevice"), "ds1307")
+    }
+
+    func testTurbo232ModemStartupArgumentsUseTurboACIAMode() {
+        let machine = EmulatedMachine.xvic
+        let modem = NetworkModemConfiguration(isEnabled: true,
+                                              interface: .turbo232,
+                                              baudRate: 38400,
+                                              transportMode: .raw,
+                                              acceptsIncomingCalls: false,
+                                              incomingPort: 6400,
+                                              autoAnswerRings: 0,
+                                              echoCommands: true,
+                                              verboseResultCodes: true,
+                                              defaultDialPort: 23)
+        let arguments = machine.startupArguments(configuration: startupConfiguration(for: machine,
+                                                                                     networkModem: modem,
+                                                                                     networkLocalPort: 25232))
+
+        XCTAssertTrue(arguments.contains("-acia1"))
+        XCTAssertEqual(arguments.value(after: "-myaciadev"), "2")
+        XCTAssertEqual(arguments.value(after: "-acia1mode"), "2")
+        XCTAssertEqual(arguments.value(after: "-acia1base"), "\(0x9800)")
+    }
+
+    func testACIAModemStartupArgumentsUseSelectedBaseAddress() {
+        let machine = EmulatedMachine.x128
+        let modem = NetworkModemConfiguration(isEnabled: true,
+                                              interface: .swiftLink,
+                                              baudRate: 9600,
+                                              transportMode: .raw,
+                                              acceptsIncomingCalls: false,
+                                              incomingPort: 6400,
+                                              autoAnswerRings: 0,
+                                              echoCommands: true,
+                                              verboseResultCodes: true,
+                                              defaultDialPort: 23,
+                                              aciaBaseAddress: .d700)
+        let arguments = machine.startupArguments(configuration: startupConfiguration(for: machine,
+                                                                                     networkModem: modem,
+                                                                                     networkLocalPort: 25232))
+
+        XCTAssertEqual(arguments.value(after: "-acia1base"), "\(0xd700)")
+    }
+
+    func testACIAModemAddressNormalizesToMachineSupportedAddress() {
+        let machine = EmulatedMachine.x64sc
+        let modem = NetworkModemConfiguration(isEnabled: true,
+                                              interface: .turbo232,
+                                              baudRate: 38400,
+                                              transportMode: .raw,
+                                              acceptsIncomingCalls: false,
+                                              incomingPort: 6400,
+                                              autoAnswerRings: 0,
+                                              echoCommands: true,
+                                              verboseResultCodes: true,
+                                              defaultDialPort: 23,
+                                              aciaBaseAddress: .d700)
+        let normalizedModem = modem.normalized(for: machine)
+        let arguments = machine.startupArguments(configuration: startupConfiguration(for: machine,
+                                                                                     networkModem: modem,
+                                                                                     networkLocalPort: 25232))
+
+        XCTAssertEqual(normalizedModem.aciaBaseAddress, .de00)
+        XCTAssertEqual(arguments.value(after: "-acia1base"), "\(0xde00)")
+    }
+
+    func testACIAModemBaudRateCapsAt38400() {
+        let swiftLinkModem = NetworkModemConfiguration(isEnabled: true,
+                                                       interface: .swiftLink,
+                                                       baudRate: 57600,
+                                                       transportMode: .raw,
+                                                       acceptsIncomingCalls: false,
+                                                       incomingPort: 6400,
+                                                       autoAnswerRings: 0,
+                                                       echoCommands: true,
+                                                       verboseResultCodes: true,
+                                                       defaultDialPort: 23)
+        let turbo232Modem = NetworkModemConfiguration(isEnabled: true,
+                                                      interface: .turbo232,
+                                                      baudRate: 57600,
+                                                      transportMode: .raw,
+                                                      acceptsIncomingCalls: false,
+                                                      incomingPort: 6400,
+                                                      autoAnswerRings: 0,
+                                                      echoCommands: true,
+                                                      verboseResultCodes: true,
+                                                      defaultDialPort: 23)
+
+        XCTAssertEqual(swiftLinkModem.supportedBaudRates, [300, 1200, 2400, 9600, 19200, 38400])
+        XCTAssertEqual(swiftLinkModem.baudRate, 38400)
+        XCTAssertEqual(turbo232Modem.supportedBaudRates, [300, 1200, 2400, 9600, 19200, 38400])
+        XCTAssertEqual(turbo232Modem.baudRate, 38400)
+    }
+
+    func testUserPortModemBaudRateCapsAt2400() {
+        let modem = NetworkModemConfiguration(isEnabled: true,
+                                              interface: .userPort,
+                                              baudRate: 57600,
+                                              transportMode: .raw,
+                                              acceptsIncomingCalls: false,
+                                              incomingPort: 6400,
+                                              autoAnswerRings: 0,
+                                              echoCommands: true,
+                                              verboseResultCodes: true,
+                                              defaultDialPort: 23)
+
+        XCTAssertEqual(modem.supportedBaudRates, [300, 1200, 2400])
+        XCTAssertEqual(modem.baudRate, 2400)
+    }
+
+    func testModemCapabilitiesMatchVICERS232Targets() {
+        XCTAssertEqual(EmulatedMachine.x64sc.capabilities.supportedModemInterfaces, [.userPort, .swiftLink, .turbo232])
+        XCTAssertEqual(EmulatedMachine.x128.capabilities.supportedModemInterfaces, [.userPort, .swiftLink, .turbo232])
+        XCTAssertEqual(EmulatedMachine.xvic.capabilities.supportedModemInterfaces, [.userPort, .swiftLink, .turbo232])
+        XCTAssertFalse(EmulatedMachine.xpet.capabilities.supportsNetworking)
+        XCTAssertFalse(EmulatedMachine.xplus4.capabilities.supportsNetworking)
+    }
+
+    func testModemACIAAddressOptionsMatchVICETargets() {
+        XCTAssertEqual(NetworkModemACIAAddress.supportedAddresses(for: .x64sc), [.de00, .df00])
+        XCTAssertEqual(NetworkModemACIAAddress.supportedAddresses(for: .x128), [.de00, .df00, .d700])
+        XCTAssertEqual(NetworkModemACIAAddress.supportedAddresses(for: .xvic), [.vic20_9800, .vic20_9c00])
+        XCTAssertEqual(NetworkModemACIAAddress.supportedAddresses(for: .xpet), [])
+    }
+
+    func testHayesModemServiceDialsWithATCommand() throws {
+        let queue = DispatchQueue(label: "com.barrywalker.vicemac.tests.hayes-modem")
+        let service = HayesModemService()
+        addTeardownBlock {
+            service.stop()
+        }
+
+        let remoteReady = expectation(description: "remote connection ready")
+        let remoteEndpointPort = try NetworkTestPort.reserveLoopbackPort()
+        let remoteListener = try NWListener(using: .tcp, on: remoteEndpointPort)
+        addTeardownBlock {
+            remoteListener.cancel()
+        }
+        remoteListener.newConnectionHandler = { connection in
+            connection.stateUpdateHandler = { state in
+                if case .ready = state {
+                    remoteReady.fulfill()
+                    connection.send(content: Data("WELCOME".utf8),
+                                    completion: .contentProcessed { _ in })
+                }
+            }
+            connection.start(queue: queue)
+        }
+        remoteListener.start(queue: queue)
+        let remotePort = remoteEndpointPort.rawValue
+
+        let modem = NetworkModemConfiguration(isEnabled: true,
+                                              interface: .swiftLink,
+                                              baudRate: 9600,
+                                              transportMode: .raw,
+                                              acceptsIncomingCalls: false,
+                                              incomingPort: 6400,
+                                              autoAnswerRings: 0,
+                                              echoCommands: true,
+                                              verboseResultCodes: true,
+                                              defaultDialPort: 23)
+        let localPort = try service.start(configuration: modem) { _ in }
+        let serialPort = try XCTUnwrap(NWEndpoint.Port(rawValue: UInt16(localPort)))
+        let serialConnection = NWConnection(host: .ipv4(.loopback),
+                                            port: serialPort,
+                                            using: .tcp)
+        addTeardownBlock {
+            serialConnection.cancel()
+        }
+
+        let serialReady = expectation(description: "serial connection ready")
+        serialConnection.stateUpdateHandler = { state in
+            if case .ready = state {
+                serialReady.fulfill()
+            }
+        }
+        serialConnection.start(queue: queue)
+        wait(for: [serialReady], timeout: 2)
+
+        let response = expectation(description: "Hayes dial response")
+        let capture = NetworkTestCapture()
+
+        @Sendable func receiveSerial() {
+            serialConnection.receive(minimumIncompleteLength: 1,
+                                     maximumLength: 4096) { data, _, isComplete, error in
+                if let data,
+                   !data.isEmpty,
+                   capture.append(data, matching: ["CONNECT 9600", "WELCOME"]) {
+                    response.fulfill()
+                }
+
+                if !isComplete,
+                   error == nil {
+                    receiveSerial()
+                }
+            }
+        }
+
+        receiveSerial()
+        serialConnection.send(content: Data("atdt 127.0.0.1:\(remotePort)\r".utf8),
+                              completion: .contentProcessed { _ in })
+
+        wait(for: [remoteReady, response], timeout: 3)
+        let printableResponse = capture.printableResponse
+        XCTAssertTrue(printableResponse.contains("CONNECT 9600"))
+        XCTAssertTrue(printableResponse.contains("WELCOME"))
+    }
+
+    func testHayesModemServiceReturnsNoCarrierWhenDialTimesOut() throws {
+        let queue = DispatchQueue(label: "com.barrywalker.vicemac.tests.hayes-timeout")
+        let service = HayesModemService(dialTimeout: .milliseconds(150))
+        addTeardownBlock {
+            service.stop()
+        }
+
+        let modem = NetworkModemConfiguration(isEnabled: true,
+                                              interface: .swiftLink,
+                                              baudRate: 9600,
+                                              transportMode: .raw,
+                                              acceptsIncomingCalls: false,
+                                              incomingPort: 6400,
+                                              autoAnswerRings: 0,
+                                              echoCommands: true,
+                                              verboseResultCodes: true,
+                                              defaultDialPort: 23)
+        let localPort = try service.start(configuration: modem) { _ in }
+        let serialPort = try XCTUnwrap(NWEndpoint.Port(rawValue: UInt16(localPort)))
+        let serialConnection = NWConnection(host: .ipv4(.loopback),
+                                            port: serialPort,
+                                            using: .tcp)
+        addTeardownBlock {
+            serialConnection.cancel()
+        }
+
+        let serialReady = expectation(description: "serial connection ready")
+        serialConnection.stateUpdateHandler = { state in
+            if case .ready = state {
+                serialReady.fulfill()
+            }
+        }
+        serialConnection.start(queue: queue)
+        wait(for: [serialReady], timeout: 2)
+
+        let response = expectation(description: "Hayes timeout response")
+        let capture = NetworkTestCapture()
+
+        @Sendable func receiveSerial() {
+            serialConnection.receive(minimumIncompleteLength: 1,
+                                     maximumLength: 4096) { data, _, isComplete, error in
+                if let data,
+                   !data.isEmpty,
+                   capture.append(data, matching: ["NO CARRIER"]) {
+                    response.fulfill()
+                }
+
+                if !isComplete,
+                   error == nil {
+                    receiveSerial()
+                }
+            }
+        }
+
+        receiveSerial()
+        serialConnection.send(content: Data("ATDT 203.0.113.1:52146\r".utf8),
+                              completion: .contentProcessed { _ in })
+
+        wait(for: [response], timeout: 3)
+        XCTAssertTrue(capture.printableResponse.contains("NO CARRIER"))
+    }
+
+    func testHayesModemServiceUsesPlainSerialForUserPort() throws {
+        let queue = DispatchQueue(label: "com.barrywalker.vicemac.tests.hayes-user-port")
+        let service = HayesModemService()
+        addTeardownBlock {
+            service.stop()
+        }
+
+        let modem = NetworkModemConfiguration(isEnabled: true,
+                                              interface: .userPort,
+                                              baudRate: 2400,
+                                              transportMode: .raw,
+                                              acceptsIncomingCalls: false,
+                                              incomingPort: 6400,
+                                              autoAnswerRings: 0,
+                                              echoCommands: true,
+                                              verboseResultCodes: true,
+                                              defaultDialPort: 23)
+        let localPort = try service.start(configuration: modem) { _ in }
+        let serialPort = try XCTUnwrap(NWEndpoint.Port(rawValue: UInt16(localPort)))
+        let serialConnection = NWConnection(host: .ipv4(.loopback),
+                                            port: serialPort,
+                                            using: .tcp)
+        addTeardownBlock {
+            serialConnection.cancel()
+        }
+
+        let serialReady = expectation(description: "serial connection ready")
+        serialConnection.stateUpdateHandler = { state in
+            if case .ready = state {
+                serialReady.fulfill()
+            }
+        }
+        serialConnection.start(queue: queue)
+        wait(for: [serialReady], timeout: 2)
+
+        let response = expectation(description: "Hayes command response")
+        let capture = NetworkTestCapture()
+
+        @Sendable func receiveSerial() {
+            serialConnection.receive(minimumIncompleteLength: 1,
+                                     maximumLength: 4096) { data, _, isComplete, error in
+                if let data,
+                   !data.isEmpty,
+                   capture.append(data, matching: ["AT", "OK"]) {
+                    response.fulfill()
+                }
+
+                if !isComplete,
+                   error == nil {
+                    receiveSerial()
+                }
+            }
+        }
+
+        receiveSerial()
+        serialConnection.send(content: Data("AT\r".utf8),
+                              completion: .contentProcessed { _ in })
+
+        wait(for: [response], timeout: 3)
+        XCTAssertFalse(capture.rawBytes.contains(0xff))
+    }
+
+    func testHayesModemCommandBufferTreatsPETSCIIDeleteAsDestructive() {
+        var commandBuffer = ""
+
+        for byte in Data("ATDT NOPE".utf8) {
+            HayesModemService.applyCommandEditingByte(byte, to: &commandBuffer)
+        }
+        for byte in [UInt8](repeating: 20, count: 4) {
+            HayesModemService.applyCommandEditingByte(byte, to: &commandBuffer)
+        }
+        for byte in Data("TEST".utf8) {
+            HayesModemService.applyCommandEditingByte(byte, to: &commandBuffer)
+        }
+
+        XCTAssertEqual(commandBuffer, "ATDT TEST")
+    }
+
+    func testHayesModemServiceProvidesBuiltInTestLine() throws {
+        let queue = DispatchQueue(label: "com.barrywalker.vicemac.tests.hayes-test-line")
+        let service = HayesModemService()
+        addTeardownBlock {
+            service.stop()
+        }
+
+        let modem = NetworkModemConfiguration(isEnabled: true,
+                                              interface: .swiftLink,
+                                              baudRate: 9600,
+                                              transportMode: .raw,
+                                              acceptsIncomingCalls: false,
+                                              incomingPort: 6400,
+                                              autoAnswerRings: 0,
+                                              echoCommands: true,
+                                              verboseResultCodes: true,
+                                              defaultDialPort: 23)
+        let localPort = try service.start(configuration: modem) { _ in }
+        let serialPort = try XCTUnwrap(NWEndpoint.Port(rawValue: UInt16(localPort)))
+        let serialConnection = NWConnection(host: .ipv4(.loopback),
+                                            port: serialPort,
+                                            using: .tcp)
+        addTeardownBlock {
+            serialConnection.cancel()
+        }
+
+        let serialReady = expectation(description: "serial connection ready")
+        serialConnection.stateUpdateHandler = { state in
+            if case .ready = state {
+                serialReady.fulfill()
+            }
+        }
+        serialConnection.start(queue: queue)
+        wait(for: [serialReady], timeout: 2)
+
+        let response = expectation(description: "built-in test line response")
+        let capture = NetworkTestCapture()
+
+        @Sendable func receiveSerial() {
+            serialConnection.receive(minimumIncompleteLength: 1,
+                                     maximumLength: 4096) { data, _, isComplete, error in
+                if let data,
+                   !data.isEmpty,
+                   capture.append(data, matching: [
+                       "CONNECT 9600",
+                       "mac VICE MODEM TEST LINE",
+                       "PONG",
+                       "NO CARRIER"
+                   ]) {
+                    response.fulfill()
+                }
+
+                if !isComplete,
+                   error == nil {
+                    receiveSerial()
+                }
+            }
+        }
+
+        receiveSerial()
+        serialConnection.send(content: Data("ATDTEST\rPING\rBYE\r".utf8),
+                              completion: .contentProcessed { _ in })
+
+        wait(for: [response], timeout: 3)
+        let printableResponse = capture.printableResponse
+        XCTAssertTrue(printableResponse.contains("CONNECT 9600"))
+        XCTAssertTrue(printableResponse.contains("mac VICE MODEM TEST LINE"))
+        XCTAssertTrue(printableResponse.contains("PONG"))
+        XCTAssertTrue(printableResponse.contains("NO CARRIER"))
     }
 
     func testSystemTimeSyncCapabilityMatchesVICEUserportRTCRegistration() {
@@ -1245,7 +1718,9 @@ final class ModelConfigurationTests: XCTestCase {
                                       tapeConfiguration: TapeConfiguration = .standard,
                                       printerConfiguration: PrinterConfiguration = .standard,
                                       driveConfigurations: [DriveConfiguration]? = nil,
-                                      syncSystemTime: Bool = false) -> MachineStartupConfiguration {
+                                      syncSystemTime: Bool = false,
+                                      networkModem: NetworkModemConfiguration = .standard,
+                                      networkLocalPort: Int? = nil) -> MachineStartupConfiguration {
         MachineStartupConfiguration(executablePath: "/tmp/vice",
                                     dataDirectory: "/tmp/data",
                                     machineModel: machineModel,
@@ -1263,7 +1738,9 @@ final class ModelConfigurationTests: XCTestCase {
                                     printerConfiguration: printerConfiguration,
                                     printerOutputBasePath: "/tmp/macvice-print/geos-print",
                                     driveConfigurations: driveConfigurations ?? machine.defaultDriveConfigurations(),
-                                    syncSystemTime: syncSystemTime)
+                                    syncSystemTime: syncSystemTime,
+                                    networkModem: networkModem,
+                                    networkLocalPort: networkLocalPort)
     }
 
     private static let allMachines: [EmulatedMachine] = [
@@ -1438,5 +1915,82 @@ private extension Array where Element == String {
 private extension RAMExpansionResourcePlan {
     func value(for resourceName: String) -> Int32? {
         (disableAssignments + enableAssignments).last { $0.name == resourceName }?.value
+    }
+}
+
+private final class NetworkTestCapture: @unchecked Sendable {
+    private var bytes: [UInt8] = []
+    private var didMatch = false
+
+    var rawBytes: [UInt8] {
+        bytes
+    }
+
+    var printableResponse: String {
+        String(decoding: bytes.filter { byte in
+            byte == 10 || byte == 13 || (byte >= 32 && byte <= 126)
+        }, as: UTF8.self)
+    }
+
+    func append(_ data: Data, matching fragments: [String]) -> Bool {
+        bytes.append(contentsOf: data)
+        guard !didMatch else {
+            return false
+        }
+
+        let printableResponse = printableResponse
+        if fragments.allSatisfy({ printableResponse.contains($0) }) {
+            didMatch = true
+            return true
+        }
+
+        return false
+    }
+}
+
+private enum NetworkTestPort {
+    static func reserveLoopbackPort() throws -> NWEndpoint.Port {
+        let descriptor = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)
+        guard descriptor >= 0 else {
+            throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+        }
+        defer {
+            close(descriptor)
+        }
+
+        var address = sockaddr_in()
+        address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        address.sin_family = sa_family_t(AF_INET)
+        address.sin_port = 0
+        address.sin_addr = in_addr(s_addr: inet_addr("127.0.0.1"))
+
+        var bindAddress = address
+        let bindResult = withUnsafePointer(to: &bindAddress) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { socketAddress in
+                Darwin.bind(descriptor, socketAddress, socklen_t(MemoryLayout<sockaddr_in>.size))
+            }
+        }
+        guard bindResult == 0 else {
+            throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+        }
+
+        var boundAddress = sockaddr_in()
+        var boundAddressLength = socklen_t(MemoryLayout<sockaddr_in>.size)
+        let nameResult = withUnsafeMutablePointer(to: &boundAddress) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { socketAddress in
+                getsockname(descriptor, socketAddress, &boundAddressLength)
+            }
+        }
+        guard nameResult == 0 else {
+            throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+        }
+
+        let port = UInt16(bigEndian: boundAddress.sin_port)
+        guard let endpointPort = NWEndpoint.Port(rawValue: port),
+              port != 0 else {
+            throw NSError(domain: NSPOSIXErrorDomain, code: Int(EADDRNOTAVAIL))
+        }
+
+        return endpointPort
     }
 }

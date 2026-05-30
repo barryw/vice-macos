@@ -340,6 +340,405 @@ struct PrinterSpoolPage: Identifiable, Equatable {
     }
 }
 
+enum NetworkModemInterface: String, CaseIterable, Codable, Identifiable {
+    case userPort
+    case swiftLink
+    case turbo232
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .userPort:
+            return "User Port"
+        case .swiftLink:
+            return "SwiftLink"
+        case .turbo232:
+            return "Turbo232"
+        }
+    }
+
+    var shortTitle: String {
+        switch self {
+        case .userPort:
+            return "User"
+        case .swiftLink:
+            return "SwiftLink"
+        case .turbo232:
+            return "Turbo232"
+        }
+    }
+
+    var detailTitle: String {
+        switch self {
+        case .userPort:
+            return "Standard VICE user port modem"
+        case .swiftLink:
+            return "6551 ACIA cartridge"
+        case .turbo232:
+            return "Turbo232 ACIA cartridge"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .userPort:
+            return "rectangle.connected.to.line.below"
+        case .swiftLink:
+            return "point.3.connected.trianglepath.dotted"
+        case .turbo232:
+            return "bolt.horizontal"
+        }
+    }
+
+    var usesUserPort: Bool {
+        self == .userPort
+    }
+
+    var usesIP232Control: Bool {
+        switch self {
+        case .userPort:
+            return false
+        case .swiftLink, .turbo232:
+            return true
+        }
+    }
+
+    var aciaMode: Int32? {
+        switch self {
+        case .userPort:
+            return nil
+        case .swiftLink:
+            return 1
+        case .turbo232:
+            return 2
+        }
+    }
+
+    var requiresACIAAddress: Bool {
+        switch self {
+        case .userPort:
+            return false
+        case .swiftLink, .turbo232:
+            return true
+        }
+    }
+
+    var supportedBaudRates: [Int] {
+        switch self {
+        case .userPort:
+            return [300, 1200, 2400]
+        case .swiftLink, .turbo232:
+            return [300, 1200, 2400, 9600, 19200, 38400]
+        }
+    }
+}
+
+enum NetworkModemACIAAddress: Int32, CaseIterable, Codable, Identifiable {
+    case d700 = 0xd700
+    case de00 = 0xde00
+    case df00 = 0xdf00
+    case vic20_9800 = 0x9800
+    case vic20_9c00 = 0x9c00
+
+    var id: Int32 { rawValue }
+
+    var title: String {
+        String(format: "$%04X", rawValue)
+    }
+
+    var shortTitle: String {
+        String(format: "%02X", rawValue >> 8)
+    }
+
+    func terminalSelectionTitle(for modemInterface: NetworkModemInterface) -> String {
+        switch modemInterface {
+        case .userPort:
+            return "User Port"
+        case .swiftLink:
+            return "Swift \(shortTitle)"
+        case .turbo232:
+            return "Turbo \(shortTitle)"
+        }
+    }
+
+    static func defaultAddress(for machine: EmulatedMachine) -> NetworkModemACIAAddress {
+        switch machine.family {
+        case .vic20:
+            return .vic20_9800
+        case .c64, .c128, .pet, .ted:
+            return .de00
+        }
+    }
+
+    static func supportedAddresses(for machine: EmulatedMachine) -> [NetworkModemACIAAddress] {
+        switch machine.family {
+        case .c64:
+            return [.de00, .df00]
+        case .c128:
+            return [.de00, .df00, .d700]
+        case .vic20:
+            return [.vic20_9800, .vic20_9c00]
+        case .pet, .ted:
+            return []
+        }
+    }
+}
+
+enum NetworkTransportMode: String, CaseIterable, Codable, Identifiable {
+    case telnet
+    case raw
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .telnet:
+            return "Telnet"
+        case .raw:
+            return "Raw TCP"
+        }
+    }
+}
+
+enum NetworkModemRuntimeState: String, Equatable {
+    case disabled
+    case waitingForMachine
+    case ready
+    case ringing
+    case connected
+    case error
+}
+
+struct NetworkModemRuntimeStatus: Equatable {
+    var state: NetworkModemRuntimeState
+    var localPort: Int?
+    var incomingPort: Int?
+    var remoteDescription: String?
+    var message: String?
+
+    static let disabled = NetworkModemRuntimeStatus(state: .disabled,
+                                                    localPort: nil,
+                                                    incomingPort: nil,
+                                                    remoteDescription: nil,
+                                                    message: nil)
+
+    var title: String {
+        switch state {
+        case .disabled:
+            return "Off"
+        case .waitingForMachine:
+            return "Waiting for machine"
+        case .ready:
+            return "Ready"
+        case .ringing:
+            return "Incoming call"
+        case .connected:
+            return remoteDescription.map { "Connected to \($0)" } ?? "Connected"
+        case .error:
+            return "Unavailable"
+        }
+    }
+
+    var detailTitle: String {
+        if let message,
+           !message.isEmpty {
+            return message
+        }
+
+        switch state {
+        case .disabled:
+            return "No modem configured"
+        case .waitingForMachine:
+            return localPort.map { "Local modem socket on port \($0)" } ?? "Local modem socket starting"
+        case .ready:
+            return incomingPort.map { "Accepting incoming calls on port \($0)" } ?? "Dial from terminal software"
+        case .ringing:
+            return remoteDescription.map { "\($0) is calling" } ?? "Remote caller is ringing"
+        case .connected:
+            return remoteDescription ?? "Carrier detected"
+        case .error:
+            return "Modem service could not start"
+        }
+    }
+}
+
+struct NetworkModemConfiguration: Codable, Equatable {
+    var isEnabled: Bool
+    var interface: NetworkModemInterface
+    var baudRate: Int
+    var transportMode: NetworkTransportMode
+    var acceptsIncomingCalls: Bool
+    var incomingPort: Int
+    var autoAnswerRings: Int
+    var echoCommands: Bool
+    var verboseResultCodes: Bool
+    var defaultDialPort: Int
+    var aciaBaseAddress: NetworkModemACIAAddress
+
+    static let standard = NetworkModemConfiguration(isEnabled: false,
+                                                    interface: .swiftLink,
+                                                    baudRate: 9600,
+                                                    transportMode: .telnet,
+                                                    acceptsIncomingCalls: false,
+                                                    incomingPort: 6400,
+                                                    autoAnswerRings: 0,
+                                                    echoCommands: true,
+                                                    verboseResultCodes: true,
+                                                    defaultDialPort: 23,
+                                                    aciaBaseAddress: .de00)
+
+    init(isEnabled: Bool,
+         interface: NetworkModemInterface,
+         baudRate: Int,
+         transportMode: NetworkTransportMode,
+         acceptsIncomingCalls: Bool,
+         incomingPort: Int,
+         autoAnswerRings: Int,
+         echoCommands: Bool,
+         verboseResultCodes: Bool,
+         defaultDialPort: Int,
+         aciaBaseAddress: NetworkModemACIAAddress = .de00) {
+        self.isEnabled = isEnabled
+        self.interface = interface
+        self.baudRate = Self.normalizedBaudRate(baudRate, for: interface)
+        self.transportMode = transportMode
+        self.acceptsIncomingCalls = acceptsIncomingCalls
+        self.incomingPort = Self.normalizedTCPPort(incomingPort, fallback: 6400)
+        self.autoAnswerRings = Self.normalizedAutoAnswerRings(autoAnswerRings)
+        self.echoCommands = echoCommands
+        self.verboseResultCodes = verboseResultCodes
+        self.defaultDialPort = Self.normalizedTCPPort(defaultDialPort, fallback: 23)
+        self.aciaBaseAddress = aciaBaseAddress
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = Self.standard
+
+        isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? defaults.isEnabled
+        interface = try container.decodeIfPresent(NetworkModemInterface.self, forKey: .interface)
+            ?? defaults.interface
+        baudRate = Self.normalizedBaudRate(try container.decodeIfPresent(Int.self, forKey: .baudRate)
+                                           ?? defaults.baudRate,
+                                           for: interface)
+        transportMode = try container.decodeIfPresent(NetworkTransportMode.self, forKey: .transportMode)
+            ?? defaults.transportMode
+        acceptsIncomingCalls = try container.decodeIfPresent(Bool.self, forKey: .acceptsIncomingCalls)
+            ?? defaults.acceptsIncomingCalls
+        incomingPort = Self.normalizedTCPPort(try container.decodeIfPresent(Int.self, forKey: .incomingPort)
+                                              ?? defaults.incomingPort,
+                                              fallback: defaults.incomingPort)
+        autoAnswerRings = Self.normalizedAutoAnswerRings(try container.decodeIfPresent(Int.self,
+                                                                                       forKey: .autoAnswerRings)
+                                                         ?? defaults.autoAnswerRings)
+        echoCommands = try container.decodeIfPresent(Bool.self, forKey: .echoCommands)
+            ?? defaults.echoCommands
+        verboseResultCodes = try container.decodeIfPresent(Bool.self, forKey: .verboseResultCodes)
+            ?? defaults.verboseResultCodes
+        defaultDialPort = Self.normalizedTCPPort(try container.decodeIfPresent(Int.self, forKey: .defaultDialPort)
+                                                 ?? defaults.defaultDialPort,
+                                                 fallback: defaults.defaultDialPort)
+        aciaBaseAddress = try container.decodeIfPresent(NetworkModemACIAAddress.self, forKey: .aciaBaseAddress)
+            ?? defaults.aciaBaseAddress
+    }
+
+    var usesActiveUserPort: Bool {
+        isEnabled && interface.usesUserPort
+    }
+
+    var supportedBaudRates: [Int] {
+        interface.supportedBaudRates
+    }
+
+    var statusTitle: String {
+        guard isEnabled else {
+            return "Off"
+        }
+
+        return "\(interface.title), \(baudRate) baud"
+    }
+
+    var dialCommandPreview: String {
+        "ATD host:\(defaultDialPort)"
+    }
+
+    var testDialCommand: String {
+        "ATDTEST"
+    }
+
+    func terminalSelectionHint(for machine: EmulatedMachine) -> String? {
+        switch interface {
+        case .userPort:
+            return "Choose User Port at \(baudRate) baud in terminal software."
+        case .swiftLink, .turbo232:
+            guard NetworkModemACIAAddress.supportedAddresses(for: machine).contains(aciaBaseAddress) else {
+                return nil
+            }
+
+            return "Choose \(aciaBaseAddress.terminalSelectionTitle(for: interface)) in terminal software."
+        }
+    }
+
+    func normalized(for machine: EmulatedMachine) -> NetworkModemConfiguration {
+        var configuration = self
+        let supportedInterfaces = machine.capabilities.supportedModemInterfaces
+
+        guard !supportedInterfaces.isEmpty else {
+            configuration.isEnabled = false
+            configuration.interface = .swiftLink
+            return configuration.normalizedValues()
+        }
+
+        if !supportedInterfaces.contains(configuration.interface) {
+            configuration.interface = supportedInterfaces.first ?? .swiftLink
+        }
+
+        let supportedAddresses = NetworkModemACIAAddress.supportedAddresses(for: machine)
+        if configuration.interface.requiresACIAAddress,
+           !supportedAddresses.contains(configuration.aciaBaseAddress) {
+            configuration.aciaBaseAddress = NetworkModemACIAAddress.defaultAddress(for: machine)
+        }
+
+        return configuration.normalizedValues()
+    }
+
+    private func normalizedValues() -> NetworkModemConfiguration {
+        NetworkModemConfiguration(isEnabled: isEnabled,
+                                  interface: interface,
+                                  baudRate: baudRate,
+                                  transportMode: transportMode,
+                                  acceptsIncomingCalls: acceptsIncomingCalls,
+                                  incomingPort: incomingPort,
+                                  autoAnswerRings: autoAnswerRings,
+                                  echoCommands: echoCommands,
+                                  verboseResultCodes: verboseResultCodes,
+                                  defaultDialPort: defaultDialPort,
+                                  aciaBaseAddress: aciaBaseAddress)
+    }
+
+    private static func normalizedBaudRate(_ baudRate: Int, for interface: NetworkModemInterface) -> Int {
+        guard let nearest = interface.supportedBaudRates.min(by: { abs($0 - baudRate) < abs($1 - baudRate) }) else {
+            return 9600
+        }
+
+        return nearest
+    }
+
+    private static func normalizedTCPPort(_ port: Int, fallback: Int) -> Int {
+        switch port {
+        case 1...65535:
+            return port
+        default:
+            return fallback
+        }
+    }
+
+    private static func normalizedAutoAnswerRings(_ rings: Int) -> Int {
+        min(max(rings, 0), 9)
+    }
+}
+
 enum SIDLayout: String, CaseIterable, Codable, Identifiable {
     case single
     case stereo

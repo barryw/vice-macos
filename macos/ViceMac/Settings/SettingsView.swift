@@ -53,6 +53,14 @@ struct SettingsView: View {
                 }
                 .tag(SettingsPaneID.printing.rawValue)
 
+            if showsNetworkSettings {
+                NetworkSettingsPane()
+                    .tabItem {
+                        Label("Network", systemImage: "network")
+                    }
+                    .tag(SettingsPaneID.network.rawValue)
+            }
+
             DisplaySettingsPane()
                 .tabItem {
                     Label("Display", systemImage: "display")
@@ -72,10 +80,17 @@ struct SettingsView: View {
         .onChange(of: showsControlSettings) { _, _ in
             normalizeSelectedPane()
         }
+        .onChange(of: showsNetworkSettings) { _, _ in
+            normalizeSelectedPane()
+        }
     }
 
     private var showsControlSettings: Bool {
         !emulator.availableControlPorts.isEmpty
+    }
+
+    private var showsNetworkSettings: Bool {
+        emulator.machine.capabilities.supportsNetworking
     }
 
     private var selectedPane: SettingsPaneID {
@@ -83,12 +98,17 @@ struct SettingsView: View {
     }
 
     private func normalizeSelectedPane() {
-        guard selectedPane == .controls,
-              !showsControlSettings else {
+        if selectedPane == .controls,
+           !showsControlSettings {
+            selectedPaneID = SettingsPaneID.keyboard.rawValue
+        }
+
+        guard selectedPane == .network,
+              !showsNetworkSettings else {
             return
         }
 
-        selectedPaneID = SettingsPaneID.keyboard.rawValue
+        selectedPaneID = SettingsPaneID.media.rawValue
     }
 }
 
@@ -100,6 +120,7 @@ private enum SettingsPaneID: String {
     case keyboard
     case drives
     case printing
+    case network
     case display
     case ai
 
@@ -119,10 +140,45 @@ private enum SettingsPaneID: String {
             return "Drives"
         case .printing:
             return "Printing"
+        case .network:
+            return "Network"
         case .display:
             return "Display"
         case .ai:
             return "AI"
+        }
+    }
+}
+
+private struct MachineHardRestartRequest: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
+    let restartButtonTitle: String
+    let applyChange: @MainActor () -> Void
+}
+
+private extension View {
+    func machineHardRestartConfirmation(_ request: Binding<MachineHardRestartRequest?>) -> some View {
+        alert(request.wrappedValue?.title ?? "Restart Machine?",
+              isPresented: Binding {
+                  request.wrappedValue != nil
+              } set: { isPresented in
+                  if !isPresented {
+                      request.wrappedValue = nil
+                  }
+              },
+              presenting: request.wrappedValue) { presentedRequest in
+            Button(presentedRequest.restartButtonTitle, role: .destructive) {
+                presentedRequest.applyChange()
+                request.wrappedValue = nil
+            }
+
+            Button("Cancel", role: .cancel) {
+                request.wrappedValue = nil
+            }
+        } message: { presentedRequest in
+            Text(presentedRequest.message)
         }
     }
 }
@@ -1927,6 +1983,7 @@ private struct AIAssistantSettingsPane: View {
 
 private struct MachineSettingsPane: View {
     @EnvironmentObject private var emulator: EmulatorSession
+    @State private var hardRestartRequest: MachineHardRestartRequest?
 
     var body: some View {
         SettingsPane {
@@ -1987,7 +2044,7 @@ private struct MachineSettingsPane: View {
 
             if emulator.machine.capabilities.supportsRAMExpansion {
                 Section("Memory") {
-                    Picker("RAM expansion", selection: $emulator.ramExpansion) {
+                    Picker("RAM expansion", selection: ramExpansionBinding) {
                         ForEach(emulator.machine.ramExpansions) { expansion in
                             Text(expansion.displayTitle(for: emulator.machine)).tag(expansion)
                         }
@@ -2008,6 +2065,32 @@ private struct MachineSettingsPane: View {
                         ROMImageSettingsRow(image: image)
                     }
                 }
+            }
+        }
+        .machineHardRestartConfirmation($hardRestartRequest)
+    }
+
+    private var ramExpansionBinding: Binding<RAMExpansion> {
+        Binding {
+            emulator.ramExpansion
+        } set: { expansion in
+            guard expansion != emulator.ramExpansion else {
+                return
+            }
+
+            let plan = expansion.resourcePlan(for: emulator.machine)
+            guard emulator.isMachineRunning,
+                  plan.requiresHardReset else {
+                emulator.ramExpansion = expansion
+                return
+            }
+
+            hardRestartRequest = MachineHardRestartRequest(
+                title: "Restart to Change RAM Expansion?",
+                message: "Changing RAM expansion rewires the machine memory map. Restarting the machine will lose unsaved work inside the emulator.",
+                restartButtonTitle: "Change and Restart"
+            ) {
+                emulator.ramExpansion = expansion
             }
         }
     }
@@ -2373,6 +2456,237 @@ private struct PrintingSettingsPane: View {
                 }
             }
         }
+    }
+}
+
+private struct NetworkSettingsPane: View {
+    @EnvironmentObject private var emulator: EmulatorSession
+    @State private var hardRestartRequest: MachineHardRestartRequest?
+
+    var body: some View {
+        SettingsPane {
+            Section("Modem") {
+                Toggle("Modem", isOn: modemEnabledBinding)
+
+                Picker("Interface", selection: modemInterfaceBinding) {
+                    ForEach(emulator.availableModemInterfaces) { modemInterface in
+                        Label(modemInterface.title,
+                              systemImage: modemInterface.systemImage)
+                            .tag(modemInterface)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .disabled(!emulator.networkModem.isEnabled)
+
+                LabeledContent("Hardware") {
+                    SettingsValueText(emulator.networkModem.interface.detailTitle)
+                }
+
+                if emulator.networkModem.interface.requiresACIAAddress {
+                    Picker("Address", selection: modemACIAAddressBinding) {
+                        ForEach(emulator.availableModemACIAAddresses) { address in
+                            Text(address.title).tag(address)
+                        }
+                    }
+                    .disabled(!emulator.networkModem.isEnabled)
+
+                    if let terminalHint = emulator.networkModem.terminalSelectionHint(for: emulator.machine) {
+                        LabeledContent("Terminal") {
+                            SettingsValueText(terminalHint,
+                                              lineLimit: 2)
+                        }
+                    }
+                }
+
+                if !emulator.networkModem.interface.requiresACIAAddress,
+                   let terminalHint = emulator.networkModem.terminalSelectionHint(for: emulator.machine) {
+                    LabeledContent("Terminal") {
+                        SettingsValueText(terminalHint,
+                                          lineLimit: 2)
+                    }
+                }
+
+                Picker("Speed", selection: $emulator.networkModem.baudRate) {
+                    ForEach(emulator.networkModem.supportedBaudRates, id: \.self) { baudRate in
+                        Text("\(baudRate)").tag(baudRate)
+                    }
+                }
+                .disabled(!emulator.networkModem.isEnabled)
+
+                Picker("Connection", selection: $emulator.networkModem.transportMode) {
+                    ForEach(NetworkTransportMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .disabled(!emulator.networkModem.isEnabled)
+
+                Toggle("Echo commands", isOn: $emulator.networkModem.echoCommands)
+                    .disabled(!emulator.networkModem.isEnabled)
+
+                Toggle("Verbose result codes", isOn: $emulator.networkModem.verboseResultCodes)
+                    .disabled(!emulator.networkModem.isEnabled)
+
+                LabeledContent("Status") {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(emulator.networkModemStatus.title)
+                            .foregroundStyle(statusColor)
+                        SettingsValueText(emulator.networkModemStatus.detailTitle,
+                                          lineLimit: 2)
+                    }
+                }
+
+                if emulator.networkModem.usesActiveUserPort {
+                    LabeledContent("User port") {
+                        SettingsValueText("System time sync is off while the modem uses the user port.",
+                                          lineLimit: 2)
+                    }
+                }
+            }
+
+            Section("Dialing") {
+                LabeledContent("Default port") {
+                    TextField("Port",
+                              value: $emulator.networkModem.defaultDialPort,
+                              format: .number)
+                        .frame(width: 86)
+                        .disabled(!emulator.networkModem.isEnabled)
+                }
+
+                LabeledContent("Command") {
+                    SettingsValueText(emulator.networkModem.dialCommandPreview)
+                        .font(.system(.body, design: .monospaced))
+                }
+            }
+
+            Section("Test Line") {
+                LabeledContent("Dial") {
+                    SettingsValueText(emulator.networkModem.testDialCommand)
+                        .font(.system(.body, design: .monospaced))
+                }
+            }
+
+            Section("Incoming Calls") {
+                Toggle("Accept incoming calls", isOn: $emulator.networkModem.acceptsIncomingCalls)
+                    .disabled(!emulator.networkModem.isEnabled)
+
+                LabeledContent("Port") {
+                    TextField("Port",
+                              value: $emulator.networkModem.incomingPort,
+                              format: .number)
+                        .frame(width: 86)
+                        .disabled(!emulator.networkModem.isEnabled
+                                  || !emulator.networkModem.acceptsIncomingCalls)
+                }
+
+                Stepper(value: $emulator.networkModem.autoAnswerRings,
+                        in: 0...9) {
+                    Text(autoAnswerTitle)
+                }
+                .disabled(!emulator.networkModem.isEnabled
+                          || !emulator.networkModem.acceptsIncomingCalls)
+            }
+        }
+        .machineHardRestartConfirmation($hardRestartRequest)
+    }
+
+    private var modemEnabledBinding: Binding<Bool> {
+        Binding {
+            emulator.networkModem.isEnabled
+        } set: { isEnabled in
+            guard isEnabled != emulator.networkModem.isEnabled else {
+                return
+            }
+
+            let actionTitle = isEnabled ? "Turn On and Restart" : "Turn Off and Restart"
+            confirmModemHardwareChange(title: isEnabled ? "Restart to Turn On Modem?" : "Restart to Turn Off Modem?",
+                                       message: "Changing modem hardware while the machine is running requires a hard restart. Restarting the machine will lose unsaved work inside the emulator.",
+                                       restartButtonTitle: actionTitle,
+                                       requiresRestart: emulator.networkModem.isEnabled || isEnabled) {
+                var modem = emulator.networkModem
+                modem.isEnabled = isEnabled
+                emulator.networkModem = modem
+            }
+        }
+    }
+
+    private var modemInterfaceBinding: Binding<NetworkModemInterface> {
+        Binding {
+            emulator.networkModem.interface
+        } set: { modemInterface in
+            guard modemInterface != emulator.networkModem.interface else {
+                return
+            }
+
+            confirmModemHardwareChange(title: "Restart to Change Modem Interface?",
+                                       message: "Changing the modem interface swaps the emulated hardware. Restarting the machine will lose unsaved work inside the emulator.",
+                                       restartButtonTitle: "Change and Restart",
+                                       requiresRestart: emulator.networkModem.isEnabled) {
+                var modem = emulator.networkModem
+                modem.interface = modemInterface
+                emulator.networkModem = modem
+            }
+        }
+    }
+
+    private var modemACIAAddressBinding: Binding<NetworkModemACIAAddress> {
+        Binding {
+            emulator.networkModem.aciaBaseAddress
+        } set: { address in
+            guard address != emulator.networkModem.aciaBaseAddress else {
+                return
+            }
+
+            confirmModemHardwareChange(title: "Restart to Change Modem Address?",
+                                       message: "Changing the ACIA address moves the emulated modem hardware. Restarting the machine will lose unsaved work inside the emulator.",
+                                       restartButtonTitle: "Change and Restart",
+                                       requiresRestart: emulator.networkModem.isEnabled) {
+                var modem = emulator.networkModem
+                modem.aciaBaseAddress = address
+                emulator.networkModem = modem
+            }
+        }
+    }
+
+    private func confirmModemHardwareChange(title: String,
+                                            message: String,
+                                            restartButtonTitle: String,
+                                            requiresRestart: Bool,
+                                            applyChange: @escaping @MainActor () -> Void) {
+        guard emulator.isMachineRunning,
+              requiresRestart else {
+            applyChange()
+            return
+        }
+
+        hardRestartRequest = MachineHardRestartRequest(title: title,
+                                                       message: message,
+                                                       restartButtonTitle: restartButtonTitle) {
+            applyChange()
+            emulator.reset(kind: .hard)
+        }
+    }
+
+    private var statusColor: Color {
+        switch emulator.networkModemStatus.state {
+        case .ready, .connected:
+            return .green
+        case .ringing:
+            return .accentColor
+        case .error:
+            return .red
+        case .disabled, .waitingForMachine:
+            return .secondary
+        }
+    }
+
+    private var autoAnswerTitle: String {
+        let rings = emulator.networkModem.autoAnswerRings
+        guard rings > 0 else {
+            return "Auto-answer off"
+        }
+
+        return rings == 1 ? "Auto-answer after 1 ring" : "Auto-answer after \(rings) rings"
     }
 }
 
