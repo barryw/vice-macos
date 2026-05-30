@@ -966,83 +966,6 @@ private struct VSIDScopeView: View {
         context.stroke(path, with: .color(.white.opacity(0.055)), lineWidth: 1)
     }
 
-    private func drawWaveform(in context: GraphicsContext, size: CGSize) {
-        guard waveform.samples.count > 1 else {
-            return
-        }
-
-        var glowPath = Path()
-        var tracePath = Path()
-        let centerY = size.height * 0.5
-        let gain = size.height * 0.42 * CGFloat(isActive ? 1.0 : 0.35)
-
-        for index in waveform.samples.indices {
-            let progress = CGFloat(index) / CGFloat(max(1, waveform.samples.count - 1))
-            let x = progress * size.width
-            let y = centerY - CGFloat(waveform.samples[index]) * gain
-            if index == 0 {
-                glowPath.move(to: CGPoint(x: x, y: y))
-                tracePath.move(to: CGPoint(x: x, y: y))
-            } else {
-                glowPath.addLine(to: CGPoint(x: x, y: y))
-                tracePath.addLine(to: CGPoint(x: x, y: y))
-            }
-        }
-
-        context.stroke(glowPath,
-                       with: .color(Color(red: 0.13, green: 0.86, blue: 0.95).opacity(0.18)),
-                       lineWidth: 7)
-        context.stroke(tracePath,
-                       with: .color(Color(red: 0.18, green: 0.90, blue: 0.96).opacity(isActive ? 0.96 : 0.38)),
-                       lineWidth: 2.2)
-    }
-
-    private func drawVoiceWaveforms(in context: GraphicsContext, size: CGSize) {
-        let activeVoices = voices.filter { $0.samples.count > 1 && ($0.isActive || VSIDScopeSignal.rms($0.samples) > 0.015) }
-        guard !activeVoices.isEmpty else {
-            return
-        }
-
-        for voice in activeVoices {
-            drawTrace(samples: VSIDScopeSignal.resampledForDisplay(voice.samples, targetCount: 384),
-                      color: traceColor(for: voice),
-                      opacity: activeVoices.count > 3 ? 0.70 : 0.90,
-                      lineWidth: activeVoices.count > 3 ? 1.4 : 1.8,
-                      in: context,
-                      size: size)
-        }
-    }
-
-    private func drawTrace(samples: [Float],
-                           color: Color,
-                           opacity: Double,
-                           lineWidth: CGFloat,
-                           in context: GraphicsContext,
-                           size: CGSize) {
-        guard samples.count > 1 else {
-            return
-        }
-
-        var trace = Path()
-        let centerY = size.height * 0.5
-        let gain = size.height * 0.42
-
-        for index in samples.indices {
-            let progress = CGFloat(index) / CGFloat(max(1, samples.count - 1))
-            let x = progress * size.width
-            let y = centerY - CGFloat(samples[index]) * gain
-            if index == 0 {
-                trace.move(to: CGPoint(x: x, y: y))
-            } else {
-                trace.addLine(to: CGPoint(x: x, y: y))
-            }
-        }
-
-        context.stroke(trace,
-                       with: .color(color.opacity(opacity)),
-                       lineWidth: lineWidth)
-    }
-
     private func traceColor(for voice: VSIDSession.VoiceWaveformSnapshot) -> Color {
         let palette = [
             Color(red: 0.20, green: 0.86, blue: 0.96),
@@ -1289,46 +1212,6 @@ private struct VSIDVoiceScopeCell: View {
         context.stroke(center, with: .color(.white.opacity(0.075)), lineWidth: 1)
     }
 
-    private func drawWave(in context: GraphicsContext, size: CGSize) {
-        guard voice.samples.count > 1 else {
-            return
-        }
-
-        var glow = Path()
-        var trace = Path()
-        let labelReserve: CGFloat = 46
-        let width = max(1, size.width - labelReserve)
-        let originX = labelReserve
-        let centerY = size.height * 0.56
-        let gain = size.height * CGFloat(0.34 + voice.rms * 0.26)
-
-        for index in voice.samples.indices {
-            let progress = CGFloat(index) / CGFloat(max(1, voice.samples.count - 1))
-            let x = originX + progress * width
-            let y = centerY - CGFloat(voice.samples[index]) * gain
-            if index == 0 {
-                glow.move(to: CGPoint(x: x, y: y))
-                trace.move(to: CGPoint(x: x, y: y))
-            } else {
-                glow.addLine(to: CGPoint(x: x, y: y))
-                trace.addLine(to: CGPoint(x: x, y: y))
-            }
-        }
-
-        context.stroke(glow,
-                       with: .color(traceColor.opacity(voice.isActive ? 0.20 : 0.06)),
-                       lineWidth: 5)
-        context.stroke(trace,
-                       with: .color(traceColor.opacity(voice.isActive ? 0.96 : 0.22)),
-                       lineWidth: 1.6)
-    }
-
-    private func drawLabel(in context: GraphicsContext, size: CGSize) {
-        let text = Text("S\(voice.chipIndex + 1) V\(voice.voiceIndex + 1)")
-            .font(.system(size: 10, weight: .semibold, design: .rounded))
-            .foregroundStyle(voice.isActive ? traceColor : .secondary)
-        context.draw(text, at: CGPoint(x: 10, y: size.height * 0.5), anchor: .leading)
-    }
 }
 
 private struct VSIDKeyboardView: View {

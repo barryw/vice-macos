@@ -1206,7 +1206,7 @@ enum ViceMacKeyMapper {
             return Key.keypadDivide
         case MacKeyCode.tab:
             return Key.tab
-        case MacKeyCode.returnKey, MacKeyCode.keypadEnter:
+        case MacKeyCode.returnKey:
             return Key.returnKey
         case MacKeyCode.escape:
             return Key.escape
@@ -1273,7 +1273,7 @@ enum ViceMacKeyMapper {
             return "KP_Delete"
         case MacKeyCode.tab:
             return "Tab"
-        case MacKeyCode.returnKey, MacKeyCode.keypadEnter:
+        case MacKeyCode.returnKey:
             return "Return"
         case MacKeyCode.escape:
             return "Escape"

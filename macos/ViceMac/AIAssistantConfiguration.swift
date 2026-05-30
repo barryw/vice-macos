@@ -91,15 +91,6 @@ struct AIAssistantRequestConfiguration {
 enum AIAssistantInteractionMode {
     case ask
     case operate
-
-    var title: String {
-        switch self {
-        case .ask:
-            return "Ask"
-        case .operate:
-            return "Do"
-        }
-    }
 }
 
 struct AIAssistantRunResult: Equatable {

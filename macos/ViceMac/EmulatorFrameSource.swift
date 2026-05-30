@@ -30,11 +30,6 @@ final class EmulatorFrameSource {
         bootFrame.pixelSize
     }
 
-    var aspectRatio: CGFloat {
-        let presentedSize = displayProfile.presentationSize(for: pixelSize)
-        return presentedSize.width / presentedSize.height
-    }
-
     init(displayProfile: MachineDisplayProfile) {
         self.displayProfile = displayProfile
     }

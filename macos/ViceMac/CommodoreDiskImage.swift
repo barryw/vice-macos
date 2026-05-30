@@ -174,17 +174,6 @@ enum CommodoreDiskRebuildIssueSeverity: String, Equatable {
     case info
     case warning
     case blocked
-
-    var label: String {
-        switch self {
-        case .info:
-            return "Note"
-        case .warning:
-            return "Warning"
-        case .blocked:
-            return "Blocked"
-        }
-    }
 }
 
 struct CommodoreDiskRebuildIssue: Identifiable, Equatable {
@@ -276,7 +265,7 @@ struct GEOSDiskStatus: Equatable {
     var inputDrivers: [GEOSInputDriver]
 
     var defaultInputDriver: GEOSInputDriver? {
-        inputDrivers.first
+        inputDrivers.first { $0.isDefault } ?? inputDrivers.first
     }
 
     var preferred1351Driver: GEOSInputDriver? {
@@ -306,10 +295,6 @@ enum CommodoreDiskImageFormat: String, CaseIterable, Identifiable {
 
     init?(url: URL) {
         self.init(rawValue: url.pathExtension.lowercased())
-    }
-
-    init?(diskImageFileType: DiskImageFileType) {
-        self.init(rawValue: diskImageFileType.rawValue)
     }
 
     var supportsBlankImageCreation: Bool {
@@ -619,10 +604,6 @@ struct CommodoreDiskImage: Identifiable, Equatable {
                                        diskName: diskName,
                                        diskID: diskID)
         try data.write(to: url, options: .atomic)
-    }
-
-    var displayName: String {
-        url.lastPathComponent
     }
 
     var header: CommodoreDiskHeader {

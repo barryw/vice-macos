@@ -103,10 +103,6 @@ final class DiskImageManagerModel: ObservableObject {
         case left
         case right
 
-        var opposite: Pane {
-            self == .left ? .right : .left
-        }
-
         var title: String {
             self == .left ? "Left Image" : "Right Image"
         }
