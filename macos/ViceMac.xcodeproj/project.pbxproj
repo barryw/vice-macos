@@ -616,51 +616,155 @@
 		A10000000000000000000031 /* ViceMac */ = {
 			isa = PBXGroup;
 			children = (
+				AD1000000000000000000001 /* App */,
+				AD1000000000000000000002 /* Session */,
+				AD1000000000000000000003 /* Configuration */,
+				AD1000000000000000000004 /* Disk Images */,
+				AD1000000000000000000005 /* Display */,
+				AD1000000000000000000006 /* Input */,
+				A10000000000000000000033 /* Settings */,
+				AD1000000000000000000007 /* Networking */,
+				AD1000000000000000000008 /* Printing */,
+				AD1000000000000000000009 /* Debugger */,
+				AD100000000000000000000A /* VICE Bridge */,
+				AD100000000000000000000B /* VSID */,
+				AD100000000000000000000C /* Shared UI */,
+				AD100000000000000000000D /* Resources */,
+			);
+			path = ViceMac;
+			sourceTree = "<group>";
+		};
+		AD1000000000000000000001 /* App */ = {
+			isa = PBXGroup;
+			children = (
 				A10000000000000000000020 /* ViceMacApp.swift */,
 				A10000000000000000000037 /* EmulatedMachine.swift */,
+				A10000000000000000000022 /* ContentView.swift */,
+				AC1004000000000000000000 /* ContentView+DriveIndicators.swift */,
+			);
+			name = App;
+			sourceTree = "<group>";
+		};
+		AD1000000000000000000002 /* Session */ = {
+			isa = PBXGroup;
+			children = (
 				A10000000000000000000021 /* EmulatorSession.swift */,
 				AC1007000000000000000000 /* EmulatorSession+State.swift */,
-				AC1008000000000000000000 /* EmulatorSession+InputControl.swift */,
 				AC1009000000000000000000 /* EmulatorSession+Lifecycle.swift */,
 				AC100A000000000000000000 /* EmulatorSession+Media.swift */,
 				AC100B000000000000000000 /* EmulatorSession+RuntimeConfiguration.swift */,
-				AB1007000000000000000020 /* EmulatorSession+Networking.swift */,
-				AB1006000000000000000020 /* EmulatorSession+Printing.swift */,
-				AB1005000000000000000020 /* EmulatorSession+DebuggerBridge.swift */,
-				AB1001000000000000000020 /* RAMExpansion.swift */,
-				AB1002000000000000000020 /* HayesModemService.swift */,
-				AB1003000000000000000020 /* PrinterSpoolPrintView.swift */,
-				AB1004000000000000000020 /* ViceResource.swift */,
-				AC1006000000000000000000 /* CommonUI.swift */,
+			);
+			name = Session;
+			sourceTree = "<group>";
+		};
+		AD1000000000000000000003 /* Configuration */ = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000038 /* EmulatorDefaults.swift */,
 				A1000000000000000000003E /* AIAssistantConfiguration.swift */,
-				A1000000000000000000003F /* DebuggerView.swift */,
-				AC100C000000000000000000 /* DebuggerModels.swift */,
-				AA1000000000000000000020 /* CommodoreDiskImage.swift */,
-				AA1000000000000000000022 /* DiskImageService.swift */,
-				AC1002000000000000000000 /* GEOSPackageService.swift */,
-				AC1001000000000000000000 /* CPMDiskImage.swift */,
-				1A0000000000000000000020 /* SIDFile.swift */,
-				1A0000000000000000000021 /* VSIDPlayerView.swift */,
 				A1000000000000000000003B /* ControlConfiguration.swift */,
+				A1000000000000000000003C /* DriveConfiguration.swift */,
+				A1000000000000000000003D /* MediaConfiguration.swift */,
+				AB1001000000000000000020 /* RAMExpansion.swift */,
+			);
+			name = Configuration;
+			sourceTree = "<group>";
+		};
+		AD1000000000000000000004 /* Disk Images */ = {
+			isa = PBXGroup;
+			children = (
+				AA1000000000000000000020 /* CommodoreDiskImage.swift */,
+				AC1001000000000000000000 /* CPMDiskImage.swift */,
+				AA1000000000000000000022 /* DiskImageService.swift */,
 				AC1003000000000000000000 /* DiskImageManagerModel.swift */,
 				AA1000000000000000000021 /* DiskImageManagerView.swift */,
-				A1000000000000000000003C /* DriveConfiguration.swift */,
-				A10000000000000000000038 /* EmulatorDefaults.swift */,
+				AC1002000000000000000000 /* GEOSPackageService.swift */,
+			);
+			name = "Disk Images";
+			sourceTree = "<group>";
+		};
+		AD1000000000000000000005 /* Display */ = {
+			isa = PBXGroup;
+			children = (
 				A10000000000000000000028 /* EmulatorFrameSource.swift */,
-				A10000000000000000000039 /* KeyboardMapping.swift */,
-				A1000000000000000000003D /* MediaConfiguration.swift */,
-				A1000000000000000000003A /* ViceCallbacks.swift */,
 				A1000000000000000000002B /* VideoFilterSettings.swift */,
 				A1000000000000000000002C /* VideoFilterControls.swift */,
-				A10000000000000000000022 /* ContentView.swift */,
-				AC1004000000000000000000 /* ContentView+DriveIndicators.swift */,
-				A10000000000000000000036 /* Engine */,
 				A10000000000000000000032 /* Metal */,
-				A10000000000000000000033 /* Settings */,
+			);
+			name = Display;
+			sourceTree = "<group>";
+		};
+		AD1000000000000000000006 /* Input */ = {
+			isa = PBXGroup;
+			children = (
+				AC1008000000000000000000 /* EmulatorSession+InputControl.swift */,
+				A10000000000000000000039 /* KeyboardMapping.swift */,
+			);
+			name = Input;
+			sourceTree = "<group>";
+		};
+		AD1000000000000000000007 /* Networking */ = {
+			isa = PBXGroup;
+			children = (
+				AB1007000000000000000020 /* EmulatorSession+Networking.swift */,
+				AB1002000000000000000020 /* HayesModemService.swift */,
+			);
+			name = Networking;
+			sourceTree = "<group>";
+		};
+		AD1000000000000000000008 /* Printing */ = {
+			isa = PBXGroup;
+			children = (
+				AB1006000000000000000020 /* EmulatorSession+Printing.swift */,
+				AB1003000000000000000020 /* PrinterSpoolPrintView.swift */,
+			);
+			name = Printing;
+			sourceTree = "<group>";
+		};
+		AD1000000000000000000009 /* Debugger */ = {
+			isa = PBXGroup;
+			children = (
+				AB1005000000000000000020 /* EmulatorSession+DebuggerBridge.swift */,
+				AC100C000000000000000000 /* DebuggerModels.swift */,
+				A1000000000000000000003F /* DebuggerView.swift */,
+			);
+			name = Debugger;
+			sourceTree = "<group>";
+		};
+		AD100000000000000000000A /* VICE Bridge */ = {
+			isa = PBXGroup;
+			children = (
+				A1000000000000000000003A /* ViceCallbacks.swift */,
+				AB1004000000000000000020 /* ViceResource.swift */,
+				A10000000000000000000036 /* Engine */,
+			);
+			name = "VICE Bridge";
+			sourceTree = "<group>";
+		};
+		AD100000000000000000000B /* VSID */ = {
+			isa = PBXGroup;
+			children = (
+				1A0000000000000000000020 /* SIDFile.swift */,
+				1A0000000000000000000021 /* VSIDPlayerView.swift */,
+			);
+			name = VSID;
+			sourceTree = "<group>";
+		};
+		AD100000000000000000000C /* Shared UI */ = {
+			isa = PBXGroup;
+			children = (
+				AC1006000000000000000000 /* CommonUI.swift */,
+			);
+			name = "Shared UI";
+			sourceTree = "<group>";
+		};
+		AD100000000000000000000D /* Resources */ = {
+			isa = PBXGroup;
+			children = (
 				A10000000000000000000034 /* BootFrames */,
 				A10000000000000000000026 /* Assets.xcassets */,
 			);
-			path = ViceMac;
+			name = Resources;
 			sourceTree = "<group>";
 		};
 		A10000000000000000000032 /* Metal */ = {
