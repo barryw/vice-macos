@@ -28,6 +28,7 @@
 
 #include "vice.h"
 
+#include <ctype.h>
 #include <string.h>
 
 #include "archdep.h"
@@ -93,6 +94,36 @@
 */
 
 #define MAXDIRPOSMARK (10+26+26)
+
+void fsdevice_normalize_petscii_display_name(uint8_t *name)
+{
+    uint8_t *p;
+
+    if (name == NULL) {
+        return;
+    }
+
+    for (p = name; *p; p++) {
+        if (*p >= 0xc1 && *p <= 0xda) {
+            *p = (uint8_t)((*p - 0xc1) + 0x41);
+        }
+    }
+}
+
+void fsdevice_normalize_ascii_display_name(char *name)
+{
+    char *p;
+
+    if (name == NULL) {
+        return;
+    }
+
+    for (p = name; *p; p++) {
+        if (isupper((unsigned char)*p)) {
+            *p = (char)tolower((unsigned char)*p);
+        }
+    }
+}
 
 static int _limit_longname(archdep_dir_t *archdep_dir, vdrive_t *vdrive, char *longname, int mode)
 {
@@ -211,6 +242,9 @@ static char *expand_shortname(vdrive_t *vdrive, char *shortname, int mode)
             _limit_longname(host_dir, vdrive, longname, 0);
             if (mode) {
                 charset_petconvstring((uint8_t *)longname, CONVERT_TO_PETSCII);   /* ASCII name to PETSCII */
+                fsdevice_normalize_petscii_display_name((uint8_t *)longname);
+            } else {
+                fsdevice_normalize_ascii_display_name(longname);
             }
             DBG(("expand_shortname>'%s'->'%s'('%s')\n", direntry, longname, shortname));
             if (!strcmp(longname, shortname)) {

@@ -15,7 +15,11 @@ struct DriveIndicator: View {
                 isPresented.toggle()
             } label: {
                 HStack(spacing: 6) {
-                    if drive.hasMultipleSlots {
+                    if drive.isSharedFolder {
+                        Image(systemName: "folder.fill")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(drive.sharedFolderPath == nil ? Color.secondary : Color.blue)
+                    } else if drive.hasMultipleSlots {
                         DriveSlotLEDStack(drive: drive, blinkOn: blinkOn)
                     } else {
                         let color = indicatorColor(blinkOn: blinkOn)
@@ -51,7 +55,7 @@ struct DriveIndicator: View {
             }
             .buttonStyle(.plain)
             .background(isPresented ? Color.secondary.opacity(0.18) : Color.clear, in: Capsule())
-            .help("Drive \(drive.unit)")
+            .help(drive.isSharedFolder ? "Drive \(drive.unit) Shared Mac Folder" : "Drive \(drive.unit)")
             .popover(isPresented: $isPresented, arrowEdge: .bottom) {
                 DrivePopover(isPresented: $isPresented, drive: drive)
             }
@@ -115,14 +119,14 @@ private struct DrivePopover: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 10) {
-                Image(systemName: "externaldrive")
+                Image(systemName: drive.isSharedFolder ? "folder" : "externaldrive")
                     .font(.title3)
                     .foregroundStyle(.secondary)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Drive \(drive.unit)")
                         .font(.headline)
-                    Text("\(drive.driveType.title) • \(drive.driveType.busTitle)")
+                    Text(subtitle)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -130,61 +134,28 @@ private struct DrivePopover: View {
                 Spacer()
             }
 
-            VStack(alignment: .leading, spacing: 8) {
-                VStack(spacing: 6) {
-                    ForEach(drive.slots) { slot in
-                        DriveSlotPopoverRow(slot: slot,
-                                            unit: drive.unit,
-                                            showsDriveNumber: drive.hasMultipleSlots,
-                                            isActive: slot.isActive,
-                                            hasError: drive.hasErrorStatus) {
-                            openDiskPanel(for: slot.driveNumber)
-                        } onDetach: {
-                            emulator.detachDisk(from: drive.unit, driveNumber: slot.driveNumber)
-                        }
-                    }
-                }
-
-                VMCInfoRow("Status") {
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(statusColor)
-                            .frame(width: 7, height: 7)
-                        Text(statusTitle)
-                    }
-                }
-
-                VMCInfoRow("Formats") {
-                    Text(diskImageFormatDescription)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-
-                VMCInfoRow("Access") {
-                    Picker("Access", selection: accessModeBinding) {
-                        ForEach(DriveAccessMode.allCases) { mode in
-                            Label(mode.title, systemImage: mode.systemImage).tag(mode)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
-                    .help(accessModeHelp)
-                }
-
-                if let headPositionText = drive.headPositionText {
-                    VMCInfoRow("Track") {
-                        Text(drive.headDetailText ?? headPositionText)
-                            .font(.system(.body, design: .monospaced))
-                    }
-                }
+            if drive.isSharedFolder {
+                sharedFolderContent
+            } else {
+                diskDriveContent
             }
 
             Divider()
 
-            Toggle("Run after attach", isOn: $autorun)
+            if !drive.isSharedFolder {
+                Toggle("Run after attach", isOn: $autorun)
+            }
 
             HStack(spacing: 8) {
+                if drive.isSharedFolder,
+                   let url = drive.sharedFolderURL {
+                    Button {
+                        NSWorkspace.shared.activateFileViewerSelecting([url])
+                    } label: {
+                        Label("Reveal in Finder", systemImage: "finder")
+                    }
+                }
+
                 Button {
                     emulator.resetDrive(drive.unit)
                 } label: {
@@ -196,6 +167,102 @@ private struct DrivePopover: View {
         .frame(width: 340)
     }
 
+    private var diskDriveContent: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            VStack(spacing: 6) {
+                ForEach(drive.slots) { slot in
+                    DriveSlotPopoverRow(slot: slot,
+                                        unit: drive.unit,
+                                        showsDriveNumber: drive.hasMultipleSlots,
+                                        isActive: slot.isActive,
+                                        hasError: drive.hasErrorStatus) {
+                        openDiskPanel(for: slot.driveNumber)
+                    } onDetach: {
+                        emulator.detachDisk(from: drive.unit, driveNumber: slot.driveNumber)
+                    }
+                }
+            }
+
+            VMCInfoRow("Status") {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(statusColor)
+                        .frame(width: 7, height: 7)
+                    Text(statusTitle)
+                }
+            }
+
+            VMCInfoRow("Formats") {
+                Text(diskImageFormatDescription)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            VMCInfoRow("Access") {
+                Picker("Access", selection: accessModeBinding) {
+                    ForEach(DriveAccessMode.allCases) { mode in
+                        Label(mode.title, systemImage: mode.systemImage).tag(mode)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .help(accessModeHelp)
+            }
+
+            if let headPositionText = drive.headPositionText {
+                VMCInfoRow("Track") {
+                    Text(drive.headDetailText ?? headPositionText)
+                        .font(.system(.body, design: .monospaced))
+                }
+            }
+        }
+    }
+
+    private var sharedFolderContent: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            VMCInfoRow("Folder") {
+                Text(drive.sharedFolderPath ?? "Choose a folder in Storage settings")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .truncationMode(.middle)
+            }
+
+            VMCInfoRow("Status") {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(statusColor)
+                        .frame(width: 7, height: 7)
+                    Text(statusTitle)
+                }
+            }
+
+            VMCInfoRow("Works") {
+                HStack(spacing: 6) {
+                    VMCStatusBadge("LOAD", color: .green)
+                    VMCStatusBadge("SAVE", color: .green)
+                    VMCStatusBadge("Directory", color: .green)
+                }
+            }
+
+            VMCInfoRow("Limits") {
+                HStack(spacing: 6) {
+                    VMCStatusBadge("No format", color: .orange)
+                    VMCStatusBadge("No raw blocks", color: .orange)
+                }
+            }
+        }
+    }
+
+    private var subtitle: String {
+        if drive.isSharedFolder {
+            return "Shared Mac Folder"
+        }
+
+        return "\(drive.driveType.title) • \(drive.driveType.busTitle)"
+    }
+
     private var statusTitle: String {
         drive.resolvedStatusText
     }
@@ -203,6 +270,10 @@ private struct DrivePopover: View {
     private var statusColor: Color {
         if drive.hasErrorStatus {
             return .red
+        }
+
+        if drive.isSharedFolder {
+            return drive.sharedFolderPath == nil ? Color.secondary.opacity(0.45) : .green
         }
 
         return drive.hasDiskImage ? .green : Color.secondary.opacity(0.45)
@@ -227,7 +298,7 @@ private struct DrivePopover: View {
 
     private func openDiskPanel(for driveNumber: Int) {
         let panel = NSOpenPanel()
-        panel.title = "Attach Disk"
+        panel.title = drive.storageKind == .hardDriveImage ? "Attach Hard Drive Image" : "Attach Disk"
         panel.message = "Choose a \(diskImageFormatDescription) image for \(driveAddress(for: driveNumber))."
         panel.prompt = "Attach"
         panel.canChooseFiles = true

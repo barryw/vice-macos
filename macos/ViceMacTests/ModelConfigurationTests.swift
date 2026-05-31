@@ -18,9 +18,26 @@ final class ModelConfigurationTests: XCTestCase {
         let configuration = try JSONDecoder().decode(DriveConfiguration.self, from: json)
 
         XCTAssertEqual(configuration.accessMode, .native)
+        XCTAssertEqual(configuration.storageKind, .diskImage)
+        XCTAssertNil(configuration.sharedFolderPath)
         XCTAssertTrue(configuration.protectsInsertedDisks)
         XCTAssertFalse(configuration.soundEnabled)
         XCTAssertEqual(configuration.soundVolume, 25)
+    }
+
+    func testDriveConfigurationDecodesLegacyHardDriveTypeAsHardDriveImage() throws {
+        let json = """
+        {
+          "unit": 8,
+          "isAttached": true,
+          "driveType": 4844
+        }
+        """.data(using: .utf8)!
+
+        let configuration = try JSONDecoder().decode(DriveConfiguration.self, from: json)
+
+        XCTAssertEqual(configuration.storageKind, .hardDriveImage)
+        XCTAssertEqual(configuration.driveType, .cmdHD)
     }
 
     func testDriveConfigurationMigratesVICEVolumeToPercent() throws {
@@ -800,6 +817,97 @@ final class ModelConfigurationTests: XCTestCase {
         XCTAssertEqual(arguments.value(after: "-drivesoundvolume"), "2000")
     }
 
+    func testSharedFolderStartupUsesFilesystemDeviceBackend() {
+        let machine = EmulatedMachine.x64sc
+        let driveConfigurations = [
+            DriveConfiguration(unit: 8,
+                               isAttached: true,
+                               storageKind: .sharedFolder,
+                               driveType: .c1541,
+                               sharedFolderPath: "/Users/test/Commodore Shared",
+                               soundEnabled: true,
+                               soundVolume: 50)
+        ]
+        let arguments = machine.startupArguments(configuration: startupConfiguration(for: machine,
+                                                                                     driveConfigurations: driveConfigurations))
+
+        XCTAssertTrue(arguments.contains("+drivesound"))
+        XCTAssertEqual(arguments.value(after: "-drive8type"), "0")
+        XCTAssertTrue(arguments.contains("+drive8truedrive"))
+        XCTAssertTrue(arguments.contains("-trapdevice8"))
+        XCTAssertEqual(arguments.value(after: "-devicebackend8"), "1")
+        XCTAssertEqual(arguments.value(after: "-fs8"), "/Users/test/Commodore Shared")
+        XCTAssertTrue(arguments.contains("-fs8convertp00"))
+        XCTAssertTrue(arguments.contains("+fs8savep00"))
+        XCTAssertTrue(arguments.contains("+fs8hidecbm"))
+        XCTAssertTrue(arguments.contains("+fslongnames"))
+        XCTAssertTrue(arguments.contains("+fsoverwrite"))
+    }
+
+    func testSharedFolderWithoutFolderStartsDetached() {
+        let machine = EmulatedMachine.x64sc
+        let driveConfigurations = [
+            DriveConfiguration(unit: 8,
+                               isAttached: true,
+                               storageKind: .sharedFolder,
+                               driveType: .c1541,
+                               soundEnabled: false,
+                               soundVolume: 25)
+        ]
+        let arguments = machine.startupArguments(configuration: startupConfiguration(for: machine,
+                                                                                     driveConfigurations: driveConfigurations))
+
+        XCTAssertEqual(arguments.value(after: "-devicebackend8"), "0")
+        XCTAssertEqual(arguments.value(after: "-drive8type"), "0")
+        XCTAssertTrue(arguments.contains("+trapdevice8"))
+    }
+
+    func testSharedFolderDriveRejectsDiskOnlyCommandsWithUsefulStatusMessages() throws {
+        let harness = try ViceFSDeviceHarness()
+
+        XCTAssertEqual(try harness.status(after: "N:MACVICE,01"), "30,CANNOT FORMAT MAC FOLDER,00,00")
+        XCTAssertEqual(try harness.status(after: "V"), "31,NO BAM ON MAC FOLDER,00,00")
+        XCTAssertEqual(try harness.status(after: "B-A:0,18,0"), "31,NO BAM ON MAC FOLDER,18,00")
+        XCTAssertEqual(try harness.status(after: "B-R:2,0,18,0"), "31,RAW BLOCKS UNSUPPORTED,18,00")
+        XCTAssertEqual(try harness.status(after: "B-P:2,0"), "31,BUFFER POINTER UNSUPPORTED,00,00")
+    }
+
+    func testSharedFolderDirectoryListingHidesMacDotFilesAndShowsFoldersAsDirectories() throws {
+        let containerURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macvice-fsdevice-\(UUID().uuidString)", isDirectory: true)
+        let rootURL = containerURL.appendingPathComponent("Tip128 X2-128S", isDirectory: true)
+        try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: containerURL) }
+
+        try Data([0x01, 0x08, 0x60]).write(to: rootURL.appendingPathComponent("Tip128 X2-128S"))
+        try Data([0x00]).write(to: rootURL.appendingPathComponent(".DS_Store"))
+        try Data([0x00]).write(to: rootURL.appendingPathComponent("._Tip128 X2-128S"))
+        try FileManager.default.createDirectory(at: rootURL.appendingPathComponent("GEOS Extras", isDirectory: true),
+                                                withIntermediateDirectories: true)
+
+        let harness = try ViceFSDeviceHarness()
+        let entries = try harness.directoryEntries(for: rootURL)
+        let names = entries.map(\.name)
+
+        let entrySummary = entries.map { "\($0.name) [\($0.detail)]" }.joined(separator: ", ")
+
+        XCTAssertEqual(entries.first?.name, "tip128 x2-128s")
+        XCTAssertTrue(entries.contains { $0.name == "tip128 x2-128s" && $0.detail.lowercased().contains("prg") },
+                      entrySummary)
+        XCTAssertTrue(entries.contains { $0.name == "geos extras" && $0.detail.lowercased().contains("dir") },
+                      entrySummary)
+        let rawNameSummary = entries.map {
+            "\($0.name): \($0.rawNameBytes.map { String(format: "%02x", $0) }.joined(separator: " "))"
+        }.joined(separator: ", ")
+        XCTAssertFalse(entries.flatMap(\.rawNameBytes).contains { (UInt8(0xc1)...UInt8(0xda)).contains($0) },
+                       rawNameSummary)
+        XCTAssertTrue(try harness.canOpenDisplayedFile(named: "TIP128 X2-128S"))
+        XCTAssertFalse(names.contains("."))
+        XCTAssertFalse(names.contains(".."))
+        XCTAssertFalse(names.contains(".DS_Store"))
+        XCTAssertFalse(names.contains("._Tip128 X2-128S"))
+    }
+
     func testDriveProtectionStartupUsesReadOnlyAttachOptions() {
         let machine = EmulatedMachine.x128
         let driveConfigurations = [
@@ -936,6 +1044,7 @@ final class ModelConfigurationTests: XCTestCase {
                                                                                      driveConfigurations: driveConfigurations))
 
         XCTAssertEqual(arguments.value(after: "-drive8type"), "1541")
+        XCTAssertEqual(arguments.value(after: "-devicebackend8"), "0")
         XCTAssertTrue(arguments.contains("+drive8truedrive"))
         XCTAssertTrue(arguments.contains("-trapdevice8"))
     }
@@ -1220,6 +1329,32 @@ final class ModelConfigurationTests: XCTestCase {
 
         XCTAssertEqual(normalized.first?.driveType, EmulatedMachine.x64sc.capabilities.defaultDriveType)
         XCTAssertEqual(normalized.first?.soundVolume, 100)
+    }
+
+    func testNormalizedDriveConfigurationsKeepsStorageTypeAndDriveModelAligned() {
+        let machine = EmulatedMachine.x64sc
+        let diskImageConfiguration = DriveConfiguration(unit: 8,
+                                                        isAttached: true,
+                                                        storageKind: .diskImage,
+                                                        driveType: .cmdHD,
+                                                        soundEnabled: false,
+                                                        soundVolume: 25)
+        let hardDriveConfiguration = DriveConfiguration(unit: 9,
+                                                        isAttached: true,
+                                                        storageKind: .hardDriveImage,
+                                                        driveType: .c1541,
+                                                        soundEnabled: false,
+                                                        soundVolume: 25)
+
+        let normalized = EmulatorSession.normalizedDriveConfigurations([
+            diskImageConfiguration,
+            hardDriveConfiguration
+        ], for: machine)
+
+        XCTAssertEqual(normalized.first(where: { $0.unit == 8 })?.storageKind, .diskImage)
+        XCTAssertEqual(normalized.first(where: { $0.unit == 8 })?.driveType, .c1541)
+        XCTAssertEqual(normalized.first(where: { $0.unit == 9 })?.storageKind, .hardDriveImage)
+        XCTAssertEqual(normalized.first(where: { $0.unit == 9 })?.driveType, .cmdHD)
     }
 
     func testMachineDefaultDrivesMatchAdvertisedUnitsAndTypes() {
@@ -2021,6 +2156,249 @@ private extension Array where Element == String {
 private extension RAMExpansionResourcePlan {
     func value(for resourceName: String) -> Int32? {
         (disableAssignments + enableAssignments).last { $0.name == resourceName }?.value
+    }
+}
+
+private final class ViceFSDeviceHarness {
+    struct DirectoryEntry {
+        let name: String
+        let detail: String
+        let rawNameBytes: [UInt8]
+    }
+
+    private typealias ResourcesInit = @convention(c) (UnsafePointer<CChar>) -> Int32
+    private typealias FSDeviceResourcesInit = @convention(c) () -> Int32
+    private typealias FSDeviceInit = @convention(c) () -> Void
+    private typealias FSDeviceShutdown = @convention(c) () -> Void
+    private typealias FSDeviceSetDirectory = @convention(c) (UnsafeMutablePointer<CChar>, UInt32) -> Void
+    private typealias FSDeviceOpen = @convention(c) (UnsafeMutableRawPointer, UnsafePointer<UInt8>, UInt32, UInt32, UnsafeMutableRawPointer?) -> Int32
+    private typealias FSDeviceRead = @convention(c) (UnsafeMutableRawPointer, UnsafeMutablePointer<UInt8>, UInt32) -> Int32
+    private typealias FSDeviceClose = @convention(c) (UnsafeMutableRawPointer, UInt32) -> Int32
+    private typealias FSDeviceFlushWriteByte = @convention(c) (UnsafeMutableRawPointer, UInt8) -> Int32
+    private typealias FSDeviceFlush = @convention(c) (UnsafeMutableRawPointer, UInt32) -> Void
+    private typealias FSDeviceErrorGetByte = @convention(c) (UnsafeMutableRawPointer, UnsafeMutablePointer<UInt8>) -> Int32
+    private typealias CharsetPToASCII = @convention(c) (UInt8, Int32) -> UInt8
+
+    private let handle: UnsafeMutableRawPointer
+    private let dependencyHandles: [UnsafeMutableRawPointer]
+    private let fsdeviceShutdown: FSDeviceShutdown
+    private let fsdeviceSetDirectory: FSDeviceSetDirectory
+    private let fsdeviceOpen: FSDeviceOpen
+    private let fsdeviceRead: FSDeviceRead
+    private let fsdeviceClose: FSDeviceClose
+    private let fsdeviceFlushWriteByte: FSDeviceFlushWriteByte
+    private let fsdeviceFlush: FSDeviceFlush
+    private let fsdeviceErrorGetByte: FSDeviceErrorGetByte
+    private let charsetPToASCII: CharsetPToASCII
+    private let vdrive: UnsafeMutableRawPointer
+    private var didShutdown = false
+
+    private static let resourceLock = NSLock()
+    nonisolated(unsafe) private static var didInitializeResources = false
+
+    init() throws {
+        let sourceFileURL = URL(fileURLWithPath: #filePath)
+        let repositoryRootURL = sourceFileURL
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let buildProductsURL = repositoryRootURL
+            .appendingPathComponent("macos")
+            .appendingPathComponent("BuildProducts")
+        let dependencyNames = [
+            "libpng16.16.dylib",
+            "libintl.8.dylib",
+            "libusb-1.0.0.dylib"
+        ]
+
+        var openedDependencies: [UnsafeMutableRawPointer] = []
+        for dependencyName in dependencyNames {
+            let dependencyURL = buildProductsURL.appendingPathComponent(dependencyName)
+            guard let dependencyHandle = dlopen(dependencyURL.path, RTLD_NOW | RTLD_GLOBAL) else {
+                throw ViceFSDeviceHarness.error("Could not load \(dependencyName): \(ViceFSDeviceHarness.dlErrorMessage())")
+            }
+            openedDependencies.append(dependencyHandle)
+        }
+
+        dependencyHandles = openedDependencies
+
+        let viceLibraryURL = buildProductsURL.appendingPathComponent("libvicemacx64sc.dylib")
+        guard let handle = dlopen(viceLibraryURL.path, RTLD_NOW | RTLD_GLOBAL) else {
+            throw ViceFSDeviceHarness.error("Could not load libvicemacx64sc.dylib: \(ViceFSDeviceHarness.dlErrorMessage())")
+        }
+        self.handle = handle
+
+        let resourcesInit: ResourcesInit = try Self.symbol("resources_init", in: handle)
+        let fsdeviceResourcesInit: FSDeviceResourcesInit = try Self.symbol("fsdevice_resources_init", in: handle)
+        let fsdeviceInit: FSDeviceInit = try Self.symbol("fsdevice_init", in: handle)
+        fsdeviceShutdown = try Self.symbol("fsdevice_shutdown", in: handle)
+        fsdeviceSetDirectory = try Self.symbol("fsdevice_set_directory", in: handle)
+        fsdeviceOpen = try Self.symbol("fsdevice_open", in: handle)
+        fsdeviceRead = try Self.symbol("fsdevice_read", in: handle)
+        fsdeviceClose = try Self.symbol("fsdevice_close", in: handle)
+        fsdeviceFlushWriteByte = try Self.symbol("fsdevice_flush_write_byte", in: handle)
+        fsdeviceFlush = try Self.symbol("fsdevice_flush", in: handle)
+        fsdeviceErrorGetByte = try Self.symbol("fsdevice_error_get_byte", in: handle)
+        charsetPToASCII = try Self.symbol("charset_p_toascii", in: handle)
+
+        try Self.initializeResourcesIfNeeded(resourcesInit: resourcesInit,
+                                             fsdeviceResourcesInit: fsdeviceResourcesInit)
+
+        vdrive = UnsafeMutableRawPointer.allocate(byteCount: 4096, alignment: MemoryLayout<UInt64>.alignment)
+        vdrive.initializeMemory(as: UInt8.self, repeating: 0, count: 4096)
+        vdrive.storeBytes(of: UInt32(8), as: UInt32.self)
+
+        fsdeviceInit()
+    }
+
+    deinit {
+        if !didShutdown {
+            fsdeviceShutdown()
+        }
+        vdrive.deallocate()
+        dlclose(handle)
+        for dependencyHandle in dependencyHandles {
+            dlclose(dependencyHandle)
+        }
+    }
+
+    func status(after command: String) throws -> String {
+        for byte in command.utf8 {
+            _ = fsdeviceFlushWriteByte(vdrive, byte)
+        }
+        _ = fsdeviceFlushWriteByte(vdrive, 13)
+        fsdeviceFlush(vdrive, 15)
+
+        var statusBytes: [UInt8] = []
+        while statusBytes.count < 256 {
+            var byte: UInt8 = 0
+            let result = fsdeviceErrorGetByte(vdrive, &byte)
+            if byte == 13 {
+                return String(decoding: statusBytes, as: UTF8.self)
+            }
+            statusBytes.append(byte)
+            if result == 0x40 {
+                return String(decoding: statusBytes, as: UTF8.self)
+            }
+        }
+
+        throw Self.error("VICE fsdevice status channel did not terminate")
+    }
+
+    func directoryEntries(for directoryURL: URL) throws -> [DirectoryEntry] {
+        directoryURL.path.withCString { path in
+            fsdeviceSetDirectory(UnsafeMutablePointer(mutating: path), 8)
+        }
+
+        let name = [UInt8(ascii: "$"), 0]
+        let openStatus = name.withUnsafeBufferPointer { buffer in
+            fsdeviceOpen(vdrive, buffer.baseAddress!, UInt32(buffer.count - 1), 0, nil)
+        }
+        guard openStatus == 0 else {
+            throw Self.error("VICE fsdevice_open directory failed with status \(openStatus)")
+        }
+
+        var bytes: [UInt8] = []
+        while bytes.count < 16_384 {
+            var byte: UInt8 = 0
+            let result = fsdeviceRead(vdrive, &byte, 0)
+            bytes.append(byte)
+            if result == 0x40 {
+                _ = fsdeviceClose(vdrive, 0)
+                return parseDirectoryEntries(from: bytes)
+            }
+        }
+
+        _ = fsdeviceClose(vdrive, 0)
+        throw Self.error("VICE fsdevice directory listing did not terminate")
+    }
+
+    func canOpenDisplayedFile(named name: String) throws -> Bool {
+        var bytes = Array(name.utf8)
+        bytes.append(0)
+
+        let openStatus = bytes.withUnsafeBufferPointer { buffer in
+            fsdeviceOpen(vdrive, buffer.baseAddress!, UInt32(buffer.count - 1), 2, nil)
+        }
+
+        if openStatus == 0 {
+            _ = fsdeviceClose(vdrive, 2)
+            return true
+        }
+
+        return false
+    }
+
+    private func parseDirectoryEntries(from bytes: [UInt8]) -> [DirectoryEntry] {
+        var entries: [DirectoryEntry] = []
+        var index = bytes.startIndex
+
+        while let openQuote = bytes[index...].firstIndex(of: UInt8(ascii: "\"")) {
+            let nameStart = bytes.index(after: openQuote)
+            guard let closeQuote = bytes[nameStart...].firstIndex(of: UInt8(ascii: "\"")) else {
+                break
+            }
+
+            let rawNameBytes = Array(bytes[nameStart..<closeQuote])
+            let name = asciiString(from: bytes[nameStart..<closeQuote])
+            let detailStart = bytes.index(after: closeQuote)
+            let detailEnd = min(bytes.endIndex, detailStart + 24)
+            let detail = asciiString(from: bytes[detailStart..<detailEnd])
+            entries.append(DirectoryEntry(name: name, detail: detail, rawNameBytes: rawNameBytes))
+            index = detailStart
+        }
+
+        return entries
+    }
+
+    private func asciiString(from bytes: ArraySlice<UInt8>) -> String {
+        let decoded = bytes.compactMap { byte -> UInt8? in
+            let converted = charsetPToASCII(byte, 0)
+            return (32...126).contains(converted) ? converted : nil
+        }
+
+        return String(decoding: decoded, as: UTF8.self).trimmingCharacters(in: .whitespaces)
+    }
+
+    private static func initializeResourcesIfNeeded(resourcesInit: ResourcesInit,
+                                                    fsdeviceResourcesInit: FSDeviceResourcesInit) throws {
+        resourceLock.lock()
+        defer { resourceLock.unlock() }
+
+        guard !didInitializeResources else {
+            return
+        }
+
+        let resourceStatus = "x64sc".withCString { resourcesInit($0) }
+        guard resourceStatus == 0 else {
+            throw error("VICE resources_init failed with status \(resourceStatus)")
+        }
+
+        let fsdeviceResourceStatus = fsdeviceResourcesInit()
+        guard fsdeviceResourceStatus == 0 else {
+            throw error("VICE fsdevice_resources_init failed with status \(fsdeviceResourceStatus)")
+        }
+
+        didInitializeResources = true
+    }
+
+    private static func symbol<T>(_ name: String, in handle: UnsafeMutableRawPointer) throws -> T {
+        guard let pointer = dlsym(handle, name) else {
+            throw error("Missing VICE symbol \(name): \(dlErrorMessage())")
+        }
+
+        return unsafeBitCast(pointer, to: T.self)
+    }
+
+    private static func error(_ message: String) -> NSError {
+        NSError(domain: "ViceFSDeviceHarness", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
+    }
+
+    private static func dlErrorMessage() -> String {
+        guard let message = dlerror() else {
+            return "unknown dynamic loader error"
+        }
+        return String(cString: message)
     }
 }
 

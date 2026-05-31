@@ -183,6 +183,7 @@ static int fsdevice_open_directory(vdrive_t *vdrive, unsigned int secondary,
     i = 0;
 
     makeshortheader(p);
+    fsdevice_normalize_petscii_display_name(p);
 
     while (*p) {
         ++p;

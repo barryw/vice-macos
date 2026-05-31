@@ -85,6 +85,8 @@ extension EmulatorSession {
 
             if var activity = driveActivities[configuration.unit] {
                 activity.isConfigured = true
+                activity.storageKind = configuration.storageKind
+                activity.sharedFolderPath = configuration.sharedFolderPath
                 activity.driveType = configuration.driveType
                 activity.accessMode = configuration.accessMode
                 activity.slots = normalizedDriveSlots(activity.slots, for: configuration.driveType)
@@ -93,6 +95,8 @@ extension EmulatorSession {
 
             return DriveActivity(unit: configuration.unit,
                                  isConfigured: true,
+                                 storageKind: configuration.storageKind,
+                                 sharedFolderPath: configuration.sharedFolderPath,
                                  driveType: configuration.driveType,
                                  accessMode: configuration.accessMode,
                                  activeDriveNumber: 0,

@@ -137,6 +137,11 @@ extension EmulatorSession {
             return false
         }
 
+        guard configuration.storageKind != .sharedFolder else {
+            statusText = "Drive \(unit) is a Shared Mac Folder"
+            return false
+        }
+
         guard configuration.driveType.driveNumbers.contains(driveNumber) else {
             statusText = "Drive \(unit):\(driveNumber) is not available on \(configuration.driveType.title)"
             return false
@@ -175,6 +180,11 @@ extension EmulatorSession {
         guard let configuration = driveConfigurations.first(where: { $0.unit == unit }),
               configuration.isAttached else {
             statusText = "Drive \(unit) is disabled"
+            return false
+        }
+
+        guard configuration.storageKind != .sharedFolder else {
+            statusText = "Drive \(unit) is a Shared Mac Folder"
             return false
         }
 

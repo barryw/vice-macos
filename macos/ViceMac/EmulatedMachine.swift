@@ -855,22 +855,45 @@ struct EmulatedMachine: Identifiable, Equatable {
         let activeConfigurations = configurations.filter { configuration in
             capabilities.driveUnits.contains(configuration.unit)
         }
-        let driveSoundEnabled = activeConfigurations.contains { $0.isAttached && $0.soundEnabled }
+        let driveSoundEnabled = activeConfigurations.contains { $0.supportsDriveSounds && $0.soundEnabled }
 
         options.append(driveSoundEnabled ? "-drivesound" : "+drivesound")
         if driveSoundEnabled,
            let volume = activeConfigurations
-            .filter({ $0.isAttached && $0.soundEnabled })
+            .filter({ $0.supportsDriveSounds && $0.soundEnabled })
             .map(\.viceSoundVolume)
             .max() {
             options += ["-drivesoundvolume", "\(volume)"]
         }
 
         for configuration in activeConfigurations {
-            let driveType = configuration.isAttached ? configuration.driveType.rawValue : 0
-            let accessMode = configuration.isAttached ? configuration.accessMode : .native
+            if configuration.isEffectivelyAttached,
+               configuration.storageKind == .sharedFolder,
+               let folderPath = configuration.sharedFolderPath {
+                options += [
+                    "-drive\(configuration.unit)type",
+                    "0",
+                    "+drive\(configuration.unit)truedrive",
+                    "-trapdevice\(configuration.unit)",
+                    "-devicebackend\(configuration.unit)",
+                    "1",
+                    "-fs\(configuration.unit)",
+                    folderPath,
+                    "-fs\(configuration.unit)convertp00",
+                    "+fs\(configuration.unit)savep00",
+                    "+fs\(configuration.unit)hidecbm",
+                    "+fslongnames",
+                    "+fsoverwrite"
+                ]
+                continue
+            }
+
+            let driveType = configuration.isEffectivelyAttached ? configuration.driveType.rawValue : 0
+            let accessMode = configuration.isEffectivelyAttached ? configuration.accessMode : .native
 
             options += [
+                "-devicebackend\(configuration.unit)",
+                "0",
                 "-drive\(configuration.unit)type",
                 "\(driveType)",
                 accessMode == .native ? "-drive\(configuration.unit)truedrive" : "+drive\(configuration.unit)truedrive",

@@ -66,6 +66,11 @@
 #endif
 
 #define DRIVE_UNIT_MIN          8
+#define FSDEVICE_ERROR_NO_BAM   "NO BAM ON MAC FOLDER"
+#define FSDEVICE_ERROR_FORMAT   "CANNOT FORMAT MAC FOLDER"
+#define FSDEVICE_ERROR_RAW      "RAW BLOCKS UNSUPPORTED"
+#define FSDEVICE_ERROR_POINTER  "BUFFER POINTER UNSUPPORTED"
+#define FSDEVICE_ERROR_EXECUTE  "BLOCK EXECUTE UNSUPPORTED"
 
 static int fsdevice_flush_reset(void)
 {
@@ -374,76 +379,41 @@ static void get4args(char *realarg, unsigned int *a1, unsigned int *a2, unsigned
     }
 }
 
-static unsigned int get_bamptr(unsigned int trk, unsigned int sec)
+static int fsdevice_flush_reject(vdrive_t *vdrive, int code, const char *message, unsigned int trk, unsigned int sec)
 {
-    return (((trk - 1) * FSDEVICE_SECTOR_MAX) + sec) >> 3;
-}
+    unsigned int dnr = vdrive->unit - DRIVE_UNIT_MIN;
 
-static unsigned int get_bammask(unsigned int trk, unsigned int sec)
-{
-    return (((trk - 1) * FSDEVICE_SECTOR_MAX) + sec) & 7;
+    fsdevice_dev[dnr].track = trk;
+    fsdevice_dev[dnr].sector = sec;
+    fsdevice_error_message(vdrive, code, message);
+
+    return code;
 }
 
 /* B-A - Block Allocate */
 static int fsdevice_flush_ba(vdrive_t *vdrive, char *realarg)
 {
-    unsigned int dnr = vdrive->unit - DRIVE_UNIT_MIN;
     unsigned int drv, trk, sec;
-    unsigned int bamptr, bammask;
-    int err = CBMDOS_IPE_OK;
 
     get4args(realarg, &drv, &trk, &sec, NULL);
     log_message(LOG_DEFAULT,
             "Fsdevice: Warning - B-A: %u %u %u (block access needs disk image)",
             drv, trk, sec);
 
-    bamptr = get_bamptr(trk, sec);
-    bammask = get_bammask(trk, sec);
-
-    if ((fsdevice_dev[dnr].bam[bamptr] & bammask) == bammask) {
-        err = CBMDOS_IPE_NO_BLOCK;
-
-        while ((fsdevice_dev[dnr].bam[bamptr] & bammask) == bammask) {
-            sec++;
-            if (sec >= FSDEVICE_SECTOR_MAX) {
-                sec = 0;
-                trk++;
-                if (trk > FSDEVICE_TRACK_MAX) {
-                    trk = 0;
-                    sec = 0;
-                    goto exitba;
-                }
-            }
-            bamptr = get_bamptr(trk, sec);
-            bammask = get_bammask(trk, sec);
-        }
-    } else {
-        fsdevice_dev[dnr].bam[bamptr] |= bammask;
-    }
-
-exitba:
-    fsdevice_dev[dnr].track = trk;
-    fsdevice_dev[dnr].sector = sec;
-    return err;
+    return fsdevice_flush_reject(vdrive, CBMDOS_IPE_INVAL, FSDEVICE_ERROR_NO_BAM, trk, sec);
 }
 
 /* B-F - Block Free */
 static int fsdevice_flush_bf(vdrive_t *vdrive, char *realarg)
 {
-    unsigned int dnr = vdrive->unit - DRIVE_UNIT_MIN;
     unsigned int drv, trk, sec;
-    unsigned int bamptr, bammask;
 
     get4args(realarg, &drv, &trk, &sec, NULL);
     log_message(LOG_DEFAULT,
             "Fsdevice: Warning - B-F: %u %u %u (block access needs disk image)",
             drv, trk, sec);
 
-    bamptr = get_bamptr(trk, sec);
-    bammask = get_bammask(trk, sec);
-    fsdevice_dev[dnr].bam[bamptr] &= ~bammask;
-
-    return CBMDOS_IPE_OK;
+    return fsdevice_flush_reject(vdrive, CBMDOS_IPE_INVAL, FSDEVICE_ERROR_NO_BAM, trk, sec);
 }
 
 /* B-P - Block Pointer */
@@ -454,83 +424,68 @@ static int fsdevice_flush_bp(vdrive_t *vdrive, char *realarg)
     log_message(LOG_DEFAULT,
             "Fsdevice: Warning - B-P: %u %u (block access needs disk image)",
             chn, pos);
-    return CBMDOS_IPE_OK;
+    return fsdevice_flush_reject(vdrive, CBMDOS_IPE_INVAL, FSDEVICE_ERROR_POINTER, 0, 0);
 }
 
 /* B-E - Block Execute */
 static int fsdevice_flush_be(vdrive_t *vdrive, char *realarg)
 {
-    unsigned int dnr = vdrive->unit - DRIVE_UNIT_MIN;
     unsigned int chn, drv, trk, sec;
     get4args(realarg, &chn, &drv, &trk, &sec);
     log_message(LOG_DEFAULT,
             "Fsdevice: Warning - B-E: %u %u %u %u (needs TDE)",
             chn, drv, trk, sec);
-    fsdevice_dev[dnr].track = trk;
-    fsdevice_dev[dnr].sector = sec;
-    return CBMDOS_IPE_OK;
+    return fsdevice_flush_reject(vdrive, CBMDOS_IPE_INVAL, FSDEVICE_ERROR_EXECUTE, trk, sec);
 }
 
-/* B-W - Block Read */
+/* B-R - Block Read */
 static int fsdevice_flush_br(vdrive_t *vdrive, char *realarg)
 {
-    unsigned int dnr = vdrive->unit - DRIVE_UNIT_MIN;
     unsigned int chn, drv, trk, sec;
     get4args(realarg, &chn, &drv, &trk, &sec);
     log_message(LOG_DEFAULT,
             "Fsdevice: Warning - B-R: %u %u %u %u (block access needs disk image)",
             chn, drv, trk, sec);
-    fsdevice_dev[dnr].track = trk;
-    fsdevice_dev[dnr].sector = sec;
-    return CBMDOS_IPE_OK;
+    return fsdevice_flush_reject(vdrive, CBMDOS_IPE_INVAL, FSDEVICE_ERROR_RAW, trk, sec);
 }
 
 /* U1, like B-R */
 static int fsdevice_flush_u1(vdrive_t *vdrive, char *realarg)
 {
-    unsigned int dnr = vdrive->unit - DRIVE_UNIT_MIN;
     unsigned int chn, drv, trk, sec;
 
     get4args(realarg, &chn, &drv, &trk, &sec);
     log_message(LOG_DEFAULT,
             "Fsdevice: Warning - U1: %u %u %u %u (block access needs disk image)",
             chn, drv, trk, sec);
-    fsdevice_dev[dnr].track = trk;
-    fsdevice_dev[dnr].sector = sec;
 
-    return CBMDOS_IPE_OK;
+    return fsdevice_flush_reject(vdrive, CBMDOS_IPE_INVAL, FSDEVICE_ERROR_RAW, trk, sec);
 }
 
 /* B-W - Block Write */
 static int fsdevice_flush_bw(vdrive_t *vdrive, char *realarg)
 {
-    int dnr = vdrive->unit - DRIVE_UNIT_MIN;
     unsigned int chn, drv, trk, sec;
 
     get4args(realarg, &chn, &drv, &trk, &sec);
     log_message(LOG_DEFAULT,
             "Fsdevice: Warning - B-W: %u %u %u %u (block access needs disk image)",
             chn, drv, trk, sec);
-    fsdevice_dev[dnr].track = trk;
-    fsdevice_dev[dnr].sector = sec;
 
-    return CBMDOS_IPE_OK;
+    return fsdevice_flush_reject(vdrive, CBMDOS_IPE_INVAL, FSDEVICE_ERROR_RAW, trk, sec);
 }
 
 /* U2, like B-W */
 static int fsdevice_flush_u2(vdrive_t *vdrive, char *realarg)
 {
-    int dnr = vdrive->unit - DRIVE_UNIT_MIN;
     unsigned int chn, drv, trk, sec;
 
     get4args(realarg, &chn, &drv, &trk, &sec);
     log_message(LOG_DEFAULT,
             "Fsdevice: Warning - U2: %u %u %u %u (block access needs disk image)",
             chn, drv, trk, sec);
-    fsdevice_dev[dnr].track = trk;
-    fsdevice_dev[dnr].sector = sec;
 
-    return CBMDOS_IPE_OK;
+    return fsdevice_flush_reject(vdrive, CBMDOS_IPE_INVAL, FSDEVICE_ERROR_RAW, trk, sec);
 }
 
 /* I - Initialize Disk */
@@ -547,23 +502,15 @@ static int fsdevice_flush_initialize(vdrive_t *vdrive)
 /* V - Validate Disk */
 static int fsdevice_flush_validate(vdrive_t *vdrive)
 {
-    int dnr = vdrive->unit - DRIVE_UNIT_MIN;
-
-    fsdevice_dev[dnr].track = 1;
-    fsdevice_dev[dnr].sector = 0;
-
-    return CBMDOS_IPE_OK;
+    return fsdevice_flush_reject(vdrive, CBMDOS_IPE_INVAL, FSDEVICE_ERROR_NO_BAM, 0, 0);
 }
 
 /* N - Format Disk */
 static int fsdevice_flush_new(vdrive_t *vdrive, char *realarg)
 {
-    int dnr = vdrive->unit - DRIVE_UNIT_MIN;
+    (void)realarg;
 
-    fsdevice_dev[dnr].track = 1;
-    fsdevice_dev[dnr].sector = 0;
-
-    return CBMDOS_IPE_OK;
+    return fsdevice_flush_reject(vdrive, CBMDOS_IPE_SYNTAX, FSDEVICE_ERROR_FORMAT, 0, 0);
 }
 
 /* P - Position in RELative file */

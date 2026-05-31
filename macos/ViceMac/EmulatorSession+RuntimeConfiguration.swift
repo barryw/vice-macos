@@ -342,7 +342,25 @@ extension EmulatorSession {
         applyDriveSoundSettings()
 
         for configuration in driveConfigurations {
-            let driveType = configuration.isAttached ? configuration.driveType.rawValue : 0
+            if configuration.isEffectivelyAttached,
+               configuration.storageKind == .sharedFolder,
+               let folderPath = configuration.viceSharedFolderPath {
+                setVICEIntResource("Drive\(configuration.unit)Type", value: 0)
+                setVICEIntResource("Drive\(configuration.unit)TrueEmulation", value: 0)
+                setVICEIntResource("TrapDevice\(configuration.unit)", value: 1)
+                setVICEStringResource("FSDevice\(configuration.unit)Dir", value: folderPath)
+                setVICEIntResource("FSDevice\(configuration.unit)ConvertP00", value: 1)
+                setVICEIntResource("FSDevice\(configuration.unit)SaveP00", value: 0)
+                setVICEIntResource("FSDevice\(configuration.unit)HideCBMFiles", value: 0)
+                setVICEIntResource("FSDeviceLongNames", value: 0)
+                setVICEIntResource("FSDeviceOverwrite", value: 0)
+                setVICEIntResource("FileSystemDevice\(configuration.unit)", value: 0)
+                setVICEIntResource("FileSystemDevice\(configuration.unit)", value: 1)
+                continue
+            }
+
+            setVICEIntResource("FileSystemDevice\(configuration.unit)", value: 0)
+            let driveType = configuration.isEffectivelyAttached ? configuration.driveType.rawValue : 0
 
             setVICEIntResource("Drive\(configuration.unit)Type", value: driveType)
             applyDriveAccessMode(configuration)
@@ -350,7 +368,7 @@ extension EmulatorSession {
         }
 
         if updateStatus {
-            statusText = "Drive settings updated"
+            statusText = "Storage settings updated"
         }
     }
 
@@ -379,7 +397,9 @@ extension EmulatorSession {
             }
 
             let driveHardwareUnchanged = configuration.isAttached == oldConfiguration.isAttached
+                && configuration.storageKind == oldConfiguration.storageKind
                 && configuration.driveType == oldConfiguration.driveType
+                && configuration.sharedFolderPath == oldConfiguration.sharedFolderPath
             let accessModeChanged = configuration.accessMode != oldConfiguration.accessMode
             let driveProtectionChanged = configuration.protectsInsertedDisks != oldConfiguration.protectsInsertedDisks
             let driveSoundChanged = configuration.soundEnabled != oldConfiguration.soundEnabled
@@ -422,11 +442,11 @@ extension EmulatorSession {
     }
 
     func applyDriveSoundSettings() {
-        let driveSoundEnabled = driveConfigurations.contains { $0.isAttached && $0.soundEnabled }
+        let driveSoundEnabled = driveConfigurations.contains { $0.supportsDriveSounds && $0.soundEnabled }
         setVICEIntResource("DriveSoundEmulation", value: driveSoundEnabled ? 1 : 0)
         if driveSoundEnabled,
            let volume = driveConfigurations
-               .filter({ $0.isAttached && $0.soundEnabled })
+               .filter({ $0.supportsDriveSounds && $0.soundEnabled })
                .map(\.viceSoundVolume)
                .max() {
             setVICEIntResource("DriveSoundEmulationVolume", value: volume)
@@ -434,7 +454,7 @@ extension EmulatorSession {
     }
 
     private func applyDriveAccessMode(_ configuration: DriveConfiguration) {
-        let accessMode = configuration.isAttached ? configuration.accessMode : DriveAccessMode.native
+        let accessMode = configuration.isEffectivelyAttached ? configuration.accessMode : DriveAccessMode.native
 
         setVICEIntResource("Drive\(configuration.unit)TrueEmulation",
                            value: accessMode.trueDriveEmulationResourceValue)

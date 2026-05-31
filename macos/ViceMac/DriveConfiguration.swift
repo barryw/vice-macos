@@ -6,7 +6,9 @@ struct DriveConfiguration: Identifiable, Codable, Equatable {
 
     let unit: Int
     var isAttached: Bool
+    var storageKind: DriveStorageKind
     var driveType: DriveType
+    var sharedFolderPath: String?
     var accessMode: DriveAccessMode
     var protectsInsertedDisks: Bool
     var soundEnabled: Bool
@@ -16,14 +18,18 @@ struct DriveConfiguration: Identifiable, Codable, Equatable {
 
     init(unit: Int,
          isAttached: Bool,
+         storageKind: DriveStorageKind = .diskImage,
          driveType: DriveType,
+         sharedFolderPath: String? = nil,
          accessMode: DriveAccessMode = .native,
          protectsInsertedDisks: Bool = true,
          soundEnabled: Bool,
          soundVolume: Int) {
         self.unit = unit
         self.isAttached = isAttached
+        self.storageKind = storageKind
         self.driveType = driveType
+        self.sharedFolderPath = Self.normalizedSharedFolderPath(sharedFolderPath)
         self.accessMode = accessMode
         self.protectsInsertedDisks = protectsInsertedDisks
         self.soundEnabled = soundEnabled
@@ -36,6 +42,11 @@ struct DriveConfiguration: Identifiable, Codable, Equatable {
         unit = try container.decode(Int.self, forKey: .unit)
         isAttached = try container.decode(Bool.self, forKey: .isAttached)
         driveType = try container.decode(DriveType.self, forKey: .driveType)
+        storageKind = try container.decodeIfPresent(DriveStorageKind.self, forKey: .storageKind)
+            ?? driveType.defaultStorageKind
+        sharedFolderPath = Self.normalizedSharedFolderPath(
+            try container.decodeIfPresent(String.self, forKey: .sharedFolderPath)
+        )
         accessMode = try container.decodeIfPresent(DriveAccessMode.self, forKey: .accessMode) ?? .native
         protectsInsertedDisks = try container.decodeIfPresent(Bool.self, forKey: .protectsInsertedDisks) ?? true
         soundEnabled = try container.decodeIfPresent(Bool.self, forKey: .soundEnabled) ?? false
@@ -46,8 +57,50 @@ struct DriveConfiguration: Identifiable, Codable, Equatable {
         Int32(Self.viceSoundVolume(fromPercent: soundVolume))
     }
 
+    var hasSharedFolder: Bool {
+        sharedFolderPath?.isEmpty == false
+    }
+
+    var isSharedFolderDrive: Bool {
+        storageKind == .sharedFolder
+    }
+
+    var usesRealDriveModel: Bool {
+        storageKind != .sharedFolder
+    }
+
+    var isEffectivelyAttached: Bool {
+        isAttached && (!isSharedFolderDrive || hasSharedFolder)
+    }
+
+    var supportsDriveSounds: Bool {
+        isAttached && usesRealDriveModel
+    }
+
+    var viceSharedFolderPath: String? {
+        guard let sharedFolderPath,
+              !sharedFolderPath.isEmpty else {
+            return nil
+        }
+
+        if sharedFolderPath.hasSuffix("/") {
+            return sharedFolderPath
+        }
+
+        return sharedFolderPath + "/"
+    }
+
     static func normalizedSoundVolumePercent(_ volume: Int) -> Int {
         min(max(volume, 0), 100)
+    }
+
+    static func normalizedSharedFolderPath(_ path: String?) -> String? {
+        guard let path = path?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !path.isEmpty else {
+            return nil
+        }
+
+        return URL(fileURLWithPath: path).standardizedFileURL.path
     }
 
     private static func soundVolumePercent(fromStoredValue volume: Int) -> Int {
@@ -60,6 +113,47 @@ struct DriveConfiguration: Identifiable, Codable, Equatable {
 
     private static func viceSoundVolume(fromPercent percent: Int) -> Int {
         min(max(percent, 0), 100) * viceSoundVolumePercentScale
+    }
+}
+
+enum DriveStorageKind: String, CaseIterable, Codable, Identifiable {
+    case diskImage
+    case hardDriveImage
+    case sharedFolder
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .diskImage:
+            return "Disk Image"
+        case .hardDriveImage:
+            return "Hard Drive Image"
+        case .sharedFolder:
+            return "Shared Mac Folder"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .diskImage:
+            return "Use a real Commodore disk image with tracks, sectors, and disk metadata."
+        case .hardDriveImage:
+            return "Use a real Commodore hard-drive image for software that expects hard-drive behavior."
+        case .sharedFolder:
+            return "Use a Finder folder for simple LOAD, SAVE, and file transfer."
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .diskImage:
+            return "externaldrive"
+        case .hardDriveImage:
+            return "internaldrive"
+        case .sharedFolder:
+            return "folder"
+        }
     }
 }
 
@@ -207,6 +301,19 @@ enum DriveType: Int32, CaseIterable, Codable, Identifiable {
         }
     }
 
+    var defaultStorageKind: DriveStorageKind {
+        isHardDriveImage ? .hardDriveImage : .diskImage
+    }
+
+    var isHardDriveImage: Bool {
+        switch self {
+        case .d9090d9060, .cmdHD:
+            return true
+        default:
+            return false
+        }
+    }
+
     var busTitle: String {
         switch self {
         case .c1551:
@@ -286,6 +393,48 @@ enum DriveType: Int32, CaseIterable, Codable, Identifiable {
     }
 }
 
+extension MachineCapabilities {
+    var supportedStorageKinds: [DriveStorageKind] {
+        var kinds: [DriveStorageKind] = [.diskImage]
+
+        if !hardDriveImageTypes.isEmpty {
+            kinds.append(.hardDriveImage)
+        }
+
+        kinds.append(.sharedFolder)
+        return kinds
+    }
+
+    var diskImageTypes: [DriveType] {
+        driveTypes.filter { !$0.isHardDriveImage }
+    }
+
+    var hardDriveImageTypes: [DriveType] {
+        driveTypes.filter(\.isHardDriveImage)
+    }
+
+    func driveTypes(for storageKind: DriveStorageKind) -> [DriveType] {
+        switch storageKind {
+        case .diskImage:
+            return diskImageTypes
+        case .hardDriveImage:
+            return hardDriveImageTypes
+        case .sharedFolder:
+            return driveTypes
+        }
+    }
+
+    func defaultDriveType(for storageKind: DriveStorageKind, fallback: DriveType) -> DriveType {
+        let candidates = driveTypes(for: storageKind)
+
+        if candidates.contains(fallback) {
+            return fallback
+        }
+
+        return candidates.first ?? defaultDriveType
+    }
+}
+
 enum DiskImageFileType: String, CaseIterable, Identifiable {
     case d64
     case d67
@@ -323,6 +472,8 @@ enum DriveLEDColor: Equatable {
 struct DriveActivity: Identifiable, Equatable {
     let unit: Int
     var isConfigured: Bool
+    var storageKind: DriveStorageKind = .diskImage
+    var sharedFolderPath: String?
     var driveType: DriveType
     var accessMode: DriveAccessMode
     var activeDriveNumber: Int
@@ -339,12 +490,20 @@ struct DriveActivity: Identifiable, Equatable {
 
     var id: Int { unit }
     var isActive: Bool { ledIntensity > 0 }
-    var isFastAccessEnabled: Bool { accessMode == .fast }
+    var isSharedFolder: Bool { storageKind == .sharedFolder }
+    var isFastAccessEnabled: Bool { !isSharedFolder && accessMode == .fast }
     var hasErrorStatus: Bool {
         driveStatusCode != DriveStatusCode.ok
             && driveStatusCode != DriveStatusCode.dosVersion
     }
-    var hasMultipleSlots: Bool { driveType.slotCount > 1 }
+    var hasMultipleSlots: Bool { !isSharedFolder && driveType.slotCount > 1 }
+    var sharedFolderURL: URL? {
+        guard let sharedFolderPath else {
+            return nil
+        }
+
+        return URL(fileURLWithPath: sharedFolderPath)
+    }
 
     var headPositionText: String? {
         guard let track else {
@@ -370,6 +529,10 @@ struct DriveActivity: Identifiable, Equatable {
     }
 
     var resolvedStatusText: String {
+        if isSharedFolder {
+            return sharedFolderPath == nil ? "Choose folder" : "Shared folder ready"
+        }
+
         if let driveStatusText,
            !driveStatusText.isEmpty {
             if !hasErrorStatus {

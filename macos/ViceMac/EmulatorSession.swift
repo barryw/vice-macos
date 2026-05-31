@@ -388,6 +388,16 @@ final class EmulatorSession: ObservableObject {
                 configuration.driveType = defaults[index].driveType
             }
 
+            if !machine.capabilities.supportedStorageKinds.contains(configuration.storageKind) {
+                configuration.storageKind = configuration.driveType.defaultStorageKind
+            }
+
+            if !machine.capabilities.driveTypes(for: configuration.storageKind).contains(configuration.driveType) {
+                configuration.driveType = machine.capabilities.defaultDriveType(for: configuration.storageKind,
+                                                                                fallback: defaults[index].driveType)
+            }
+
+            configuration.sharedFolderPath = DriveConfiguration.normalizedSharedFolderPath(configuration.sharedFolderPath)
             configuration.soundVolume = DriveConfiguration.normalizedSoundVolumePercent(configuration.soundVolume)
 
             return configuration

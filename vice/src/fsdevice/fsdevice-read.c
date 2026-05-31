@@ -377,6 +377,11 @@ static int relative_read(vdrive_t *vdrive, bufinfo_t *bufinfo, uint8_t *data)
     return SERIAL_OK;
 }
 
+static int fsdevice_hide_host_directory_entry(const char *direntry)
+{
+    return direntry == NULL || direntry[0] == '\0' || direntry[0] == '.';
+}
+
 static void command_directory_get(vdrive_t *vdrive, bufinfo_t *bufinfo,
                                   uint8_t *data, unsigned int secondary)
 {
@@ -384,7 +389,7 @@ static void command_directory_get(vdrive_t *vdrive, bufinfo_t *bufinfo,
     unsigned long blocks;
     const char *direntry;
     size_t filelen;
-    unsigned int isdir;
+    unsigned int isdir = 0;
     fileio_info_t *finfo = NULL;
     unsigned int format = 0;
     char buf[ARCHDEP_PATH_MAX];
@@ -414,6 +419,10 @@ static void command_directory_get(vdrive_t *vdrive, bufinfo_t *bufinfo,
 
         if (direntry == NULL) {
             break;
+        }
+
+        if (fsdevice_hide_host_directory_entry(direntry)) {
+            continue;
         }
 
         finfo = fileio_open(direntry, bufinfo->dir, format,
@@ -507,12 +516,16 @@ static void command_directory_get(vdrive_t *vdrive, bufinfo_t *bufinfo,
             protectfile = 1;
         }
 
-        blocks = (filelen + 253) / 254;
-        if (blocks > 0xffff) {
-            blocks = 0xffff; /* Limit file size to 16 bits.  */
-            /* this file is too large, guard it against opening */
-            splatfile = 1;
-            protectfile = 1;
+        if (isdir != 0) {
+            blocks = 0;
+        } else {
+            blocks = (filelen + 253) / 254;
+            if (blocks > 0xffff) {
+                blocks = 0xffff; /* Limit file size to 16 bits.  */
+                /* this file is too large, guard it against opening */
+                splatfile = 1;
+                protectfile = 1;
+            }
         }
 
         SET_LO_HI(p, blocks);
@@ -534,6 +547,7 @@ static void command_directory_get(vdrive_t *vdrive, bufinfo_t *bufinfo,
         *p++ = '"';
 
         fsdevice_limit_namelength(vdrive, finfo->name);
+        fsdevice_normalize_petscii_display_name(finfo->name);
 
         for (i = 0; finfo->name[i] && (*p = finfo->name[i]); ++i, ++p) {
         }

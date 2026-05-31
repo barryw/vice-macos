@@ -43,7 +43,7 @@ struct SettingsView: View {
 
             DriveSettingsPane()
                 .tabItem {
-                    Label("Drives", systemImage: "externaldrive")
+                    Label("Storage", systemImage: "externaldrive")
                 }
                 .tag(SettingsPaneID.drives.rawValue)
 
@@ -137,7 +137,7 @@ private enum SettingsPaneID: String {
         case .keyboard:
             return "Keyboard"
         case .drives:
-            return "Drives"
+            return "Storage"
         case .printing:
             return "Printing"
         case .network:
@@ -1803,47 +1803,123 @@ private struct DriveSettingsSection: View {
 
     var body: some View {
         Section("Drive \(drive.unit)") {
-            Toggle("Attached", isOn: $drive.isAttached)
+            Toggle("Enabled", isOn: $drive.isAttached)
 
-            Picker("Type", selection: $drive.driveType) {
-                ForEach(emulator.machine.capabilities.driveTypes) { type in
-                    Text(type.title).tag(type)
+            Picker("Storage", selection: $drive.storageKind) {
+                ForEach(emulator.machine.capabilities.supportedStorageKinds) { kind in
+                    Label(kind.title, systemImage: kind.systemImage).tag(kind)
+                }
+            }
+            .disabled(!drive.isAttached)
+            .onChange(of: drive.storageKind) { _, storageKind in
+                normalizeDriveType(for: storageKind)
+            }
+
+            LabeledContent("Best for") {
+                Text(drive.storageKind.detail)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .disabled(!drive.isAttached)
+
+            if drive.storageKind == .sharedFolder {
+                sharedFolderControls
+            } else {
+                Picker("Model", selection: $drive.driveType) {
+                    ForEach(availableDriveTypes) { type in
+                        Text(type.title).tag(type)
+                    }
+                }
+                .disabled(!drive.isAttached)
+
+                LabeledContent("Hardware") {
+                    Text(hardwareDetail)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                .disabled(!drive.isAttached)
+
+                LabeledContent("Formats") {
+                    Text(drive.driveType.supportedDiskImageDescription)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                .disabled(!drive.isAttached)
+
+                Picker("Access", selection: $drive.accessMode) {
+                    ForEach(DriveAccessMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .disabled(!drive.isAttached)
+
+                Toggle(protectToggleTitle, isOn: $drive.protectsInsertedDisks)
+                    .disabled(!drive.isAttached)
+
+                Toggle("Drive sounds", isOn: $drive.soundEnabled)
+                    .disabled(!drive.supportsDriveSounds)
+
+                LabeledContent("Sound volume") {
+                    SettingsPercentSlider(value: $drive.soundVolume,
+                                          isEnabled: drive.supportsDriveSounds && drive.soundEnabled,
+                                          onEditingChanged: handleVolumeEditingChanged)
+                }
+            }
+        }
+    }
+
+    private var sharedFolderControls: some View {
+        Group {
+            LabeledContent("Folder") {
+                HStack(spacing: 8) {
+                    SettingsValueText(sharedFolderTitle, truncationMode: .middle)
+
+                    Spacer(minLength: 8)
+
+                    Button("Choose...") {
+                        chooseSharedFolder()
+                    }
+
+                    Button("Reveal") {
+                        revealSharedFolder()
+                    }
+                    .disabled(drive.sharedFolderPath == nil)
+
+                    Button("Clear") {
+                        drive.sharedFolderPath = nil
+                    }
+                    .disabled(drive.sharedFolderPath == nil)
                 }
             }
             .disabled(!drive.isAttached)
 
-            LabeledContent("Hardware") {
-                Text(hardwareDetail)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            .disabled(!drive.isAttached)
-
-            LabeledContent("Formats") {
-                Text(drive.driveType.supportedDiskImageDescription)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            .disabled(!drive.isAttached)
-
-            Picker("Access", selection: $drive.accessMode) {
-                ForEach(DriveAccessMode.allCases) { mode in
-                    Text(mode.title).tag(mode)
+            LabeledContent("Machine sees") {
+                HStack(spacing: 6) {
+                    VMCStatusBadge("LOAD/SAVE", systemImage: "checkmark.circle", color: .green)
+                    VMCStatusBadge("65535 blocks free", systemImage: "number", color: .secondary)
+                    VMCStatusBadge("No raw blocks", systemImage: "exclamationmark.triangle", color: .orange)
                 }
             }
-            .pickerStyle(.segmented)
             .disabled(!drive.isAttached)
 
-            Toggle("Protect inserted disks", isOn: $drive.protectsInsertedDisks)
+            if let visibleFileCount {
+                LabeledContent("Visible files") {
+                    Text("\(visibleFileCount)")
+                        .foregroundStyle(.secondary)
+                }
                 .disabled(!drive.isAttached)
 
-            Toggle("Drive sounds", isOn: $drive.soundEnabled)
-                .disabled(!drive.isAttached)
-
-            LabeledContent("Sound volume") {
-                SettingsPercentSlider(value: $drive.soundVolume,
-                                      isEnabled: drive.isAttached && drive.soundEnabled,
-                                      onEditingChanged: handleVolumeEditingChanged)
+                if visibleFileCount > 500 {
+                    LabeledContent("Large folder") {
+                        Text("Very large directories can be awkward from BASIC. Use a smaller shared folder when software loads \"$\".")
+                            .foregroundStyle(.orange)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .disabled(!drive.isAttached)
+                }
             }
         }
     }
@@ -1866,9 +1942,85 @@ private struct DriveSettingsSection: View {
         emulator.previewDriveSound(for: drive)
     }
 
+    private var availableDriveTypes: [DriveType] {
+        emulator.machine.capabilities.driveTypes(for: drive.storageKind)
+    }
+
+    private var protectToggleTitle: String {
+        drive.storageKind == .hardDriveImage ? "Protect inserted image" : "Protect inserted disks"
+    }
+
     private var hardwareDetail: String {
         let mechanism = drive.driveType.slotCount == 1 ? "single drive" : "\(drive.driveType.slotCount) drives"
         return "\(drive.driveType.busTitle), \(mechanism)"
+    }
+
+    private var sharedFolderTitle: String {
+        guard let path = drive.sharedFolderPath else {
+            return "Choose a folder"
+        }
+
+        return path
+    }
+
+    private var visibleFileCount: Int? {
+        guard let path = drive.sharedFolderPath else {
+            return nil
+        }
+
+        guard let urls = try? FileManager.default.contentsOfDirectory(
+            at: URL(fileURLWithPath: path),
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return nil
+        }
+
+        return urls.reduce(0) { count, url in
+            let values = try? url.resourceValues(forKeys: [.isRegularFileKey])
+            return count + ((values?.isRegularFile ?? false) ? 1 : 0)
+        }
+    }
+
+    private func normalizeDriveType(for storageKind: DriveStorageKind) {
+        guard !emulator.machine.capabilities.driveTypes(for: storageKind).contains(drive.driveType) else {
+            return
+        }
+
+        drive.driveType = emulator.machine.capabilities.defaultDriveType(for: storageKind,
+                                                                         fallback: drive.driveType)
+    }
+
+    private func chooseSharedFolder() {
+        let panel = NSOpenPanel()
+        panel.title = "Choose Shared Mac Folder"
+        panel.message = "Choose the Finder folder this machine sees as drive \(drive.unit)."
+        panel.prompt = "Choose"
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+
+        if let path = drive.sharedFolderPath {
+            panel.directoryURL = URL(fileURLWithPath: path)
+        }
+
+        NSApp.activate(ignoringOtherApps: true)
+        panel.center()
+
+        guard panel.runModal() == .OK,
+              let url = panel.url else {
+            return
+        }
+
+        drive.sharedFolderPath = url.path
+    }
+
+    private func revealSharedFolder() {
+        guard let path = drive.sharedFolderPath else {
+            return
+        }
+
+        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
     }
 }
 

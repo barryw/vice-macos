@@ -243,7 +243,12 @@ struct ViceMacApp: App {
 
                 ForEach(emulator.driveConfigurations) { configuration in
                     Menu("Drive \(configuration.unit)") {
-                        if configuration.driveType.slotCount > 1 {
+                        if configuration.storageKind == .sharedFolder {
+                            Button("Reveal Shared Folder") {
+                                revealSharedFolder(configuration)
+                            }
+                            .disabled(configuration.sharedFolderPath == nil)
+                        } else if configuration.driveType.slotCount > 1 {
                             Menu("Attach Disk") {
                                 ForEach(configuration.driveType.driveNumbers, id: \.self) { driveNumber in
                                     Button("Drive \(configuration.unit):\(driveNumber)...") {
@@ -279,30 +284,34 @@ struct ViceMacApp: App {
                             }
                         }
 
-                        if configuration.driveType.slotCount > 1 {
-                            Menu("Detach Disk") {
-                                ForEach(configuration.driveType.driveNumbers, id: \.self) { driveNumber in
-                                    Button("Drive \(configuration.unit):\(driveNumber)") {
-                                        emulator.detachDisk(from: configuration.unit,
-                                                            driveNumber: driveNumber)
+                        if configuration.storageKind != .sharedFolder {
+                            if configuration.driveType.slotCount > 1 {
+                                Menu("Detach Disk") {
+                                    ForEach(configuration.driveType.driveNumbers, id: \.self) { driveNumber in
+                                        Button("Drive \(configuration.unit):\(driveNumber)") {
+                                            emulator.detachDisk(from: configuration.unit,
+                                                                driveNumber: driveNumber)
+                                        }
+                                        .disabled(!emulator.hasDiskAttached(to: configuration.unit,
+                                                                            driveNumber: driveNumber))
                                     }
-                                    .disabled(!emulator.hasDiskAttached(to: configuration.unit,
-                                                                        driveNumber: driveNumber))
                                 }
+                            } else {
+                                Button("Detach Disk") {
+                                    emulator.detachDisk(from: configuration.unit)
+                                }
+                                .disabled(!emulator.hasDiskAttached(to: configuration.unit,
+                                                                    driveNumber: 0))
                             }
-                        } else {
-                            Button("Detach Disk") {
-                                emulator.detachDisk(from: configuration.unit)
-                            }
-                            .disabled(!emulator.hasDiskAttached(to: configuration.unit,
-                                                                driveNumber: 0))
                         }
 
                         Divider()
 
-                        Picker("Access", selection: driveAccessModeBinding(for: configuration.unit)) {
-                            ForEach(DriveAccessMode.allCases) { mode in
-                                Text(mode.title).tag(mode)
+                        if configuration.storageKind != .sharedFolder {
+                            Picker("Access", selection: driveAccessModeBinding(for: configuration.unit)) {
+                                ForEach(DriveAccessMode.allCases) { mode in
+                                    Text(mode.title).tag(mode)
+                                }
                             }
                         }
 
@@ -419,6 +428,14 @@ struct ViceMacApp: App {
         } set: { accessMode in
             emulator.setDriveAccessMode(accessMode, for: unit)
         }
+    }
+
+    private func revealSharedFolder(_ configuration: DriveConfiguration) {
+        guard let path = configuration.sharedFolderPath else {
+            return
+        }
+
+        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
     }
 
     private var filterPresetBinding: Binding<VideoFilterPreset> {
@@ -911,11 +928,16 @@ private enum MediaOpenPanel {
             return
         }
 
+        guard configuration.storageKind != .sharedFolder else {
+            emulator.statusText = "Drive \(unit) is a Shared Mac Folder"
+            return
+        }
+
         let extensions = configuration.driveType.supportedDiskImageTypes.map(\.rawValue)
         let destinationTitle = configuration.driveType.slotCount > 1
             ? "drive \(unit):\(driveNumber)"
             : "drive \(unit)"
-        let panel = openPanel(title: "Attach Disk",
+        let panel = openPanel(title: configuration.storageKind == .hardDriveImage ? "Attach Hard Drive Image" : "Attach Disk",
                               message: "Choose a \(configuration.driveType.supportedDiskImageDescription) image for \(destinationTitle).",
                               prompt: autorun ? "Attach and Run" : "Attach",
                               filenameExtensions: extensions)

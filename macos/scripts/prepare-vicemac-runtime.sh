@@ -231,6 +231,7 @@ done
 make -C "$BUILD_DIR/src" gcr.o V=1
 make -C "$BUILD_DIR/src/drive" V=1
 make -C "$BUILD_DIR/src/vdrive" V=1
+make -C "$BUILD_DIR/src/fsdevice" V=1
 make -C "$BUILD_DIR/src/userport" V=1
 make -C "$BUILD_DIR/src/core/rtc" V=1
 make -C "$BUILD_DIR/src/arch/macos" V=1

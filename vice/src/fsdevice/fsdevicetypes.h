@@ -85,6 +85,7 @@ extern fsdevice_dev_t fsdevice_dev[FSDEVICE_DEVICE_MAX];
 struct vdrive_s;
 
 void fsdevice_error(struct vdrive_s *vdrive, int code);
+void fsdevice_error_message(struct vdrive_s *vdrive, int code, const char *message);
 char *fsdevice_get_path(unsigned int unit);
 int fsdevice_error_get_byte(struct vdrive_s *vdrive, uint8_t *data);
 int fsdevice_flush_write_byte(struct vdrive_s *vdrive, uint8_t data);

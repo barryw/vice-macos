@@ -69,6 +69,8 @@
 
 fsdevice_dev_t fsdevice_dev[FSDEVICE_DEVICE_MAX];
 
+static int fsdevice_last_error_code[FSDEVICE_DEVICE_MAX];
+
 
 void fsdevice_set_directory(char *filename, unsigned int unit)
 {
@@ -102,30 +104,31 @@ char *fsdevice_get_path(unsigned int unit)
     return NULL;
 }
 
-void fsdevice_error(vdrive_t *vdrive, int code)
+static void fsdevice_error_internal(vdrive_t *vdrive, int code, const char *custom_message)
 {
     unsigned int dnr;
-    static int last_code[FSDEVICE_DEVICE_MAX];
     const char *message;
     unsigned int trk = 0, sec = 0;
 
     dnr = vdrive->unit - 8;
 
-    /* Only set an error once per command */
-    if (code != CBMDOS_IPE_OK && last_code[dnr] != CBMDOS_IPE_OK
-        && last_code[dnr] != CBMDOS_IPE_DOS_VERSION) {
-        return;
-    }
-
     if (dnr >= FSDEVICE_DEVICE_MAX) {
         return;
     }
 
-    last_code[dnr] = code;
+    /* Only set an error once per command */
+    if (code != CBMDOS_IPE_OK && fsdevice_last_error_code[dnr] != CBMDOS_IPE_OK
+        && fsdevice_last_error_code[dnr] != CBMDOS_IPE_DOS_VERSION) {
+        return;
+    }
+
+    fsdevice_last_error_code[dnr] = code;
 
     if (code != CBMDOS_IPE_MEMORY_READ) {
         if (code == CBMDOS_IPE_DOS_VERSION) {
             message = "VICE FS DRIVER V2.0";
+        } else if (custom_message != NULL) {
+            message = custom_message;
         } else {
             message = cbmdos_errortext(code);
         }
@@ -135,9 +138,9 @@ void fsdevice_error(vdrive_t *vdrive, int code)
             sec = fsdevice_dev[dnr].sector;
         }
 
-        sprintf(fsdevice_dev[dnr].errorl,
-                "%02d,%s,%02u,%02u\015",
-                code, message, trk, sec);
+        snprintf(fsdevice_dev[dnr].errorl, ARCHDEP_PATH_MAX,
+                 "%02d,%s,%02u,%02u\015",
+                 code, message, trk, sec);
 
         fsdevice_dev[dnr].elen = (unsigned int)strlen(fsdevice_dev[dnr].errorl);
 
@@ -152,6 +155,16 @@ void fsdevice_error(vdrive_t *vdrive, int code)
     }
 
     fsdevice_dev[dnr].eptr = 0;
+}
+
+void fsdevice_error(vdrive_t *vdrive, int code)
+{
+    fsdevice_error_internal(vdrive, code, NULL);
+}
+
+void fsdevice_error_message(vdrive_t *vdrive, int code, const char *message)
+{
+    fsdevice_error_internal(vdrive, code, message);
 }
 
 int fsdevice_error_get_byte(vdrive_t *vdrive, uint8_t *data)
