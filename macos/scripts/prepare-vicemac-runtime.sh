@@ -309,7 +309,7 @@ rewrite_dependency_load_paths() {
             exit 1
         fi
 
-        install_name_tool -change "$dependency" "@rpath/$dependency_name" "$binary"
+        install_name_tool -change "$dependency" "@loader_path/$dependency_name" "$binary"
     done < <(dylib_dependencies "$binary")
 }
 

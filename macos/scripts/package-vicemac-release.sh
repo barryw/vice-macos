@@ -747,9 +747,16 @@ if [[ "$NOTARIZE" -eq 1 ]]; then
     notarize_and_staple_dmg "$DMG_PATH"
 fi
 
+VICE_MAC_RUNTIME_SKIP_BUILD=1 \
+VICE_MAC_RUNTIME_VERSION="$RELEASE_ASSET_VERSION" \
+VICE_MAC_DIST_DIR="$DIST_DIR" \
+"$SCRIPT_DIR/package-macvicekit-runtime.sh"
+
 (
     cd "$DIST_DIR"
-    shasum -a 256 "$(basename "$DMG_PATH")" > SHA256SUMS.txt
+    shopt -s nullglob
+    checksum_artifacts=(*.dmg *.zip)
+    shasum -a 256 "${checksum_artifacts[@]}" > SHA256SUMS.txt
 )
 
 rm -rf "$STAGE_ROOT"

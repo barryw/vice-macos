@@ -39,22 +39,22 @@ extension EmulatorSession {
     }
 
     func applySystemTimeSync(updateStatus: Bool = true) {
-        guard ViceEngineIsRunning(),
+        guard engine.isRunning,
               machine.capabilities.supportsSystemTimeSync else {
             return
         }
 
-        if ViceEngineSetSystemTimeSyncEnabled(syncSystemTime), updateStatus {
+        if engine.setSystemTimeSyncEnabled(syncSystemTime), updateStatus {
             statusText = syncSystemTime ? "System time synced" : "System time sync off"
         }
     }
 
     func applyPauseState(updateStatus: Bool = true) {
-        guard ViceEngineIsRunning() else {
+        guard engine.isRunning else {
             return
         }
 
-        _ = ViceEngineSetPauseEnabled(isPaused)
+        _ = engine.setPauseEnabled(isPaused)
 
         if updateStatus {
             statusText = isPaused ? "Paused" : "Running"
@@ -62,21 +62,39 @@ extension EmulatorSession {
     }
 
     func applyVideoStandard(updateStatus: Bool = true) {
-        guard ViceEngineIsRunning(),
+        guard engine.isRunning,
               machine.capabilities.supportsVideoStandardSelection else {
             return
         }
 
-        if case .x64sc = activeMachineModel {
-            applyMachineModel(updateStatus: false)
+        let videoModelName: String?
+        switch activeMachineModel {
+        case .x64sc, .x128, .ted:
+            videoModelName = activeMachineModel.viceModelName(for: videoStandard)
+        case .xpet, .xvic:
+            videoModelName = nil
+        }
+
+        let didApplyVideoStandard = engine.setVideoStandard(videoStandard.macVICEVideoStandard,
+                                                            machine: machine.macVICEKitMachine,
+                                                            model: videoModelName)
+        guard didApplyVideoStandard else {
+            if updateStatus {
+                statusText = "Video \(videoStandard.rawValue) unavailable"
+            }
+            return
+        }
+
+        switch activeMachineModel {
+        case .x64sc:
             applySIDModel(updateStatus: false)
             applySIDConfiguration(updateStatus: false)
             applyROMImages()
             applyDriveConfigurations(updateStatus: false)
-        } else {
-            for assignment in machine.videoStandardAssignments(for: videoStandard) {
-                setVICEIntResource(assignment.name, value: assignment.value)
-            }
+        case .ted:
+            break
+        case .x128, .xpet, .xvic:
+            break
         }
 
         if updateStatus {
@@ -85,14 +103,12 @@ extension EmulatorSession {
     }
 
     func applySIDModel(updateStatus: Bool = true) {
-        guard ViceEngineIsRunning(),
+        guard engine.isRunning,
               machine.capabilities.supportsSIDModelSelection else {
             return
         }
 
-        ViceResource.sidModel.withCString { resourceName in
-            _ = ViceEngineSetIntResource(resourceName, sidModel.rawValue)
-        }
+        _ = engine.setIntResource(ViceResource.sidModel, value: sidModel.rawValue)
 
         if updateStatus {
             statusText = "SID \(sidModel.title)"
@@ -100,7 +116,7 @@ extension EmulatorSession {
     }
 
     func applySIDConfiguration(updateStatus: Bool = true) {
-        guard ViceEngineIsRunning(),
+        guard engine.isRunning,
               machine.capabilities.supportsSIDModelSelection else {
             return
         }
@@ -115,7 +131,7 @@ extension EmulatorSession {
     }
 
     func applyMediaBehavior(updateStatus: Bool = true) {
-        guard ViceEngineIsRunning() else {
+        guard engine.isRunning else {
             return
         }
 
@@ -130,7 +146,7 @@ extension EmulatorSession {
 
     func applyPrinterConfiguration(updateStatus: Bool = true,
                                            previousDeviceNumber: Int? = nil) {
-        guard ViceEngineIsRunning() else {
+        guard engine.isRunning else {
             return
         }
 
@@ -156,7 +172,7 @@ extension EmulatorSession {
     }
 
     func applyTapeConfiguration(updateStatus: Bool = true) {
-        guard ViceEngineIsRunning(),
+        guard engine.isRunning,
               machine.capabilities.supportsTape else {
             return
         }
@@ -171,12 +187,12 @@ extension EmulatorSession {
     }
 
     func applyEmulationSpeed(updateStatus: Bool = true) {
-        guard ViceEngineIsRunning() else {
+        guard engine.isRunning else {
             return
         }
 
         setVICEIntResource(ViceResource.speed, value: emulationSpeed.speedPercent)
-        _ = ViceEngineSetWarpMode(emulationSpeed.isWarpEnabled)
+        _ = engine.setWarpMode(emulationSpeed.isWarpEnabled)
 
         if updateStatus {
             statusText = emulationSpeed.isWarpEnabled ? "Warp enabled" : "Speed \(emulationSpeed.title)"
@@ -184,7 +200,7 @@ extension EmulatorSession {
     }
 
     func applyDisplayOutput(updateStatus: Bool = true) {
-        guard ViceEngineIsRunning(),
+        guard engine.isRunning,
               machine.supportsDisplayOutputSelection,
               let resourceName = displayOutput.resourceName else {
             return
@@ -211,15 +227,13 @@ extension EmulatorSession {
     }
 
     func applyMachineModel(updateStatus: Bool = true) {
-        guard ViceEngineIsRunning(),
+        guard engine.isRunning,
               activeMachineModel.supportsRuntimeModelSelection,
               let modelName = activeMachineModel.viceModelName(for: videoStandard) else {
             return
         }
 
-        let didQueueModel = modelName.withCString { modelNamePointer in
-            ViceEngineSetMachineModel(modelNamePointer)
-        }
+        let didQueueModel = engine.setMachineModel(modelName)
         guard didQueueModel else {
             if updateStatus {
                 statusText = "\(machineDisplayName) model unavailable"
@@ -233,7 +247,7 @@ extension EmulatorSession {
     }
 
     func applySoundSettings(updateStatus: Bool = true) {
-        guard ViceEngineIsRunning() else {
+        guard engine.isRunning else {
             return
         }
 
@@ -246,7 +260,7 @@ extension EmulatorSession {
     }
 
     func applyROMImages() {
-        guard ViceEngineIsRunning() else {
+        guard engine.isRunning else {
             return
         }
 
@@ -257,7 +271,7 @@ extension EmulatorSession {
     }
 
     func applyRAMExpansion(updateStatus: Bool = true) {
-        guard ViceEngineIsRunning(),
+        guard engine.isRunning,
               machine.capabilities.supportsRAMExpansion,
               machine.ramExpansions.contains(ramExpansion) else {
             return
@@ -270,14 +284,14 @@ extension EmulatorSession {
 
         if updateStatus {
             if plan.requiresHardReset {
-                _ = ViceEngineTriggerMachineReset(true)
+                _ = engine.reset(hard: true)
             }
             statusText = "RAM expansion \(ramExpansion.statusTitle)"
         }
     }
 
     func applyKeyboardMapping(updateStatus: Bool = true, forceReload: Bool = false) {
-        guard ViceEngineIsRunning() else {
+        guard engine.isRunning else {
             return
         }
 
@@ -305,7 +319,7 @@ extension EmulatorSession {
     }
 
     func applyControlPorts() {
-        guard ViceEngineIsRunning() else {
+        guard engine.isRunning else {
             return
         }
 
@@ -330,12 +344,12 @@ extension EmulatorSession {
         setVICEIntResource("Mouse", value: hasMouse1351 ? 1 : 0)
         if !hasMouse1351 {
             releaseMouseButtons()
-            _ = ViceEngineResetMouse()
+            _ = engine.resetMouse()
         }
     }
 
     func applyDriveConfigurations(updateStatus: Bool = true) {
-        guard ViceEngineIsRunning() else {
+        guard engine.isRunning else {
             return
         }
 
@@ -373,7 +387,7 @@ extension EmulatorSession {
     }
 
     func applyDriveConfigurationChanges(from oldConfigurations: [DriveConfiguration]) {
-        guard ViceEngineIsRunning() else {
+        guard engine.isRunning else {
             return
         }
 
@@ -470,16 +484,10 @@ extension EmulatorSession {
     }
 
     func setVICEIntResource(_ name: String, value: Int32) {
-        name.withCString { resourceName in
-            _ = ViceEngineSetIntResource(resourceName, value)
-        }
+        _ = engine.setIntResource(name, value: value)
     }
 
     func setVICEStringResource(_ name: String, value: String) {
-        name.withCString { resourceName in
-            value.withCString { resourceValue in
-                _ = ViceEngineSetStringResource(resourceName, resourceValue)
-            }
-        }
+        _ = engine.setStringResource(name, value: value)
     }
 }

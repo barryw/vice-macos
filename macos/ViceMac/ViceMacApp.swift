@@ -1,5 +1,6 @@
 import AppKit
 import Darwin
+import MacVICEKit
 import Sparkle
 import SwiftUI
 import UniformTypeIdentifiers
@@ -349,10 +350,10 @@ struct ViceMacApp: App {
                 }
 
                 Button("Step") {
-                    _ = ViceEngineDebuggerStep(1, false)
+                    try? emulator.engine.debugger.step(count: 1, over: false)
                 }
                 .keyboardShortcut("s", modifiers: [.command, .shift])
-                .disabled(!ViceEngineIsRunning())
+                .disabled(!emulator.isMachineRunning)
             }
 
             CommandMenu("Display") {
@@ -470,7 +471,7 @@ private final class ViceMacAppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         WindowFrameRestoration.saveOpenWindowFrames()
 
-        guard ViceEngineIsRunning() else {
+        guard MacVICEEngineSession.isRunning else {
             return .terminateNow
         }
 
@@ -479,7 +480,7 @@ private final class ViceMacAppDelegate: NSObject, NSApplicationDelegate {
         }
 
         didRequestEngineTermination = true
-        if !ViceEngineRequestQuit() {
+        if !MacVICEEngineSession.requestQuit() {
             Darwin._exit(0)
         }
 
@@ -509,9 +510,11 @@ private struct ViceMacLaunchConfiguration {
             .flatMap(TimeInterval.init)
             ?? environment["VICE_MAC_SMOKE_TIMEOUT"].flatMap(TimeInterval.init)
             ?? 35
+        let togglesVideoStandard = arguments.contains("--vice-mac-smoke-toggle-video")
 
         return ViceMacLaunchConfiguration(
-            releaseSmokeTest: ViceMacReleaseSmokeTestConfiguration(timeout: max(1, timeout))
+            releaseSmokeTest: ViceMacReleaseSmokeTestConfiguration(timeout: max(1, timeout),
+                                                                  togglesVideoStandard: togglesVideoStandard)
         )
     }
 
@@ -527,14 +530,28 @@ private struct ViceMacLaunchConfiguration {
 
 private struct ViceMacReleaseSmokeTestConfiguration {
     let timeout: TimeInterval
+    let togglesVideoStandard: Bool
 }
 
 private struct ReleaseSmokeTestView: View {
+    @EnvironmentObject private var emulator: EmulatorSession
     let configuration: ViceMacReleaseSmokeTestConfiguration
 
     var body: some View {
-        Color.black
-            .frame(width: 320, height: 240)
+        MacVICEDisplayView(videoSource: emulator.frameSource,
+                           inputHandlers: nil,
+                           configuration: displayConfiguration)
+            .frame(width: displaySize.width, height: displaySize.height)
+            .background(Color.black)
+    }
+
+    private var displaySize: CGSize {
+        emulator.frameSource.nativeDisplaySize()
+    }
+
+    private var displayConfiguration: MacVICEDisplayConfiguration {
+        MacVICEDisplayConfiguration(forwardsInput: false,
+                                    bootImageURL: emulator.frameSource.bootImageURL)
     }
 }
 
@@ -548,16 +565,40 @@ private enum ReleaseSmokeTestRunner {
         let deadline = Date().addingTimeInterval(configuration.timeout)
         var lastSequence: UInt64 = 0
         var lastStatus = "no emulator frame received"
+        var firstPassingFrame: MacVICEVideoFrame?
+        var didRequestFirstVideoSwitch = false
+        var didRequestSecondVideoSwitch = false
+        let originalVideoStandard = emulator.videoStandard
+        let alternateVideoStandard: EmulatorSession.VideoStandard = originalVideoStandard == .pal ? .ntsc : .pal
 
         while Date() < deadline {
             if let frame = emulator.frameSource.copyLatestFrame(after: lastSequence) {
                 lastSequence = frame.sequence
                 if let stats = ReleaseSmokeFrameAnalyzer.analyze(frame) {
                     lastStatus = stats.summary
-                    if stats.passed {
+                    if stats.passed && !configuration.togglesVideoStandard {
                         ReleaseSmokeTestProcess.succeed(
                             "VICE Mac release smoke test passed for \(emulator.machine.shortName): \(stats.summary)"
                         )
+                    }
+                    if stats.passed && configuration.togglesVideoStandard {
+                        if firstPassingFrame == nil {
+                            firstPassingFrame = frame
+                            emulator.videoStandard = alternateVideoStandard
+                            didRequestFirstVideoSwitch = true
+                            lastStatus = "requested \(alternateVideoStandard.rawValue) after \(stats.summary)"
+                        } else if didRequestFirstVideoSwitch,
+                                  !didRequestSecondVideoSwitch,
+                                  frame.height != firstPassingFrame?.height {
+                            emulator.videoStandard = originalVideoStandard
+                            didRequestSecondVideoSwitch = true
+                            lastStatus = "requested \(originalVideoStandard.rawValue) after \(stats.summary)"
+                        } else if didRequestSecondVideoSwitch,
+                                  frame.height == firstPassingFrame?.height {
+                            ReleaseSmokeTestProcess.succeed(
+                                "VICE Mac video switch smoke test passed for \(emulator.machine.shortName): \(stats.summary)"
+                            )
+                        }
                     }
                 } else {
                     lastStatus = "invalid emulator frame"
@@ -578,12 +619,7 @@ private enum ReleaseSmokeTestRunner {
     }
 
     private static func lastEngineErrorMessage() -> String? {
-        guard let error = ViceEngineGetLastError() else {
-            return nil
-        }
-
-        let message = String(cString: error).trimmingCharacters(in: .whitespacesAndNewlines)
-        return message.isEmpty ? nil : message
+        MacVICEEngineSession.lastError
     }
 }
 
@@ -637,7 +673,7 @@ private struct ReleaseSmokeFrameStats {
 }
 
 private enum ReleaseSmokeFrameAnalyzer {
-    static func analyze(_ frame: EmulatorVideoFrame) -> ReleaseSmokeFrameStats? {
+    static func analyze(_ frame: MacVICEVideoFrame) -> ReleaseSmokeFrameStats? {
         guard frame.width > 0,
               frame.height > 0,
               frame.bytesPerRow >= frame.width * 4,
@@ -1470,11 +1506,7 @@ private enum AppMetadata {
     }
 
     private static var viceVersion: String {
-        guard let version = ViceEngineGetVersion() else {
-            return "engine"
-        }
-
-        return String(cString: version)
+        MacVICEEngineSession.version
     }
 
     private static func bundleString(for key: String) -> String {

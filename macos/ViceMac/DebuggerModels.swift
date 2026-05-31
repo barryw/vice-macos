@@ -1,4 +1,5 @@
 import Foundation
+import MacVICEKit
 
 struct DebuggerCPU: Identifiable, Hashable {
     let id: UInt32
@@ -45,14 +46,14 @@ struct DebuggerSnapshot {
     let supportedCPUs: [DebuggerCPU]
     let registers: [DebuggerRegister]
 
-    init(_ raw: ViceEngineDebuggerSnapshot) {
-        memorySpace = raw.memorySpace
-        cpu = DebuggerCPU(id: raw.cpuType)
-        bank = raw.bank
-        cycle = raw.cycle
-        programCounter = UInt16(raw.programCounter & 0xffff)
-        supportedCPUs = DebuggerSnapshot.cpuArray(from: raw).map(DebuggerCPU.init)
-        registers = DebuggerSnapshot.registerArray(from: raw).map(DebuggerRegister.init)
+    init(_ snapshot: MacVICEDebuggerSnapshot) {
+        memorySpace = snapshot.memorySpace.rawValue
+        cpu = DebuggerCPU(id: snapshot.cpuType)
+        bank = snapshot.bank
+        cycle = snapshot.cycle
+        programCounter = UInt16(snapshot.programCounter & 0xffff)
+        supportedCPUs = snapshot.supportedCPUTypes.map(DebuggerCPU.init)
+        registers = snapshot.registers.map(DebuggerRegister.init)
     }
 
     var pcText: String { DebuggerFormatter.hex16(programCounter) }
@@ -60,21 +61,6 @@ struct DebuggerSnapshot {
     var bankText: String { bank < 0 ? "Current" : "\(bank)" }
     var memorySpaceText: String { DebuggerFormatter.memorySpaceTitle(memorySpace) }
 
-    private static func cpuArray(from snapshot: ViceEngineDebuggerSnapshot) -> [UInt32] {
-        var storage = snapshot.supportedCPUTypes
-        let count = min(Int(snapshot.supportedCPUCount), Int(VICE_ENGINE_DEBUGGER_MAX_CPUS))
-        return withUnsafeBytes(of: &storage) { rawBuffer in
-            Array(rawBuffer.bindMemory(to: UInt32.self).prefix(count))
-        }
-    }
-
-    private static func registerArray(from snapshot: ViceEngineDebuggerSnapshot) -> [ViceEngineDebuggerRegister] {
-        var storage = snapshot.registers
-        let count = min(Int(snapshot.registerCount), Int(VICE_ENGINE_DEBUGGER_MAX_REGISTERS))
-        return withUnsafeBytes(of: &storage) { rawBuffer in
-            Array(rawBuffer.bindMemory(to: ViceEngineDebuggerRegister.self).prefix(count))
-        }
-    }
 }
 
 struct DebuggerRegister: Identifiable {
@@ -84,12 +70,12 @@ struct DebuggerRegister: Identifiable {
     let flags: UInt32
     let value: UInt32
 
-    init(_ raw: ViceEngineDebuggerRegister) {
-        id = raw.id
-        name = DebuggerFormatter.cString(raw.name)
-        bitWidth = raw.bitWidth
-        flags = raw.flags
-        value = raw.value
+    init(_ register: MacVICERegister) {
+        id = register.id
+        name = register.name
+        bitWidth = register.bitWidth
+        flags = register.flags
+        value = register.value
     }
 
     var hexDigits: Int {
@@ -126,14 +112,14 @@ struct DebuggerDisassemblyLine: Identifiable {
     let isProgramCounter: Bool
     let hasBreakpoint: Bool
 
-    init(_ raw: ViceEngineDebuggerDisassemblyLine,
+    init(_ line: MacVICEDisassemblyLine,
          programCounter: UInt16?,
          activeBreakpoints: Set<UInt16>) {
-        address = UInt16(raw.address & 0xffff)
+        address = UInt16(line.address & 0xffff)
         id = address
-        size = raw.size
-        bytes = DebuggerFormatter.bytes(raw.bytes, count: Int(raw.size))
-        text = DebuggerFormatter.cString(raw.text)
+        size = line.size
+        bytes = line.bytes
+        text = line.text
         isProgramCounter = programCounter == address
         hasBreakpoint = activeBreakpoints.contains(address)
     }
@@ -154,17 +140,17 @@ struct DebuggerCheckpoint: Identifiable {
     let hitCount: UInt32
     let ignoreCount: UInt32
 
-    init(_ raw: ViceEngineDebuggerCheckpoint) {
-        id = raw.id
-        memorySpace = raw.memorySpace
-        startAddress = UInt16(raw.startAddress & 0xffff)
-        endAddress = UInt16(raw.endAddress & 0xffff)
-        operations = DebuggerOperations(rawValue: raw.operations)
-        enabled = raw.enabled != 0
-        stops = raw.stops != 0
-        temporary = raw.temporary != 0
-        hitCount = raw.hitCount
-        ignoreCount = raw.ignoreCount
+    init(_ checkpoint: MacVICECheckpoint) {
+        id = checkpoint.id
+        memorySpace = checkpoint.memorySpace.rawValue
+        startAddress = UInt16(checkpoint.startAddress & 0xffff)
+        endAddress = UInt16(checkpoint.endAddress & 0xffff)
+        operations = DebuggerOperations(rawValue: checkpoint.operations)
+        enabled = checkpoint.isEnabled
+        stops = checkpoint.stops
+        temporary = checkpoint.isTemporary
+        hitCount = checkpoint.hitCount
+        ignoreCount = checkpoint.ignoreCount
     }
 
     var rangeText: String {

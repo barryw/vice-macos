@@ -1,4 +1,5 @@
 import Foundation
+import MacVICEKit
 
 extension EmulatorSession {
     func start() {
@@ -7,18 +8,24 @@ extension EmulatorSession {
         }
         startupError = nil
 
-        guard let executablePath = Bundle.main.executableURL?.path,
-              let dataDirectory = Bundle.main.resourceURL?.appendingPathComponent("VICEData").path,
-              let runtimeDirectory = Bundle.main.privateFrameworksURL?.path else {
+        guard let executablePath = Bundle.main.executableURL?.path else {
             reportStartupFailure(
                 status: "Missing runtime paths",
-                detail: "The app bundle is missing its executable, resources, or Frameworks path."
+                detail: "The app bundle is missing its executable."
             )
             return
         }
-        let dynamicLibraryPath = URL(fileURLWithPath: runtimeDirectory)
-            .appendingPathComponent(machine.dynamicLibraryName)
-            .path
+
+        let runtime: MacVICERuntime
+        do {
+            runtime = try MacVICERuntime.resolve(machine: machine.macVICEKitMachine)
+        } catch {
+            reportStartupFailure(
+                status: "Missing VICE runtime",
+                detail: error.localizedDescription
+            )
+            return
+        }
 
         preparePrintSpoolDirectory()
         let networkLocalPort: Int?
@@ -33,15 +40,9 @@ extension EmulatorSession {
         }
 
         didStartEngine = true
-        ViceEngineSetVideoFrameCallback(viceFrameCallback,
-                                        Unmanaged.passUnretained(frameSource).toOpaque())
-        ViceEngineSetDriveStatusCallback(viceDriveStatusCallback,
-                                         Unmanaged.passUnretained(self).toOpaque())
-        ViceEngineSetCartridgeStatusCallback(viceCartridgeStatusCallback,
-                                             Unmanaged.passUnretained(self).toOpaque())
 
         let startupConfiguration = MachineStartupConfiguration(executablePath: executablePath,
-                                                               dataDirectory: dataDirectory,
+                                                               dataDirectory: runtime.dataDirectoryURL.path,
                                                                machineModel: activeMachineModel,
                                                                videoStandard: videoStandard,
                                                                sidModel: sidModel,
@@ -61,36 +62,30 @@ extension EmulatorSession {
                                                                networkModem: networkModem,
                                                                networkLocalPort: networkLocalPort)
         let startupArguments = machine.startupArguments(configuration: startupConfiguration)
-        let startResult = machine.id.rawValue.withCString { machineIDPointer in
-            dynamicLibraryPath.withCString { dynamicLibraryPathPointer in
-                startupArguments.withCStringArray { argumentCount, argumentPointers in
-                    ViceEngineStartMachine(machineIDPointer,
-                                           dynamicLibraryPathPointer,
-                                           argumentCount,
-                                           argumentPointers)
-                }
-            }
-        }
-        guard let started = startResult else {
+        let startResult: MacVICEEngineStartResult
+        do {
+            startResult = try engine.start(machineID: machine.id.rawValue,
+                                           dynamicLibraryURL: runtime.dynamicLibraryURL(for: machine.macVICEKitMachine),
+                                           arguments: startupArguments)
+        } catch {
             didStartEngine = false
             hayesModemService.stop()
             reportStartupFailure(
-                status: "Unable to prepare startup arguments",
-                detail: "VICE Mac could not build the emulator startup arguments."
+                status: "Unable to start \(machine.shortName)",
+                detail: error.localizedDescription
             )
             return
         }
 
-        let isRunning = started || ViceEngineIsRunning()
-        didStartEngine = isRunning
+        didStartEngine = engine.isRunning
 
-        if isRunning {
+        if engine.isRunning {
             applyRuntimeConfiguration()
         }
 
-        if started {
+        if startResult == .started {
             statusText = "\(machine.shortName) running"
-        } else if isRunning {
+        } else if engine.isRunning {
             statusText = "\(machine.shortName) already running"
         } else {
             hayesModemService.stop()
@@ -108,16 +103,11 @@ extension EmulatorSession {
     }
 
     private func lastEngineErrorMessage() -> String? {
-        guard let error = ViceEngineGetLastError() else {
-            return nil
-        }
-
-        let message = String(cString: error).trimmingCharacters(in: .whitespacesAndNewlines)
-        return message.isEmpty ? nil : message
+        MacVICEEngineSession.lastError
     }
 
     func reset(kind: MachineResetKind = .soft) {
-        guard ViceEngineIsRunning() else {
+        guard engine.isRunning else {
             return
         }
 
@@ -125,7 +115,7 @@ extension EmulatorSession {
             isPaused = false
         }
 
-        _ = ViceEngineTriggerMachineReset(kind == .hard)
+        _ = engine.reset(hard: kind == .hard)
         statusText = kind.statusText
     }
 

@@ -29,6 +29,7 @@ apps you want into `/Applications`.
 | `xc232.app` | C232 |
 | `xv364.app` | V364 |
 | `x128.app` | C128 |
+| `vsid.app` | SID player |
 
 ## Why This Exists
 
@@ -111,6 +112,21 @@ The app can expose an assistant panel backed by OpenAI or Anthropic API keys
 stored in the macOS keychain. It can answer questions about the current machine
 or operate the emulator through the app's internal tool surface.
 
+### MacVICEKit
+
+The shared engine bridge, Metal display, audio/video sources, input forwarding,
+media attachment, snapshots, and debugger APIs now live in `MacVICEKit/`. The
+repo root keeps a tiny SwiftPM adapter manifest so Xcode users can add this repo
+URL directly while the real package stays out of the website, k8s, and app
+support files. The Mac apps dogfood that package so external tools can
+eventually embed the same VICE runtime without copying app internals.
+
+Release builds also publish `MacVICERuntime-<version>-arm64.framework.zip` and
+`MacVICERuntime-latest-arm64.framework.zip`, which contain the native VICE
+dylibs, bundled runtime dependencies, VICEData, and a manifest. See
+`MacVICEKit/README.md` and `docs/MacVICEKit.md` for consumer setup and runtime
+layout.
+
 ## Updates
 
 Sparkle is wired to the latest GitHub Release appcast:
@@ -160,6 +176,12 @@ Build the release DMG:
 macos/scripts/package-vicemac-release.sh
 ```
 
+Build only the reusable runtime artifact:
+
+```sh
+macos/scripts/package-macvicekit-runtime.sh
+```
+
 Current Xcode releases require Apple's separate Metal toolchain component:
 
 ```sh
@@ -204,9 +226,10 @@ On a green push, CI:
 1. Prepares the VICE tree and Metal toolchain.
 2. Builds and tests the native Mac apps.
 3. Packages all machine apps into one Apple Silicon DMG.
-4. Signs, notarizes, staples, and smoke-tests the DMG.
-5. Publishes a GitHub Release named `vice-mac-<VICE version>-<git sha>-1`.
-6. Uploads the DMG, `SHA256SUMS.txt`, and `appcast.xml`.
+4. Builds the reusable `MacVICERuntime.framework` artifact.
+5. Signs, notarizes, staples, and smoke-tests the DMG.
+6. Publishes a GitHub Release named `vice-mac-<VICE version>-<git sha>-1`.
+7. Uploads the DMG, runtime framework zip, `SHA256SUMS.txt`, and `appcast.xml`.
 
 Required Woodpecker secrets:
 

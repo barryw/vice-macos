@@ -1,9 +1,10 @@
 import AppKit
 import CoreGraphics
 import Foundation
+import MacVICEKit
 
 extension EmulatorSession {
-    func handleDriveStatus(_ status: DriveStatusSnapshot) {
+    func handleDriveStatus(_ status: MacVICEDriveStatus) {
         guard let driveType = DriveType(rawValue: status.driveType) else {
             driveActivities.removeValue(forKey: status.unit)
             return
@@ -37,7 +38,7 @@ extension EmulatorSession {
         }
     }
 
-    func handleCartridgeStatus(_ status: CartridgeStatusSnapshot) {
+    func handleCartridgeStatus(_ status: MacVICECartridgeStatus) {
         cartridgeStatus = CartridgeStatus(isAttached: status.isAttached,
                                           cartridgeID: status.cartridgeID,
                                           cartridgeFlags: status.cartridgeFlags,
@@ -53,11 +54,11 @@ extension EmulatorSession {
             return
         }
 
-        _ = ViceEngineResetDrive(UInt32(unit))
+        _ = engine.resetDrive(unit: UInt32(unit))
     }
 
     func previewDriveSound(for configuration: DriveConfiguration) {
-        guard ViceEngineIsRunning(),
+        guard engine.isRunning,
               configuration.isAttached,
               configuration.soundEnabled,
               configuration.soundVolume > 0,
@@ -67,7 +68,7 @@ extension EmulatorSession {
         }
 
         applyDriveSoundSettings()
-        _ = ViceEnginePreviewDriveSound(UInt32(configuration.unit))
+        _ = engine.previewDriveSound(unit: UInt32(configuration.unit))
     }
 
     @discardableResult
@@ -157,9 +158,10 @@ extension EmulatorSession {
         applyDiskWriteProtection(configuration)
         applyMediaBehavior(updateStatus: false)
 
-        let didAttach = url.path.withCString { path in
-            ViceEngineAttachDisk(UInt32(unit), UInt32(driveNumber), path, behavior.viceRunMode)
-        }
+        let didAttach = engine.attachDisk(unit: UInt32(unit),
+                                          drive: UInt32(driveNumber),
+                                          url: url,
+                                          runMode: behavior.macVICERunMode)
 
         if didAttach {
             rememberMedia(url)
@@ -198,7 +200,7 @@ extension EmulatorSession {
             return false
         }
 
-        let didDetach = ViceEngineDetachDisk(UInt32(unit), UInt32(driveNumber))
+        let didDetach = engine.detachDisk(unit: UInt32(unit), drive: UInt32(driveNumber))
         if didDetach {
             statusText = "Disk detached from \(driveAddress(unit: unit, driveNumber: driveNumber))"
         } else {
@@ -218,9 +220,7 @@ extension EmulatorSession {
         let runBehavior = behavior == .attach ? MediaOpenBehavior.load : behavior
         applyMediaBehavior(updateStatus: false)
 
-        let didStart = url.path.withCString { path in
-            ViceEngineAutostartMedia(path, runBehavior.viceRunMode)
-        }
+        let didStart = engine.autostart(url, runMode: runBehavior.macVICERunMode)
 
         if didStart {
             rememberMedia(url)
@@ -241,9 +241,7 @@ extension EmulatorSession {
 
         applyTapeConfiguration(updateStatus: false)
 
-        let didAttach = url.path.withCString { path in
-            ViceEngineAttachTape(1, path)
-        }
+        let didAttach = engine.attachTape(unit: 1, url: url)
 
         if didAttach {
             tapeImagePath = url.path
@@ -261,7 +259,7 @@ extension EmulatorSession {
             return
         }
 
-        if ViceEngineDetachTape(1) {
+        if engine.detachTape(unit: 1) {
             tapeImagePath = nil
             statusText = "Tape ejected"
         } else {
@@ -274,7 +272,7 @@ extension EmulatorSession {
             return
         }
 
-        if ViceEngineControlTape(1, command.rawValue) {
+        if engine.controlTape(unit: 1, rawCommand: command.rawValue) {
             statusText = "Datasette \(command.title.lowercased())"
         }
     }
@@ -305,9 +303,7 @@ extension EmulatorSession {
             return false
         }
 
-        let didAttach = url.path.withCString { path in
-            ViceEngineAttachCartridge(path)
-        }
+        let didAttach = engine.attachCartridge(url)
 
         if didAttach {
             rememberMedia(url)
@@ -324,7 +320,7 @@ extension EmulatorSession {
             return
         }
 
-        if ViceEngineDetachCartridge() {
+        if engine.detachCartridge() {
             statusText = "Cartridge detached"
         } else {
             statusText = "Unable to detach cartridge"
@@ -333,16 +329,14 @@ extension EmulatorSession {
 
     @discardableResult
     func saveSnapshot(url: URL) -> Bool {
-        guard ViceEngineIsRunning() else {
+        guard engine.isRunning else {
             statusText = "\(machine.shortName) is not running"
             return false
         }
 
-        let didSave = url.path.withCString { path in
-            ViceEngineSaveSnapshot(path,
-                                   snapshotConfiguration.includesROMImages,
-                                   snapshotConfiguration.includesAttachedDisks)
-        }
+        let didSave = engine.saveSnapshot(to: url,
+                                          includesROMs: snapshotConfiguration.includesROMImages,
+                                          includesDisks: snapshotConfiguration.includesAttachedDisks)
 
         if didSave {
             rememberMedia(url)
@@ -374,16 +368,14 @@ extension EmulatorSession {
 
     @discardableResult
     func loadSnapshot(url: URL) -> Bool {
-        guard ViceEngineIsRunning() else {
+        guard engine.isRunning else {
             statusText = "\(machine.shortName) is not running"
             return false
         }
 
         releaseAllKeys()
 
-        let didLoad = url.path.withCString { path in
-            ViceEngineLoadSnapshot(path)
-        }
+        let didLoad = engine.loadSnapshot(from: url)
 
         if didLoad {
             rememberMedia(url)

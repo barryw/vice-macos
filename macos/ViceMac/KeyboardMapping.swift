@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import MacVICEKit
 
 enum VICEKeyboardMappingMode: String, CaseIterable, Codable, Identifiable {
     case symbolic
@@ -556,7 +557,7 @@ private final class VICEKeymapParser {
                 if !visited.contains(includeURL),
                    FileManager.default.fileExists(atPath: includeURL.path) {
                     visited.insert(includeURL)
-                    let includeText = try String(contentsOf: includeURL, encoding: .utf8)
+                    let includeText = try VICEKeymapTextReader.text(at: includeURL)
                     lines.append(.raw("# BEGIN !INCLUDE \(includeName)"))
                     try parse(text: includeText,
                               baseURL: includeURL.deletingLastPathComponent(),
@@ -700,10 +701,13 @@ private final class VICEKeymapParser {
 
 enum VICEKeymapStore {
     static func document(for machine: EmulatedMachine,
-                         configuration: VICEKeyboardMappingConfiguration) throws -> VICEKeymapDocument {
+                         configuration: VICEKeyboardMappingConfiguration,
+                         dataDirectoryURLs: [URL]? = nil) throws -> VICEKeymapDocument {
         switch configuration.profile {
         case .viceDefault:
-            return try defaultDocument(for: machine, mode: configuration.mode)
+            return try defaultDocument(for: machine,
+                                       mode: configuration.mode,
+                                       dataDirectoryURLs: dataDirectoryURLs)
         case .custom:
             let url = customKeymapURL(for: machine, mode: configuration.mode)
             if FileManager.default.fileExists(atPath: url.path) {
@@ -746,33 +750,27 @@ enum VICEKeymapStore {
     }
 
     static func bundledKeymapURL(for machine: EmulatedMachine,
-                                 mode: VICEKeyboardMappingMode) -> URL? {
+                                 mode: VICEKeyboardMappingMode,
+                                 dataDirectoryURLs: [URL]? = nil) -> URL? {
         let relativePath = "\(machine.viceDataDirectoryName)/\(machine.defaultKeymapFilename(for: mode))"
-        if let url = Bundle.main.resourceURL?
-            .appendingPathComponent("VICEData")
-            .appendingPathComponent(relativePath),
-           FileManager.default.fileExists(atPath: url.path) {
-            return url
+        let directories = dataDirectoryURLs
+            ?? VICEDataDirectoryLocator.existingDataDirectoryURLs(for: machine)
+        for dataDirectoryURL in directories {
+            let keymapURL = dataDirectoryURL.appendingPathComponent(relativePath)
+            if FileManager.default.fileExists(atPath: keymapURL.path) {
+                return keymapURL
+            }
         }
-
-        #if DEBUG
-        let sourceURL = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .appendingPathComponent("vice/data")
-            .appendingPathComponent(relativePath)
-        if FileManager.default.fileExists(atPath: sourceURL.path) {
-            return sourceURL
-        }
-        #endif
 
         return nil
     }
 
     private static func defaultDocument(for machine: EmulatedMachine,
-                                        mode: VICEKeyboardMappingMode) throws -> VICEKeymapDocument {
-        guard let url = bundledKeymapURL(for: machine, mode: mode) else {
+                                        mode: VICEKeyboardMappingMode,
+                                        dataDirectoryURLs: [URL]? = nil) throws -> VICEKeymapDocument {
+        guard let url = bundledKeymapURL(for: machine,
+                                         mode: mode,
+                                         dataDirectoryURLs: dataDirectoryURLs) else {
             throw VICEKeymapError.missingDefaultMap(machine.shortName, mode.title)
         }
 
@@ -780,7 +778,7 @@ enum VICEKeymapStore {
     }
 
     private static func document(at url: URL) throws -> VICEKeymapDocument {
-        let text = try String(contentsOf: url, encoding: .utf8)
+        let text = try VICEKeymapTextReader.text(at: url)
         return try VICEKeymapDocument.parse(text: text,
                                             baseURL: url.deletingLastPathComponent())
     }
@@ -795,13 +793,148 @@ enum VICEKeymapStore {
     }
 }
 
+enum VICEDataDirectoryLocator {
+    static func existingDataDirectoryURLs(for machine: EmulatedMachine? = nil,
+                                          bundle: Bundle? = .main,
+                                          environment: [String: String] = ProcessInfo.processInfo.environment,
+                                          sourceFilePath: String = #filePath,
+                                          fileManager: FileManager = .default) -> [URL] {
+        var candidates: [URL] = []
+
+        if let machine,
+           let runtime = try? MacVICERuntime.resolve(machine: machine.macVICEKitMachine) {
+            candidates.append(runtime.dataDirectoryURL)
+        }
+
+        candidates.append(contentsOf: candidateDataDirectoryURLs(bundle: bundle,
+                                                                 environment: environment,
+                                                                 sourceFilePath: sourceFilePath))
+
+        var seenPaths = Set<String>()
+        return candidates.compactMap { candidate -> URL? in
+            let standardizedURL = candidate.standardizedFileURL
+            guard fileManager.directoryExists(at: standardizedURL),
+                  seenPaths.insert(standardizedURL.path).inserted else {
+                return nil
+            }
+            return standardizedURL
+        }
+    }
+
+    static func candidateDataDirectoryURLs(bundle: Bundle? = .main,
+                                           environment: [String: String] = ProcessInfo.processInfo.environment,
+                                           sourceFilePath: String = #filePath) -> [URL] {
+        var candidates: [URL] = []
+
+        if let runtimePath = environment["MACVICE_RUNTIME_DIR"],
+           !runtimePath.isEmpty {
+            let runtimeURL = URL(fileURLWithPath: runtimePath, isDirectory: true)
+            candidates.append(runtimeURL.appendingPathComponent("VICEData", isDirectory: true))
+            candidates.append(runtimeURL.appendingPathComponent("data", isDirectory: true))
+        }
+
+        if let runtimeBundle = Bundle(identifier: MacVICERuntime.frameworkBundleIdentifier),
+           let resourceURL = runtimeBundle.resourceURL {
+            candidates.append(resourceURL.appendingPathComponent("VICEData", isDirectory: true))
+        }
+
+        if let bundle {
+            if let resourceURL = bundle.resourceURL {
+                candidates.append(resourceURL.appendingPathComponent("VICEData", isDirectory: true))
+                appendRuntimeFrameworkDataCandidates(
+                    at: resourceURL.appendingPathComponent(MacVICERuntime.frameworkName, isDirectory: true),
+                    to: &candidates
+                )
+            }
+
+            if let frameworksURL = bundle.privateFrameworksURL {
+                appendRuntimeFrameworkDataCandidates(
+                    at: frameworksURL.appendingPathComponent(MacVICERuntime.frameworkName, isDirectory: true),
+                    to: &candidates
+                )
+            }
+        }
+
+        #if DEBUG
+        let sourceURL = URL(fileURLWithPath: sourceFilePath)
+        for rootURL in sourceURL.viceMacAncestorDirectories {
+            candidates.append(rootURL
+                .appendingPathComponent("vice", isDirectory: true)
+                .appendingPathComponent("data", isDirectory: true))
+        }
+        #endif
+
+        return candidates
+    }
+
+    private static func appendRuntimeFrameworkDataCandidates(at frameworkURL: URL,
+                                                             to candidates: inout [URL]) {
+        if let runtimeBundle = Bundle(url: frameworkURL),
+           let resourceURL = runtimeBundle.resourceURL {
+            candidates.append(resourceURL.appendingPathComponent("VICEData", isDirectory: true))
+        }
+
+        candidates.append(frameworkURL
+            .appendingPathComponent("Resources", isDirectory: true)
+            .appendingPathComponent("VICEData", isDirectory: true))
+        candidates.append(frameworkURL
+            .appendingPathComponent("Versions/Current/Resources", isDirectory: true)
+            .appendingPathComponent("VICEData", isDirectory: true))
+    }
+}
+
+private enum VICEKeymapTextReader {
+    static func text(at url: URL) throws -> String {
+        let data = try Data(contentsOf: url)
+        if let text = String(data: data, encoding: .utf8) {
+            return text
+        }
+        if let text = String(data: data, encoding: .isoLatin1) {
+            return text
+        }
+
+        throw VICEKeymapError.unreadableText(url.lastPathComponent)
+    }
+}
+
 enum VICEKeymapError: LocalizedError {
     case missingDefaultMap(String, String)
+    case unreadableText(String)
 
     var errorDescription: String? {
         switch self {
         case let .missingDefaultMap(machine, mode):
             return "Missing VICE \(mode) keymap for \(machine)."
+        case let .unreadableText(filename):
+            return "\(filename) is not a readable VICE keyboard map."
+        }
+    }
+}
+
+private extension FileManager {
+    func directoryExists(at url: URL) -> Bool {
+        var isDirectory: ObjCBool = false
+        return fileExists(atPath: url.path, isDirectory: &isDirectory) && isDirectory.boolValue
+    }
+}
+
+private extension URL {
+    var viceMacAncestorDirectories: [URL] {
+        var directories: [URL] = []
+        var currentURL = URL(fileURLWithPath: absoluteURL.path, isDirectory: hasDirectoryPath)
+            .standardizedFileURL
+
+        if !currentURL.hasDirectoryPath {
+            currentURL.deleteLastPathComponent()
+        }
+
+        while true {
+            directories.append(currentURL)
+            let parentURL = currentURL.deletingLastPathComponent()
+            guard parentURL.path != currentURL.path else {
+                return directories
+            }
+            currentURL = parentURL
         }
     }
 }

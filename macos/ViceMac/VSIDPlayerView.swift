@@ -1,4 +1,5 @@
 import AppKit
+import MacVICEKit
 import SwiftUI
 import UniformTypeIdentifiers
 import Waveform
@@ -128,13 +129,36 @@ final class VSIDSession: ObservableObject {
                 return
             }
 
-            if ViceEngineIsRunning() {
-                _ = ViceEngineSetIntResource("SoundVolume", Int32(soundVolume))
+            if engine.isRunning {
+                _ = engine.setIntResource("SoundVolume", value: Int32(soundVolume))
             }
         }
     }
 
+    private let engine: MacVICEEngineSession
     private var didStartEngine = false
+
+    init() {
+        engine = MacVICEEngineSession(configuration: MacVICEMachineConfiguration(machine: .vsid))
+        engine.callbacks.vsidState = { [weak self] state in
+            let snapshot = EngineState(vsidState: state)
+            Task { @MainActor in
+                self?.apply(engineState: snapshot)
+            }
+        }
+        engine.callbacks.audioSamples = { [weak self] samples in
+            let snapshot = WaveformSnapshot(audioSamples: samples)
+            Task { @MainActor in
+                self?.apply(waveform: snapshot)
+            }
+        }
+        engine.callbacks.sidVoiceSamples = { [weak self] samples in
+            let snapshots = VoiceWaveformSnapshot.snapshots(voiceSamples: samples)
+            Task { @MainActor in
+                self?.apply(voiceWaveforms: snapshots, chipIndex: samples.chipIndex)
+            }
+        }
+    }
 
     var displayTitle: String {
         let viceTitle = engineState.name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -227,7 +251,7 @@ final class VSIDSession: ObservableObject {
             let engineWasStarted = didStartEngine
             startEngineIfNeeded(initialTuneURL: engineWasStarted ? nil : url)
             if engineWasStarted && didStartEngine {
-                _ = ViceEngineAutostartMedia(url.path, MediaOpenBehavior.load.viceRunMode)
+                _ = engine.autostart(url, runMode: .load)
             }
         } catch {
             statusText = error.localizedDescription
@@ -239,22 +263,24 @@ final class VSIDSession: ObservableObject {
             return
         }
 
-        guard let executablePath = Bundle.main.executableURL?.path,
-              let dataDirectory = Bundle.main.resourceURL?.appendingPathComponent("VICEData").path,
-              let runtimeDirectory = Bundle.main.privateFrameworksURL?.path else {
-            statusText = "The VSID runtime is missing from the app bundle."
+        guard let executablePath = Bundle.main.executableURL?.path else {
+            statusText = "The VSID app executable is missing."
             return
         }
 
-        let dynamicLibraryPath = URL(fileURLWithPath: runtimeDirectory)
-            .appendingPathComponent("libvicemacvsid.dylib")
-            .path
+        let runtime: MacVICERuntime
+        do {
+            runtime = try MacVICERuntime.resolve(machine: .vsid)
+        } catch {
+            statusText = error.localizedDescription
+            return
+        }
 
         var arguments = [
             executablePath,
             "-default",
             "-directory",
-            dataDirectory,
+            runtime.dataDirectoryURL.path,
             "-sound",
             "-sounddev",
             "coreaudio",
@@ -275,29 +301,19 @@ final class VSIDSession: ObservableObject {
             arguments.append(initialTuneURL.path)
         }
 
-        ViceEngineSetVSIDStateCallback(viceVSIDStateCallback,
-                                       Unmanaged.passUnretained(self).toOpaque())
-        ViceEngineSetAudioSamplesCallback(viceAudioSamplesCallback,
-                                          Unmanaged.passUnretained(self).toOpaque())
-        ViceEngineSetSIDVoiceSamplesCallback(viceSIDVoiceSamplesCallback,
-                                             Unmanaged.passUnretained(self).toOpaque())
-
-        let startResult = "vsid".withCString { machineIDPointer in
-            dynamicLibraryPath.withCString { dynamicLibraryPathPointer in
-                arguments.withCStringArray { argumentCount, argumentPointers in
-                    ViceEngineStartMachine(machineIDPointer,
-                                           dynamicLibraryPathPointer,
-                                           argumentCount,
-                                           argumentPointers)
-                }
-            }
+        let startResult: MacVICEEngineStartResult
+        do {
+            startResult = try engine.start(machineID: "vsid",
+                                           dynamicLibraryURL: runtime.dynamicLibraryURL(for: .vsid),
+                                           arguments: arguments)
+        } catch {
+            statusText = error.localizedDescription
+            return
         }
 
-        if startResult == true || ViceEngineIsRunning() {
+        if startResult == .started || engine.isRunning {
             didStartEngine = true
             statusText = initialTuneURL == nil ? "VSID ready" : "Playing \(initialTuneURL?.lastPathComponent ?? "SID")"
-        } else if let error = ViceEngineGetLastError() {
-            statusText = String(cString: error)
         } else {
             statusText = "Unable to start VSID."
         }
@@ -310,27 +326,27 @@ final class VSIDSession: ObservableObject {
         }
 
         startEngineIfNeeded(initialTuneURL: loadedTune?.url)
-        _ = ViceEngineSetPauseEnabled(false)
+        _ = engine.setPauseEnabled(false)
         isPlaying = true
         isPaused = false
     }
 
     func pause() {
-        guard ViceEngineIsRunning() else {
+        guard engine.isRunning else {
             return
         }
 
-        _ = ViceEngineSetPauseEnabled(true)
+        _ = engine.setPauseEnabled(true)
         isPaused = true
         isPlaying = false
     }
 
     func stop() {
-        guard ViceEngineIsRunning() else {
+        guard engine.isRunning else {
             return
         }
 
-        _ = ViceEngineSetPauseEnabled(true)
+        _ = engine.setPauseEnabled(true)
         isPaused = true
         isPlaying = false
         engineState.deciseconds = 0
@@ -339,12 +355,12 @@ final class VSIDSession: ObservableObject {
 
     func selectTune(_ tune: Int) {
         let nextTune = min(max(tune, 1), tuneCount)
-        guard ViceEngineIsRunning() else {
+        guard engine.isRunning else {
             return
         }
 
-        _ = ViceEngineSetIntResource("PSIDTune", Int32(nextTune))
-        _ = ViceEngineTriggerMachineReset(false)
+        _ = engine.setIntResource("PSIDTune", value: Int32(nextTune))
+        _ = engine.reset(hard: false)
         resetVisualizers(chipCount: sidChipCount)
         isPlaying = true
         isPaused = false
@@ -416,53 +432,6 @@ final class VSIDSession: ObservableObject {
         }
         return types
     }()
-}
-
-private func viceVSIDStateCallback(_ state: UnsafePointer<ViceEngineVSIDState>?,
-                                   _ context: UnsafeMutableRawPointer?) {
-    guard let state,
-          let context else {
-        return
-    }
-
-    let snapshot = VSIDSession.EngineState(viceState: state.pointee)
-    let session = Unmanaged<VSIDSession>.fromOpaque(context).takeUnretainedValue()
-    Task { @MainActor [session, snapshot] in
-        session.apply(engineState: snapshot)
-    }
-}
-
-private func viceAudioSamplesCallback(_ samples: UnsafePointer<ViceEngineAudioSamples>?,
-                                      _ context: UnsafeMutableRawPointer?) {
-    guard let samples,
-          let context,
-          let samplePointer = samples.pointee.samples else {
-        return
-    }
-
-    let snapshot = VSIDSession.WaveformSnapshot(audioSamples: samples.pointee,
-                                                samplePointer: samplePointer)
-    let session = Unmanaged<VSIDSession>.fromOpaque(context).takeUnretainedValue()
-    Task { @MainActor [session, snapshot] in
-        session.apply(waveform: snapshot)
-    }
-}
-
-private func viceSIDVoiceSamplesCallback(_ samples: UnsafePointer<ViceEngineSIDVoiceSamples>?,
-                                         _ context: UnsafeMutableRawPointer?) {
-    guard let samples,
-          let context,
-          let samplePointer = samples.pointee.samples else {
-        return
-    }
-
-    let snapshots = VSIDSession.VoiceWaveformSnapshot.snapshots(voiceSamples: samples.pointee,
-                                                                samplePointer: samplePointer)
-    let chipIndex = Int(samples.pointee.chipIndex)
-    let session = Unmanaged<VSIDSession>.fromOpaque(context).takeUnretainedValue()
-    Task { @MainActor [session, snapshots, chipIndex] in
-        session.apply(voiceWaveforms: snapshots, chipIndex: chipIndex)
-    }
 }
 
 private enum VSIDScopeSignal {
@@ -548,17 +517,21 @@ private enum VSIDScopeSignal {
 }
 
 private extension VSIDSession.WaveformSnapshot {
-    init(audioSamples: ViceEngineAudioSamples, samplePointer: UnsafePointer<Int16>) {
+    init(audioSamples: MacVICEAudioSamples) {
         let frameCount = max(0, Int(audioSamples.frameCount))
         let channelCount = max(1, Int(audioSamples.channelCount))
         let rawSampleCount = frameCount * channelCount
 
-        guard frameCount > 0, rawSampleCount > 0 else {
+        let rawSampleValues = audioSamples.samples.withUnsafeBytes { buffer in
+            Array(buffer.bindMemory(to: Int16.self).prefix(rawSampleCount))
+        }
+
+        guard frameCount > 0,
+              rawSampleValues.count >= rawSampleCount else {
             self = .silent
             return
         }
 
-        let rawSamples = UnsafeBufferPointer(start: samplePointer, count: rawSampleCount)
         let targetCount = 384
         let bucketSize = max(1, frameCount / targetCount)
         var waveformSamples: [Float] = []
@@ -577,7 +550,7 @@ private extension VSIDSession.WaveformSnapshot {
             var peak: Float = 0
 
             for frame in bucketStart..<bucketEnd {
-                let sample = Self.monoSample(rawSamples: rawSamples,
+                let sample = Self.monoSample(rawSamples: rawSampleValues,
                                              frame: frame,
                                              channelCount: channelCount)
                 let absSample = abs(sample)
@@ -622,7 +595,7 @@ private extension VSIDSession.WaveformSnapshot {
                   sequence: audioSamples.sequence)
     }
 
-    private static func monoSample(rawSamples: UnsafeBufferPointer<Int16>,
+    private static func monoSample(rawSamples: [Int16],
                                    frame: Int,
                                    channelCount: Int) -> Float {
         let base = frame * channelCount
@@ -671,19 +644,19 @@ private extension VSIDSession.WaveformSnapshot {
 }
 
 private extension VSIDSession.VoiceWaveformSnapshot {
-    static func snapshots(voiceSamples: ViceEngineSIDVoiceSamples,
-                          samplePointer: UnsafePointer<Int16>) -> [VSIDSession.VoiceWaveformSnapshot] {
+    static func snapshots(voiceSamples: MacVICESIDVoiceSamples) -> [VSIDSession.VoiceWaveformSnapshot] {
         let frameCount = max(0, Int(voiceSamples.frameCount))
-        let voiceCount = max(1, min(Int(voiceSamples.voiceCount), Int(VICE_ENGINE_SID_VOICE_COUNT)))
+        let voiceCount = max(1, min(Int(voiceSamples.voiceCount), MacVICESIDVoiceSamples.voiceCountPerChip))
         let rawSampleCount = frameCount * voiceCount
 
-        guard frameCount > 0, rawSampleCount > 0 else {
-            return []
+        let rawSamples = voiceSamples.samples.withUnsafeBytes { buffer in
+            Array(buffer.bindMemory(to: Int16.self).prefix(rawSampleCount))
         }
 
-        let rawSamples = UnsafeBufferPointer(start: samplePointer, count: rawSampleCount)
-        let frequencies = Self.fixedArray(voiceSamples.frequency, count: voiceCount, as: UInt16.self)
-        let controls = Self.fixedArray(voiceSamples.control, count: voiceCount, as: UInt8.self)
+        guard frameCount > 0,
+              rawSamples.count >= rawSampleCount else {
+            return []
+        }
 
         return (0..<voiceCount).map { voice in
             let samples = Self.downsample(rawSamples: rawSamples,
@@ -698,15 +671,15 @@ private extension VSIDSession.VoiceWaveformSnapshot {
                                                      voiceIndex: voice,
                                                      samples: samples,
                                                      rms: rms,
-                                                     frequency: frequencies[safe: voice] ?? 0,
-                                                     control: controls[safe: voice] ?? 0,
+                                                     frequency: voiceSamples.frequencies[safe: voice] ?? 0,
+                                                     control: voiceSamples.controls[safe: voice] ?? 0,
                                                      sampleRate: voiceSamples.sampleRate,
                                                      clockRate: voiceSamples.clockRate,
                                                      sequence: voiceSamples.sequence)
         }
     }
 
-    private static func downsample(rawSamples: UnsafeBufferPointer<Int16>,
+    private static func downsample(rawSamples: [Int16],
                                    frameCount: Int,
                                    voiceCount: Int,
                                    voiceIndex: Int) -> [Float] {
@@ -720,7 +693,7 @@ private extension VSIDSession.VoiceWaveformSnapshot {
         return output
     }
 
-    private static func rms(rawSamples: UnsafeBufferPointer<Int16>,
+    private static func rms(rawSamples: [Int16],
                             frameCount: Int,
                             voiceCount: Int,
                             voiceIndex: Int) -> Float {
@@ -736,40 +709,26 @@ private extension VSIDSession.VoiceWaveformSnapshot {
 
         return min(max(sqrt(squared / Float(frameCount)) * 3.8, 0), 1)
     }
-
-    private static func fixedArray<T, U>(_ tuple: T, count: Int, as: U.Type) -> [U] {
-        withUnsafeBytes(of: tuple) { rawBuffer in
-            Array(rawBuffer.bindMemory(to: U.self).prefix(count))
-        }
-    }
 }
 
 private extension VSIDSession.EngineState {
-    init(viceState: ViceEngineVSIDState) {
-        self.name = Self.string(from: viceState.name)
-        self.author = Self.string(from: viceState.author)
-        self.copyright = Self.string(from: viceState.copyright)
-        self.irq = Self.string(from: viceState.irq)
-        self.driverInfo = Self.string(from: viceState.driverInfo)
-        self.sync = viceState.sync
-        self.sidModel = viceState.sidModel
-        self.currentTune = viceState.currentTune
-        self.tuneCount = viceState.tuneCount
-        self.defaultTune = viceState.defaultTune
-        self.deciseconds = viceState.deciseconds
-        self.driverAddress = viceState.driverAddress
-        self.loadAddress = viceState.loadAddress
-        self.initAddress = viceState.initAddress
-        self.playAddress = viceState.playAddress
-        self.dataSize = viceState.dataSize
-    }
-
-    private static func string<T>(from tuple: T) -> String {
-        withUnsafePointer(to: tuple) { pointer in
-            pointer.withMemoryRebound(to: CChar.self, capacity: Int(VICE_ENGINE_VSID_TEXT_CAPACITY)) { cString in
-                String(cString: cString)
-            }
-        }
+    init(vsidState: MacVICEVSIDState) {
+        self.name = vsidState.name
+        self.author = vsidState.author
+        self.copyright = vsidState.copyright
+        self.irq = vsidState.irq
+        self.driverInfo = vsidState.driverInfo
+        self.sync = vsidState.sync
+        self.sidModel = vsidState.sidModel
+        self.currentTune = vsidState.currentTune
+        self.tuneCount = vsidState.tuneCount
+        self.defaultTune = vsidState.defaultTune
+        self.deciseconds = vsidState.deciseconds
+        self.driverAddress = vsidState.driverAddress
+        self.loadAddress = vsidState.loadAddress
+        self.initAddress = vsidState.initAddress
+        self.playAddress = vsidState.playAddress
+        self.dataSize = vsidState.dataSize
     }
 }
 

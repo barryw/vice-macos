@@ -1,4 +1,5 @@
 import Foundation
+import MacVICEKit
 
 enum EmulatorMediaFile: Equatable {
     case disk(DiskImageFileType)
@@ -106,6 +107,17 @@ enum MediaOpenBehavior: String, CaseIterable, Codable, Identifiable {
             return 0
         case .load:
             return 1
+        }
+    }
+
+    var macVICERunMode: MacVICEMediaRunMode {
+        switch self {
+        case .attach:
+            return .attach
+        case .load:
+            return .load
+        case .run:
+            return .run
         }
     }
 

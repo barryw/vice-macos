@@ -2,6 +2,7 @@ import AppKit
 import CoreGraphics
 import Darwin
 import Foundation
+import MacVICEKit
 @preconcurrency import Network
 import XCTest
 
@@ -254,11 +255,18 @@ final class ModelConfigurationTests: XCTestCase {
         XCTAssertTrue(v364Arguments.contains("-TEDborders"))
     }
 
-    func testTEDMachinesKeepVideoAndROMChangesInStartupArguments() {
+    func testTEDMachinesSupportRuntimeVideoButKeepROMChangesInStartupArguments() {
         let machine = EmulatedMachine.xplus4
 
-        XCTAssertFalse(machine.supportsRuntimeVideoStandardUpdates)
+        XCTAssertTrue(machine.supportsRuntimeVideoStandardUpdates)
         XCTAssertFalse(machine.supportsRuntimeROMImageUpdates)
+    }
+
+    func testTEDRuntimeVideoChangesUseModelNames() {
+        XCTAssertEqual(MachineModel.ted(.plus4).viceModelName(for: .pal), "plus4pal")
+        XCTAssertEqual(MachineModel.ted(.plus4).viceModelName(for: .ntsc), "plus4ntsc")
+        XCTAssertEqual(MachineModel.ted(.c16).viceModelName(for: .pal), "c16pal")
+        XCTAssertEqual(MachineModel.ted(.c16).viceModelName(for: .ntsc), "c16ntsc")
     }
 
     func testTEDPrototypeModelsAreNTSConly() {
@@ -1080,12 +1088,12 @@ final class ModelConfigurationTests: XCTestCase {
     }
 
     func testFrameSourceCopiesLatestFrameWithoutSequenceFilter() {
-        let source = EmulatorFrameSource.displaySource(for: .x64sc)
-        let frame = EmulatorVideoFrame(width: 2,
-                                       height: 1,
-                                       bytesPerRow: 8,
-                                       sequence: 42,
-                                       pixels: Data(repeating: 255, count: 8))
+        let source = MacVICEFrameSource(displayProfile: EmulatedMachine.x64sc.macVICEDisplayProfile)
+        let frame = MacVICEVideoFrame(width: 2,
+                                      height: 1,
+                                      bytesPerRow: 8,
+                                      sequence: 42,
+                                      pixels: Data(repeating: 255, count: 8))
 
         source.publish(frame)
 
@@ -1127,13 +1135,15 @@ final class ModelConfigurationTests: XCTestCase {
     }
 
     func testDebuggerSnapshotFormatsRawMemorySpace() {
-        var raw = ViceEngineDebuggerSnapshot()
-        raw.memorySpace = 5
-        raw.cpuType = 5
-        raw.bank = -1
-        raw.programCounter = 0xc000
-
-        let snapshot = DebuggerSnapshot(raw)
+        let snapshot = DebuggerSnapshot(
+            MacVICEDebuggerSnapshot(memorySpace: .drive11,
+                                    cpuType: 5,
+                                    bank: -1,
+                                    cycle: 0,
+                                    programCounter: 0xc000,
+                                    supportedCPUTypes: [],
+                                    registers: [])
+        )
 
         XCTAssertEqual(snapshot.memorySpaceText, "Drive 11")
         XCTAssertEqual(snapshot.pcText, "C000")
@@ -1142,19 +1152,18 @@ final class ModelConfigurationTests: XCTestCase {
     }
 
     func testDebuggerCheckpointDetailTextSurfacesParsedOptions() {
-        var raw = ViceEngineDebuggerCheckpoint()
-        raw.id = 7
-        raw.memorySpace = 3
-        raw.startAddress = 0xc000
-        raw.endAddress = 0xc002
-        raw.operations = DebuggerOperations.read.rawValue | DebuggerOperations.write.rawValue
-        raw.enabled = 1
-        raw.stops = 0
-        raw.temporary = 1
-        raw.hitCount = 2
-        raw.ignoreCount = 4
-
-        let checkpoint = DebuggerCheckpoint(raw)
+        let checkpoint = DebuggerCheckpoint(
+            MacVICECheckpoint(id: 7,
+                              memorySpace: .drive9,
+                              startAddress: 0xc000,
+                              endAddress: 0xc002,
+                              operations: DebuggerOperations.read.rawValue | DebuggerOperations.write.rawValue,
+                              isEnabled: true,
+                              stops: false,
+                              isTemporary: true,
+                              hitCount: 2,
+                              ignoreCount: 4)
+        )
 
         XCTAssertEqual(checkpoint.rangeText, "C000-C002")
         XCTAssertEqual(checkpoint.memorySpaceText, "Drive 9")
@@ -1291,6 +1300,66 @@ final class ModelConfigurationTests: XCTestCase {
                 XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
             }
         }
+    }
+
+    func testAllMachinesParseBundledMacKeymaps() throws {
+        for machine in Self.allMachines {
+            for mode in VICEKeyboardMappingMode.allCases {
+                let document = try VICEKeymapStore.document(
+                    for: machine,
+                    configuration: VICEKeyboardMappingConfiguration(mode: mode, profile: .viceDefault)
+                )
+
+                XCTAssertFalse(document.entries.isEmpty, "\(machine.shortName) \(mode.shortTitle)")
+            }
+        }
+    }
+
+    func testKeymapStoreReadsDefaultMapFromRuntimeDataDirectory() throws {
+        let dataDirectoryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macvice-data-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("VICEData", isDirectory: true)
+        let machineDirectoryURL = dataDirectoryURL.appendingPathComponent("C64", isDirectory: true)
+        let keymapURL = machineDirectoryURL.appendingPathComponent("macos_sym.vkm")
+        try FileManager.default.createDirectory(at: machineDirectoryURL, withIntermediateDirectories: true)
+        try """
+        # VICE keyboard mapping file
+        # 0 | A | B | C | D | E | F | G | H
+        a 1 2 0x8
+        """.write(to: keymapURL, atomically: true, encoding: .utf8)
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: dataDirectoryURL.deletingLastPathComponent())
+        }
+
+        let document = try VICEKeymapStore.document(for: .x64sc,
+                                                    configuration: .standard,
+                                                    dataDirectoryURLs: [dataDirectoryURL])
+
+        XCTAssertEqual(document.entries.first?.symbol, "a")
+        XCTAssertEqual(document.entries.first?.row, 1)
+        XCTAssertEqual(document.entries.first?.column, 2)
+    }
+
+    func testDataDirectoryLocatorFindsRepoDataFromNestedPackageSourcePath() throws {
+        let rootURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macvice-source-\(UUID().uuidString)", isDirectory: true)
+        let sourceURL = rootURL
+            .appendingPathComponent("MacVICEKit/Sources/MacVICEKit/Runtime", isDirectory: true)
+            .appendingPathComponent("MacVICERuntime.swift")
+        let dataDirectoryURL = rootURL
+            .appendingPathComponent("vice", isDirectory: true)
+            .appendingPathComponent("data", isDirectory: true)
+        try FileManager.default.createDirectory(at: sourceURL.deletingLastPathComponent(),
+                                                withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: dataDirectoryURL, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: rootURL) }
+
+        let urls = VICEDataDirectoryLocator.existingDataDirectoryURLs(bundle: nil,
+                                                                      environment: [:],
+                                                                      sourceFilePath: sourceURL.path)
+
+        XCTAssertEqual(urls.map { $0.standardizedFileURL.path },
+                       [dataDirectoryURL.standardizedFileURL.path])
     }
 
     func testPETModelSpecificMacKeymapsResolve() throws {

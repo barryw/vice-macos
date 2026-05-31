@@ -28,7 +28,7 @@ extension EmulatorSession {
         guard configuration.isEnabled else {
             hayesModemService.stop()
             networkModemStatus = .disabled
-            if ViceEngineIsRunning() {
+            if engine.isRunning {
                 setVICEIntResource("Acia1Enable", value: 0)
                 if !syncSystemTime {
                     setVICEIntResource("UserportDevice", value: 0)
@@ -47,7 +47,7 @@ extension EmulatorSession {
                 }
             }
 
-            guard ViceEngineIsRunning() else {
+            guard engine.isRunning else {
                 return
             }
 

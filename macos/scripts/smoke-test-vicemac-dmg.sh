@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MACOS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 DIST_DIR="${VICE_MAC_DIST_DIR:-$MACOS_DIR/dist}"
 SMOKE_APPS="${VICE_MAC_SMOKE_APPS:-x64sc xvic xpet xplus4 xc16 xc232 xv364 x128}"
+SMOKE_VIDEO_SWITCH_APPS="${VICE_MAC_SMOKE_VIDEO_SWITCH_APPS:-xplus4 xc16}"
 SMOKE_TIMEOUT="${VICE_MAC_SMOKE_TIMEOUT:-35}"
 SMOKE_ATTEMPTS="${VICE_MAC_SMOKE_ATTEMPTS:-2}"
 KEEP_LOGS="${VICE_MAC_SMOKE_KEEP_LOGS:-0}"
@@ -147,6 +148,13 @@ assert_release_metadata() {
     fi
 }
 
+uses_video_switch_smoke() {
+    local app="$1"
+    local app_list=" $SMOKE_VIDEO_SWITCH_APPS "
+
+    [[ "$app_list" == *" $app "* ]]
+}
+
 run_app_smoke_test() {
     local app="$1"
     local attempt
@@ -187,7 +195,12 @@ run_app_smoke_test_attempt() {
     assert_release_metadata "$app_bundle"
 
     echo "Smoke testing $app_executable"
-    "$app_executable" --vice-mac-smoke-test --vice-mac-smoke-timeout "$SMOKE_TIMEOUT" >"$CURRENT_STDOUT_LOG" 2>"$CURRENT_STDERR_LOG" &
+    local smoke_args=(--vice-mac-smoke-test --vice-mac-smoke-timeout "$SMOKE_TIMEOUT")
+    if uses_video_switch_smoke "$app"; then
+        smoke_args+=(--vice-mac-smoke-toggle-video)
+    fi
+
+    "$app_executable" "${smoke_args[@]}" >"$CURRENT_STDOUT_LOG" 2>"$CURRENT_STDERR_LOG" &
     APP_PID=$!
 
     wait_timeout=$((SMOKE_TIMEOUT + 15))

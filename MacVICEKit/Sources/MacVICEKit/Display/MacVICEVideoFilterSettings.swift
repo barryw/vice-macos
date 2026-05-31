@@ -1,25 +1,68 @@
 import Foundation
-import MacVICEKit
 
-struct VideoFilterSettings: Codable, Equatable {
-    var preset: VideoFilterPreset = .commodore1702
-    var scanlineIntensity = 0.34
-    var phosphorMaskIntensity = 0.18
-    var barrelDistortion = 0.035
-    var vignette = 0.22
-    var halation = 0.16
-    var saturation = 1.08
-    var warmth = 0.04
-    var monochromeAmount = 0.0
-    var phosphorTintRed = 1.0
-    var phosphorTintGreen = 1.0
-    var phosphorTintBlue = 1.0
-    var phosphorPersistence = 0.0
+/// Adjustable CRT/display filter settings consumed by `MacVICEMetalRenderer`.
+public struct MacVICEVideoFilterSettings: Codable, Equatable, Sendable {
+    /// Preset these settings were derived from.
+    public var preset: MacVICEVideoFilterPreset
+    /// Darkening between scanlines, from 0 to 1.
+    public var scanlineIntensity: Double
+    /// RGB phosphor mask strength, from 0 to 1.
+    public var phosphorMaskIntensity: Double
+    /// Barrel distortion amount, from 0 to 1.
+    public var barrelDistortion: Double
+    /// Corner darkening amount, from 0 to 1.
+    public var vignette: Double
+    /// Bloom-like glow around bright pixels, from 0 to 1.
+    public var halation: Double
+    /// Color saturation multiplier.
+    public var saturation: Double
+    /// Warm/cool color balance offset.
+    public var warmth: Double
+    /// Amount of monochrome conversion before phosphor tinting, from 0 to 1.
+    public var monochromeAmount: Double
+    /// Red channel multiplier for monochrome phosphor tinting.
+    public var phosphorTintRed: Double
+    /// Green channel multiplier for monochrome phosphor tinting.
+    public var phosphorTintGreen: Double
+    /// Blue channel multiplier for monochrome phosphor tinting.
+    public var phosphorTintBlue: Double
+    /// Previous-frame persistence amount, from 0 to 1.
+    public var phosphorPersistence: Double
 
-    static func defaults(for preset: VideoFilterPreset) -> VideoFilterSettings {
+    /// Creates custom display filter settings.
+    public init(preset: MacVICEVideoFilterPreset = .commodore1702,
+                scanlineIntensity: Double = 0.34,
+                phosphorMaskIntensity: Double = 0.18,
+                barrelDistortion: Double = 0.035,
+                vignette: Double = 0.22,
+                halation: Double = 0.16,
+                saturation: Double = 1.08,
+                warmth: Double = 0.04,
+                monochromeAmount: Double = 0.0,
+                phosphorTintRed: Double = 1.0,
+                phosphorTintGreen: Double = 1.0,
+                phosphorTintBlue: Double = 1.0,
+                phosphorPersistence: Double = 0.0) {
+        self.preset = preset
+        self.scanlineIntensity = scanlineIntensity
+        self.phosphorMaskIntensity = phosphorMaskIntensity
+        self.barrelDistortion = barrelDistortion
+        self.vignette = vignette
+        self.halation = halation
+        self.saturation = saturation
+        self.warmth = warmth
+        self.monochromeAmount = monochromeAmount
+        self.phosphorTintRed = phosphorTintRed
+        self.phosphorTintGreen = phosphorTintGreen
+        self.phosphorTintBlue = phosphorTintBlue
+        self.phosphorPersistence = phosphorPersistence
+    }
+
+    /// Returns MacVICE's default settings for a preset.
+    public static func defaults(for preset: MacVICEVideoFilterPreset) -> MacVICEVideoFilterSettings {
         switch preset {
         case .clean:
-            return VideoFilterSettings(
+            return MacVICEVideoFilterSettings(
                 preset: preset,
                 scanlineIntensity: 0.0,
                 phosphorMaskIntensity: 0.0,
@@ -36,7 +79,7 @@ struct VideoFilterSettings: Codable, Equatable {
             )
 
         case .commodore1702:
-            return VideoFilterSettings(
+            return MacVICEVideoFilterSettings(
                 preset: preset,
                 scanlineIntensity: 0.34,
                 phosphorMaskIntensity: 0.18,
@@ -53,7 +96,7 @@ struct VideoFilterSettings: Codable, Equatable {
             )
 
         case .commodore1084:
-            return VideoFilterSettings(
+            return MacVICEVideoFilterSettings(
                 preset: preset,
                 scanlineIntensity: 0.30,
                 phosphorMaskIntensity: 0.14,
@@ -70,7 +113,7 @@ struct VideoFilterSettings: Codable, Equatable {
             )
 
         case .pvm:
-            return VideoFilterSettings(
+            return MacVICEVideoFilterSettings(
                 preset: preset,
                 scanlineIntensity: 0.42,
                 phosphorMaskIntensity: 0.26,
@@ -87,7 +130,7 @@ struct VideoFilterSettings: Codable, Equatable {
             )
 
         case .rf:
-            return VideoFilterSettings(
+            return MacVICEVideoFilterSettings(
                 preset: preset,
                 scanlineIntensity: 0.24,
                 phosphorMaskIntensity: 0.08,
@@ -104,7 +147,7 @@ struct VideoFilterSettings: Codable, Equatable {
             )
 
         case .greenPhosphor:
-            return VideoFilterSettings(
+            return MacVICEVideoFilterSettings(
                 preset: preset,
                 scanlineIntensity: 0.46,
                 phosphorMaskIntensity: 0.0,
@@ -121,7 +164,7 @@ struct VideoFilterSettings: Codable, Equatable {
             )
 
         case .amberPhosphor:
-            return VideoFilterSettings(
+            return MacVICEVideoFilterSettings(
                 preset: preset,
                 scanlineIntensity: 0.44,
                 phosphorMaskIntensity: 0.0,
@@ -138,7 +181,7 @@ struct VideoFilterSettings: Codable, Equatable {
             )
 
         case .whitePhosphor:
-            return VideoFilterSettings(
+            return MacVICEVideoFilterSettings(
                 preset: preset,
                 scanlineIntensity: 0.40,
                 phosphorMaskIntensity: 0.0,
@@ -157,62 +200,33 @@ struct VideoFilterSettings: Codable, Equatable {
     }
 }
 
-extension MacVICEVideoFilterSettings {
-    init(_ settings: VideoFilterSettings) {
-        self.init(preset: MacVICEVideoFilterPreset(settings.preset),
-                  scanlineIntensity: settings.scanlineIntensity,
-                  phosphorMaskIntensity: settings.phosphorMaskIntensity,
-                  barrelDistortion: settings.barrelDistortion,
-                  vignette: settings.vignette,
-                  halation: settings.halation,
-                  saturation: settings.saturation,
-                  warmth: settings.warmth,
-                  monochromeAmount: settings.monochromeAmount,
-                  phosphorTintRed: settings.phosphorTintRed,
-                  phosphorTintGreen: settings.phosphorTintGreen,
-                  phosphorTintBlue: settings.phosphorTintBlue,
-                  phosphorPersistence: settings.phosphorPersistence)
-    }
-}
-
-private extension MacVICEVideoFilterPreset {
-    init(_ preset: VideoFilterPreset) {
-        switch preset {
-        case .clean:
-            self = .clean
-        case .commodore1702:
-            self = .commodore1702
-        case .commodore1084:
-            self = .commodore1084
-        case .pvm:
-            self = .pvm
-        case .rf:
-            self = .rf
-        case .greenPhosphor:
-            self = .greenPhosphor
-        case .amberPhosphor:
-            self = .amberPhosphor
-        case .whitePhosphor:
-            self = .whitePhosphor
-        }
-    }
-}
-
-enum VideoFilterPreset: String, CaseIterable, Codable, Identifiable {
+/// Named display filter presets suitable for UI presentation.
+public enum MacVICEVideoFilterPreset: String, CaseIterable, Codable, Identifiable, Sendable {
+    /// Sharp, unfiltered output.
     case clean = "Clean"
+    /// Commodore 1702-inspired composite monitor look.
     case commodore1702 = "1702"
+    /// Commodore 1084-inspired RGB monitor look.
     case commodore1084 = "1084"
+    /// Professional video monitor-inspired look.
     case pvm = "PVM"
+    /// Softer RF-style output.
     case rf = "RF"
+    /// Green monochrome phosphor display.
     case greenPhosphor = "Green Phosphor"
+    /// Amber monochrome phosphor display.
     case amberPhosphor = "Amber Phosphor"
+    /// White monochrome phosphor display.
     case whitePhosphor = "White Phosphor"
 
-    var id: String { rawValue }
+    /// Stable identifier for SwiftUI controls.
+    public var id: String { rawValue }
 
-    var title: String { rawValue }
+    /// Full display title.
+    public var title: String { rawValue }
 
-    var toolbarTitle: String {
+    /// Short display title suitable for compact toolbars.
+    public var toolbarTitle: String {
         switch self {
         case .clean:
             return "Clean"
@@ -233,7 +247,8 @@ enum VideoFilterPreset: String, CaseIterable, Codable, Identifiable {
         }
     }
 
-    var systemImage: String {
+    /// SF Symbol name that represents the preset.
+    public var systemImage: String {
         switch self {
         case .clean:
             return "display"

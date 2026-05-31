@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import MacVICEKit
 
 enum MachineID: String, CaseIterable, Codable, Identifiable {
     case x64sc
@@ -88,7 +89,7 @@ enum MachineModel: Equatable {
     }
 
     var supportsRuntimeVideoStandardUpdates: Bool {
-        family != .ted
+        true
     }
 
     var supportsRuntimeROMImageUpdates: Bool {
@@ -97,9 +98,9 @@ enum MachineModel: Equatable {
 
     var supportsRuntimeModelSelection: Bool {
         switch self {
-        case .x64sc, .x128, .xpet:
+        case .x64sc, .x128, .xpet, .ted:
             return true
-        case .xvic, .ted:
+        case .xvic:
             return false
         }
     }
@@ -112,7 +113,9 @@ enum MachineModel: Equatable {
             return model.viceModelName(for: videoStandard)
         case let .xpet(model):
             return model.viceModelName
-        case .xvic, .ted:
+        case let .ted(model):
+            return model.viceModelName(for: videoStandard)
+        case .xvic:
             return nil
         }
     }
@@ -651,6 +654,40 @@ struct EmulatedMachine: Identifiable, Equatable {
 
     var mainWindowIdentifier: String {
         "ViceMac.MainWindow.\(id.rawValue)"
+    }
+
+    var macVICEKitMachine: MacVICEMachine {
+        switch id {
+        case .x64sc:
+            return .c64sc
+        case .x128:
+            return .c128
+        case .xvic:
+            return .vic20
+        case .xpet:
+            return .pet
+        case .xplus4:
+            return .plus4
+        case .xc16:
+            return .c16
+        case .xc232:
+            return .c232
+        case .xv364:
+            return .v364
+        }
+    }
+
+    var macVICEDisplayProfile: MacVICEDisplayProfile {
+        MacVICEDisplayProfile(
+            bootFrame: MacVICEBootFrame(pixelSize: displayProfile.bootFrame.pixelSize),
+            nativeScale: displayProfile.nativeScale,
+            pixelAspectRatio: displayProfile.pixelAspectRatio
+        )
+    }
+
+    var bootImageURL: URL? {
+        Bundle.main.url(forResource: displayProfile.bootFrame.resourceName,
+                        withExtension: displayProfile.bootFrame.fileExtension)
     }
 
     var usesVIC20MemoryExpansion: Bool {

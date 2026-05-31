@@ -15,10 +15,11 @@ The bridge should be a narrow C ABI that can be called from Swift:
 - deliver video frames as immutable RGBA buffers
 - deliver audio buffers separately once video is stable
 
-The Swift side copies each delivered video frame into `EmulatorFrameSource`.
-`EmulatorRenderer` uploads the newest frame to a Metal texture and then runs the
-filter chain. The renderer does not know whether a frame came from boot artwork,
-x64sc, or a future recording source.
+The Swift package copies each delivered video frame into `MacVICEFrameSource`.
+`MacVICEDisplayView` uploads the newest frame to a Metal texture through
+`MacVICEMetalRenderer` and then runs the filter chain. The renderer does not
+know whether a frame came from boot artwork, a machine runtime, or a future
+recording source.
 
 ## VICE Side
 
@@ -58,8 +59,10 @@ not an ad hoc display stream bolted onto headless mode.
 - `--enable-macosui` configures VICE with `src/arch/macos`.
 - `x64sc` links for arm64 with the native macOS arch layer.
 - `video_canvas_refresh` publishes RGBA frames through `vicemacbridge`.
-- Swift `EmulatorFrameSource` can accept live frames and the Metal renderer can
-  upload them into the existing filter pipeline.
+- `MacVICEKit` owns the frame source, display view, Metal renderer, input sink,
+  debugger wrappers, and engine-session API used by the app.
+- Swift `MacVICEFrameSource` can accept live frames and `MacVICEDisplayView`
+  can upload them into the existing filter pipeline.
 - The embedded x64sc engine target starts `main_program` on a dedicated thread
   from the Swift app and registers the frame callback before emulation starts.
 - CoreAudio is selected through VICE's own sound resources and driver path; the

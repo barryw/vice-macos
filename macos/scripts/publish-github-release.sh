@@ -511,6 +511,10 @@ publish_github_release_main() {
     write_appcast "$tag" "$release_label" "$notes_file" "${dmg_artifacts[0]}" "$appcast_file"
 
     artifacts=("${dmg_artifacts[@]}")
+    runtime_artifacts=("$DIST_DIR"/*.zip)
+    if [[ "${#runtime_artifacts[@]}" -gt 0 ]]; then
+        artifacts+=("${runtime_artifacts[@]}")
+    fi
     if [[ -f "$DIST_DIR/SHA256SUMS.txt" ]]; then
         artifacts+=("$DIST_DIR/SHA256SUMS.txt")
     fi

@@ -64,6 +64,13 @@
 #define VICEMAC_DEBUGGER_REQUEST_QUEUE_CAPACITY 64
 #define VICEMAC_PATH_CAPACITY 4096
 #define VICEMAC_CURRENT_MEMORY_BANK -1
+#define VICEMAC_PLUS4MODEL_C16_PAL 0
+#define VICEMAC_PLUS4MODEL_C16_NTSC 1
+#define VICEMAC_PLUS4MODEL_PLUS4_PAL 2
+#define VICEMAC_PLUS4MODEL_PLUS4_NTSC 3
+#define VICEMAC_PLUS4MODEL_V364_NTSC 4
+#define VICEMAC_PLUS4MODEL_232_NTSC 5
+#define VICEMAC_PLUS4MODEL_UNKNOWN 99
 
 typedef void (*vicemac_drive_sound_head_fn)(int track, int step, int unit);
 
@@ -2376,6 +2383,30 @@ static int vicemac_c128_model_for_name(const char *model)
     return C128MODEL_UNKNOWN;
 }
 
+static int vicemac_plus4_model_for_name(const char *model)
+{
+    if (strcmp(model, "c16") == 0 || strcmp(model, "c16pal") == 0) {
+        return VICEMAC_PLUS4MODEL_C16_PAL;
+    }
+    if (strcmp(model, "c16ntsc") == 0) {
+        return VICEMAC_PLUS4MODEL_C16_NTSC;
+    }
+    if (strcmp(model, "plus4") == 0 || strcmp(model, "plus4pal") == 0) {
+        return VICEMAC_PLUS4MODEL_PLUS4_PAL;
+    }
+    if (strcmp(model, "plus4ntsc") == 0) {
+        return VICEMAC_PLUS4MODEL_PLUS4_NTSC;
+    }
+    if (strcmp(model, "v364") == 0 || strcmp(model, "cv364") == 0) {
+        return VICEMAC_PLUS4MODEL_V364_NTSC;
+    }
+    if (strcmp(model, "c232") == 0) {
+        return VICEMAC_PLUS4MODEL_232_NTSC;
+    }
+
+    return VICEMAC_PLUS4MODEL_UNKNOWN;
+}
+
 static int vicemac_dispatch_integer_machine_model(const char *symbol_name, int model)
 {
     typedef void (*machine_model_set_function_t)(int model);
@@ -2388,6 +2419,25 @@ static int vicemac_dispatch_integer_machine_model(const char *symbol_name, int m
 
     set_model_function(model);
     return 1;
+}
+
+static int vicemac_dispatch_plus4_machine_model(int model)
+{
+    int sound_enabled = 0;
+    int should_restore_sound = resources_get_int("Sound", &sound_enabled) == 0 && sound_enabled != 0;
+    int did_set_model;
+
+    if (should_restore_sound) {
+        (void)resources_set_int("Sound", 0);
+    }
+
+    did_set_model = vicemac_dispatch_integer_machine_model("plus4model_set", model);
+
+    if (should_restore_sound) {
+        (void)resources_set_int("Sound", sound_enabled);
+    }
+
+    return did_set_model;
 }
 
 static int vicemac_dispatch_machine_model(const char *model)
@@ -2406,6 +2456,12 @@ static int vicemac_dispatch_machine_model(const char *model)
     machine_model = vicemac_c128_model_for_name(model);
     if (machine_model != C128MODEL_UNKNOWN
         && vicemac_dispatch_integer_machine_model("c128model_set", machine_model)) {
+        return 1;
+    }
+
+    machine_model = vicemac_plus4_model_for_name(model);
+    if (machine_model != VICEMAC_PLUS4MODEL_UNKNOWN
+        && vicemac_dispatch_plus4_machine_model(machine_model)) {
         return 1;
     }
 

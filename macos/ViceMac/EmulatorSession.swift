@@ -4,6 +4,7 @@ import Darwin
 import Foundation
 import GameController
 import ImageIO
+import MacVICEKit
 import UniformTypeIdentifiers
 
 struct EmulatorStartupError: Identifiable, Equatable {
@@ -359,11 +360,12 @@ final class EmulatorSession: ObservableObject {
     @Published var printSpoolPages: [PrinterSpoolPage] = []
     @Published var networkModemStatus: NetworkModemRuntimeStatus = .disabled
 
-    let frameSource: EmulatorFrameSource
+    let engine: MacVICEEngineSession
+    let frameSource: MacVICEFrameSource
     var didStartEngine = false
 
     var isMachineRunning: Bool {
-        ViceEngineIsRunning()
+        engine.isRunning
     }
 
     var pressedKeys: [UInt16: PressedEmulatorKey] = [:]
@@ -454,6 +456,15 @@ final class EmulatorSession: ObservableObject {
         case pal = "PAL"
 
         var id: String { rawValue }
+
+        var macVICEVideoStandard: MacVICEVideoStandard {
+            switch self {
+            case .ntsc:
+                return .ntsc
+            case .pal:
+                return .pal
+            }
+        }
     }
 
     enum SIDModel: Int32, CaseIterable, Identifiable {
@@ -597,10 +608,15 @@ final class EmulatorSession: ObservableObject {
         networkModem = loadedNetworkModem
         syncSystemTime = loadedSyncSystemTime
         statusText = "Starting \(machine.shortName)"
-        frameSource = EmulatorFrameSource.displaySource(for: machine)
+        let frameSource = MacVICEFrameSource(displayProfile: machine.macVICEDisplayProfile,
+                                             bootImageURL: machine.bootImageURL)
+        self.frameSource = frameSource
+        engine = MacVICEEngineSession(configuration: MacVICEMachineConfiguration(machine: machine.macVICEKitMachine),
+                                      videoSource: frameSource)
         if !loadedSyncSystemTime && loadedNetworkModem.usesActiveUserPort {
             EmulatorDefaults.saveSyncSystemTime(false, for: machine)
         }
+        configureEngineCallbacks()
         setupGameControllerMonitoring()
         refreshPrintQueue()
         startPrintQueueMonitoring()
@@ -616,39 +632,17 @@ final class EmulatorSession: ObservableObject {
             GCController.stopWirelessControllerDiscovery()
         }
     }
-}
 
-extension Array where Element == String {
-    func withCStringArray<Result>(
-        _ body: (Int32, UnsafePointer<UnsafePointer<CChar>?>?) -> Result
-    ) -> Result? {
-        guard count <= Int(Int32.max) else {
-            return nil
-        }
-
-        var cStrings: [UnsafeMutablePointer<CChar>] = []
-        cStrings.reserveCapacity(count)
-
-        for string in self {
-            guard let cString = strdup(string) else {
-                for cString in cStrings {
-                    free(cString)
-                }
-                return nil
-            }
-            cStrings.append(cString)
-        }
-        defer {
-            for cString in cStrings {
-                free(cString)
+    private func configureEngineCallbacks() {
+        engine.callbacks.driveStatus = { [weak self] status in
+            Task { @MainActor in
+                self?.handleDriveStatus(status)
             }
         }
-
-        var pointers = cStrings.map { Optional(UnsafePointer<CChar>($0)) }
-        pointers.append(nil)
-
-        return pointers.withUnsafeBufferPointer { buffer in
-            body(Int32(count), buffer.baseAddress)
+        engine.callbacks.cartridgeStatus = { [weak self] status in
+            Task { @MainActor in
+                self?.handleCartridgeStatus(status)
+            }
         }
     }
 }

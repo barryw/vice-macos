@@ -1,4 +1,5 @@
 import AppKit
+import MacVICEKit
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -353,17 +354,9 @@ private struct EmulatorDisplaySurface: View {
             ZStack {
                 Color.black
 
-                EmulatorMetalView(frameSource: emulator.frameSource,
-                                  filterSettings: emulator.filterSettings,
-                                  preservesAspectRatio: emulator.displayMode.preservesAspectRatio,
-                                  isMouseInputActive: emulator.isMacMouseInputActive,
-                                  onKeyEvent: emulator.handleKeyEvent,
-                                  onFlagsChanged: emulator.handleFlagsChanged,
-                                  onMouseMoved: emulator.handleMouseMoved,
-                                  onMouseButton: emulator.handleMouseButton,
-                                  onMouseCaptureChanged: emulator.handleMouseCaptureChanged,
-                                  onPaste: { emulator.pasteFromPasteboard() },
-                                  onFocusLost: emulator.releaseAllKeys)
+                MacVICEDisplayView(videoSource: emulator.frameSource,
+                                    inputHandlers: inputHandlers,
+                                    configuration: displayConfiguration)
                     .frame(width: displaySize.width,
                            height: displaySize.height)
                     .overlay {
@@ -389,6 +382,27 @@ private struct EmulatorDisplaySurface: View {
 
     private var nativeSize: CGSize {
         emulator.frameSource.nativeDisplaySize()
+    }
+
+    private var displayConfiguration: MacVICEDisplayConfiguration {
+        MacVICEDisplayConfiguration(
+            preservesAspectRatio: emulator.displayMode.preservesAspectRatio,
+            filtering: .nearest,
+            filterSettings: MacVICEVideoFilterSettings(emulator.filterSettings),
+            forwardsInput: true,
+            capturesMouse: emulator.isMacMouseInputActive,
+            bootImageURL: emulator.frameSource.bootImageURL
+        )
+    }
+
+    private var inputHandlers: MacVICEDisplayInputHandlers {
+        MacVICEDisplayInputHandlers(onKeyEvent: emulator.handleKeyEvent,
+                                    onFlagsChanged: emulator.handleFlagsChanged,
+                                    onMouseMoved: emulator.handleMouseMoved,
+                                    onMouseButton: emulator.handleMouseButton,
+                                    onMouseCaptureChanged: emulator.handleMouseCaptureChanged,
+                                    onPaste: { emulator.pasteFromPasteboard() },
+                                    onFocusLost: emulator.releaseAllKeys)
     }
 
     private func size(for containerSize: CGSize) -> CGSize {

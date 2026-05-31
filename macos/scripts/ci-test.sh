@@ -8,6 +8,9 @@ DERIVED_DATA="${VICE_MAC_CI_DERIVED_DATA:-/private/tmp/vice-macos-ci-derived-dat
 CONFIGURATION="${VICE_MAC_CI_CONFIGURATION:-Debug}"
 DESTINATION="${VICE_MAC_CI_DESTINATION:-platform=macOS,arch=arm64}"
 
+swift test --package-path "$MACOS_DIR/../MacVICEKit"
+bash -n "$SCRIPT_DIR/package-macvicekit-runtime.sh"
+
 SCHEMES=(
     "VICE Mac C64"
     "VICE Mac VIC-20"
@@ -17,6 +20,7 @@ SCHEMES=(
     "VICE Mac C232"
     "VICE Mac V364"
     "VICE Mac C128"
+    "VICE Mac VSID"
 )
 
 for scheme in "${SCHEMES[@]}"; do

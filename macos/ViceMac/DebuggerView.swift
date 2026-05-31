@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import MacVICEKit
 import SwiftUI
 
 struct DebuggerView: View {
@@ -73,12 +74,12 @@ struct DebuggerView: View {
                     emulator.isPaused = true
                     session.refresh(emulator: emulator, followProgramCounterIfNeeded: false)
                 }
-                .disabled(!ViceEngineIsRunning() || emulator.isPaused)
+                .disabled(!emulator.isMachineRunning || emulator.isPaused)
 
                 DebuggerToolbarButton("Run", systemImage: "play.fill") {
                     session.continueExecution(emulator: emulator)
                 }
-                .disabled(!ViceEngineIsRunning())
+                .disabled(!emulator.isMachineRunning)
 
                 Divider()
                     .frame(height: 22)
@@ -86,17 +87,17 @@ struct DebuggerView: View {
                 DebuggerToolbarButton("Step", systemImage: "arrow.turn.down.right") {
                     session.step(emulator: emulator, over: false)
                 }
-                .disabled(!ViceEngineIsRunning())
+                .disabled(!emulator.isMachineRunning)
 
                 DebuggerToolbarButton("Next", systemImage: "arrow.right.to.line") {
                     session.step(emulator: emulator, over: true)
                 }
-                .disabled(!ViceEngineIsRunning())
+                .disabled(!emulator.isMachineRunning)
 
                 DebuggerToolbarButton("Return", systemImage: "return") {
                     session.stepOut(emulator: emulator)
                 }
-                .disabled(!ViceEngineIsRunning())
+                .disabled(!emulator.isMachineRunning)
 
                 Spacer(minLength: 8)
             }
@@ -483,8 +484,12 @@ final class DebuggerSession: ObservableObject {
     private var disassemblyAddress: UInt16 = 0
     private var memoryAddress: UInt16 = 0
 
+    private var macVICEMemorySpace: MacVICEMemorySpace {
+        MacVICEMemorySpace(rawValue: memorySpace.rawValue) ?? .computer
+    }
+
     func refresh(emulator: EmulatorSession, followProgramCounterIfNeeded: Bool) {
-        guard ViceEngineIsRunning() else {
+        guard emulator.isMachineRunning else {
             snapshot = nil
             registers = []
             disassembly = []
@@ -494,20 +499,20 @@ final class DebuggerSession: ObservableObject {
             return
         }
 
-        loadSnapshot()
+        loadSnapshot(emulator: emulator)
 
         if followProgramCounter && followProgramCounterIfNeeded, let programCounter = snapshot?.programCounter {
             disassemblyAddress = programCounter
             disassemblyAddressText = DebuggerFormatter.hex16(programCounter)
         }
 
-        loadDisassembly()
-        loadCheckpoints()
+        loadDisassembly(emulator: emulator)
+        loadCheckpoints(emulator: emulator)
         loadMemory(emulator: emulator)
     }
 
     func autosync(emulator: EmulatorSession) {
-        guard ViceEngineIsRunning() else {
+        guard emulator.isMachineRunning else {
             return
         }
 
@@ -516,7 +521,9 @@ final class DebuggerSession: ObservableObject {
     }
 
     func setCPU(_ cpuType: UInt32, emulator: EmulatorSession) {
-        guard ViceEngineDebuggerSetCPU(memorySpace.rawValue, cpuType) else {
+        do {
+            try emulator.engine.debugger.setCPU(memorySpace: macVICEMemorySpace, cpuType: cpuType)
+        } catch {
             setStatus("Unable to switch CPU", kind: .error)
             return
         }
@@ -524,10 +531,11 @@ final class DebuggerSession: ObservableObject {
     }
 
     func continueExecution(emulator: EmulatorSession) {
-        if ViceEngineDebuggerContinue() {
+        do {
+            try emulator.engine.debugger.resume()
             emulator.isPaused = false
             setStatus("Running", kind: .neutral)
-        } else {
+        } catch {
             setStatus("Unable to continue", kind: .error)
         }
         refresh(emulator: emulator, followProgramCounterIfNeeded: false)
@@ -535,9 +543,10 @@ final class DebuggerSession: ObservableObject {
 
     func step(emulator: EmulatorSession, over: Bool) {
         emulator.isPaused = true
-        if ViceEngineDebuggerStep(1, over) {
+        do {
+            try emulator.engine.debugger.step(count: 1, over: over)
             setStatus(over ? "Stepped over" : "Stepped", kind: .neutral)
-        } else {
+        } catch {
             setStatus("Unable to step", kind: .error)
         }
         refresh(emulator: emulator, followProgramCounterIfNeeded: true)
@@ -545,9 +554,10 @@ final class DebuggerSession: ObservableObject {
 
     func stepOut(emulator: EmulatorSession) {
         emulator.isPaused = true
-        if ViceEngineDebuggerReturn() {
+        do {
+            try emulator.engine.debugger.stepOut()
             setStatus("Running until return", kind: .neutral)
-        } else {
+        } catch {
             setStatus("Unable to step out", kind: .error)
         }
         refresh(emulator: emulator, followProgramCounterIfNeeded: true)
@@ -571,7 +581,7 @@ final class DebuggerSession: ObservableObject {
         followProgramCounter = false
         disassemblyAddress = address
         disassemblyAddressText = DebuggerFormatter.hex16(address)
-        loadDisassembly()
+        loadDisassembly(emulator: emulator)
         setStatus("Disassembly at \(DebuggerFormatter.hex16(address))", kind: .neutral)
     }
 
@@ -603,7 +613,11 @@ final class DebuggerSession: ObservableObject {
             return
         }
 
-        guard ViceEngineDebuggerSetRegister(memorySpace.rawValue, register.id, value) else {
+        do {
+            try emulator.engine.debugger.setRegister(memorySpace: macVICEMemorySpace,
+                                                     registerID: register.id,
+                                                     value: value)
+        } catch {
             setStatus("Unable to write \(register.name)", kind: .error)
             return
         }
@@ -669,29 +683,29 @@ final class DebuggerSession: ObservableObject {
             return
         }
 
-        var checkpointID: UInt32 = 0
         let resolvedEnd = endAddress ?? address
-        guard ViceEngineDebuggerSetCheckpoint(memorySpace.rawValue,
-                                              UInt32(address),
-                                              UInt32(resolvedEnd),
-                                              operations.rawValue,
-                                              true,
-                                              true,
-                                              false,
-                                              &checkpointID) else {
+        let checkpointID: UInt32
+        do {
+            checkpointID = try emulator.engine.debugger.setCheckpoint(memorySpace: macVICEMemorySpace,
+                                                                      startAddress: UInt32(address),
+                                                                      endAddress: UInt32(resolvedEnd),
+                                                                      operationsMask: operations.rawValue)
+        } catch {
             setStatus("Unable to add checkpoint", kind: .error)
             return
         }
 
         setStatus("Added checkpoint #\(checkpointID)", kind: .neutral)
-        loadCheckpoints()
-        loadDisassembly()
+        loadCheckpoints(emulator: emulator)
+        loadDisassembly(emulator: emulator)
     }
 
     func setCheckpointEnabled(_ checkpoint: DebuggerCheckpoint,
                               enabled: Bool,
                               emulator: EmulatorSession) {
-        guard ViceEngineDebuggerSetCheckpointEnabled(checkpoint.id, enabled) else {
+        do {
+            try emulator.engine.debugger.setBreakpoint(id: checkpoint.id, enabled: enabled)
+        } catch {
             setStatus("Unable to update checkpoint #\(checkpoint.id)", kind: .error)
             return
         }
@@ -701,7 +715,9 @@ final class DebuggerSession: ObservableObject {
     }
 
     func deleteCheckpoint(_ checkpoint: DebuggerCheckpoint, emulator: EmulatorSession) {
-        guard ViceEngineDebuggerDeleteCheckpoint(checkpoint.id) else {
+        do {
+            try emulator.engine.debugger.removeBreakpoint(id: checkpoint.id)
+        } catch {
             setStatus("Unable to delete checkpoint #\(checkpoint.id)", kind: .error)
             return
         }
@@ -755,10 +771,11 @@ final class DebuggerSession: ObservableObject {
         commandText = ""
     }
 
-    private func loadSnapshot() {
-        var rawSnapshot = ViceEngineDebuggerSnapshot()
-        guard ViceEngineDebuggerCaptureSnapshot(memorySpace.rawValue, &rawSnapshot),
-              rawSnapshot.valid != 0 else {
+    private func loadSnapshot(emulator: EmulatorSession) {
+        let debuggerSnapshot: MacVICEDebuggerSnapshot
+        do {
+            debuggerSnapshot = try emulator.engine.debugger.snapshot(memorySpace: macVICEMemorySpace)
+        } catch {
             snapshot = nil
             registers = []
             supportedCPUs = [.unknown]
@@ -767,7 +784,7 @@ final class DebuggerSession: ObservableObject {
             return
         }
 
-        let resolvedSnapshot = DebuggerSnapshot(rawSnapshot)
+        let resolvedSnapshot = DebuggerSnapshot(debuggerSnapshot)
         snapshot = resolvedSnapshot
         activeCPU = resolvedSnapshot.cpu
         supportedCPUs = resolvedSnapshot.supportedCPUs.isEmpty ? [resolvedSnapshot.cpu] : resolvedSnapshot.supportedCPUs
@@ -787,24 +804,14 @@ final class DebuggerSession: ObservableObject {
         }
     }
 
-    private func loadDisassembly() {
-        let capacity = 96
-        var rawLines = [ViceEngineDebuggerDisassemblyLine](repeating: ViceEngineDebuggerDisassemblyLine(),
-                                                           count: capacity)
-        var count: UInt32 = 0
-        let success = rawLines.withUnsafeMutableBufferPointer { buffer in
-            guard let baseAddress = buffer.baseAddress else {
-                return false
-            }
-            return ViceEngineDebuggerDisassemble(memorySpace.rawValue,
-                                                 EmulatorSession.currentMemoryBank,
-                                                 UInt32(disassemblyAddress),
-                                                 baseAddress,
-                                                 UInt32(buffer.count),
-                                                 &count)
-        }
-
-        guard success else {
+    private func loadDisassembly(emulator: EmulatorSession) {
+        let lines: [MacVICEDisassemblyLine]
+        do {
+            lines = try emulator.engine.debugger.disassemble(memorySpace: macVICEMemorySpace,
+                                                             bank: EmulatorSession.currentMemoryBank,
+                                                             address: UInt32(disassemblyAddress),
+                                                             count: 96)
+        } catch {
             disassembly = []
             return
         }
@@ -812,26 +819,19 @@ final class DebuggerSession: ObservableObject {
         let pc = snapshot?.programCounter
         let activeBreakpoints = Set(checkpoints.filter { $0.operations.contains(.execute) && $0.enabled }
             .flatMap { checkpoint in checkpoint.addresses })
-        disassembly = rawLines.prefix(Int(count)).map {
+        disassembly = lines.map {
             DebuggerDisassemblyLine($0,
                                     programCounter: pc,
                                     activeBreakpoints: activeBreakpoints)
         }
     }
 
-    private func loadCheckpoints() {
-        let capacity = 256
-        var rawCheckpoints = [ViceEngineDebuggerCheckpoint](repeating: ViceEngineDebuggerCheckpoint(),
-                                                            count: capacity)
-        var count: UInt32 = 0
-        let success = rawCheckpoints.withUnsafeMutableBufferPointer { buffer in
-            guard let baseAddress = buffer.baseAddress else {
-                return false
-            }
-            return ViceEngineDebuggerListCheckpoints(baseAddress, UInt32(buffer.count), &count)
+    private func loadCheckpoints(emulator: EmulatorSession) {
+        do {
+            checkpoints = try emulator.engine.debugger.listBreakpoints().map(DebuggerCheckpoint.init)
+        } catch {
+            checkpoints = []
         }
-
-        checkpoints = success ? rawCheckpoints.prefix(Int(count)).map(DebuggerCheckpoint.init) : []
     }
 
     private func loadMemory(emulator: EmulatorSession) {

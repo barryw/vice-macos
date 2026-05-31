@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import ImageIO
+import MacVICEKit
 import UniformTypeIdentifiers
 
 extension EmulatorSession {
@@ -146,7 +147,7 @@ extension EmulatorSession {
             }
     }
 
-    static func writePNG(frame: EmulatorVideoFrame, to url: URL) throws {
+    static func writePNG(frame: MacVICEVideoFrame, to url: URL) throws {
         guard frame.width > 0,
               frame.height > 0,
               frame.bytesPerRow >= frame.width * 4,

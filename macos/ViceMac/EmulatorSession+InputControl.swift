@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import GameController
+import MacVICEKit
 
 extension EmulatorSession {
     var hasGameControllers: Bool {
@@ -253,7 +254,7 @@ extension EmulatorSession {
     @discardableResult
     func handleKeyEvent(_ event: NSEvent, pressed: Bool) -> Bool {
         if !pressed, let existingKey = pressedKeys.removeValue(forKey: event.keyCode) {
-            ViceEngineSendKeyEvent(existingKey.symbol, existingKey.modifiers, false)
+            engine.sendKeyEvent(keyCode: existingKey.symbol, modifiers: existingKey.modifiers, pressed: false)
             return true
         }
 
@@ -280,10 +281,10 @@ extension EmulatorSession {
         let modifiers = ViceMacKeyMapper.modifiers(for: event)
         if let existingKey = pressedKeys.updateValue(PressedEmulatorKey(symbol: symbol, modifiers: modifiers),
                                                      forKey: event.keyCode) {
-            ViceEngineSendKeyEvent(existingKey.symbol, existingKey.modifiers, false)
+            engine.sendKeyEvent(keyCode: existingKey.symbol, modifiers: existingKey.modifiers, pressed: false)
         }
 
-        ViceEngineSendKeyEvent(symbol, modifiers, true)
+        engine.sendKeyEvent(keyCode: symbol, modifiers: modifiers, pressed: true)
         return true
     }
 
@@ -299,17 +300,17 @@ extension EmulatorSession {
         }
 
         if modifierKey.isToggle {
-            ViceEngineSendKeyEvent(modifierKey.symbol, modifierKey.modifiers, true)
-            ViceEngineSendKeyEvent(modifierKey.symbol, modifierKey.modifiers, false)
+            engine.sendKeyEvent(keyCode: modifierKey.symbol, modifiers: modifierKey.modifiers, pressed: true)
+            engine.sendKeyEvent(keyCode: modifierKey.symbol, modifiers: modifierKey.modifiers, pressed: false)
             return true
         }
 
         if let existingKey = pressedKeys.removeValue(forKey: event.keyCode) {
-            ViceEngineSendKeyEvent(existingKey.symbol, existingKey.modifiers, false)
+            engine.sendKeyEvent(keyCode: existingKey.symbol, modifiers: existingKey.modifiers, pressed: false)
         } else {
             pressedKeys[event.keyCode] = PressedEmulatorKey(symbol: modifierKey.symbol,
                                                             modifiers: modifierKey.modifiers)
-            ViceEngineSendKeyEvent(modifierKey.symbol, modifierKey.modifiers, true)
+            engine.sendKeyEvent(keyCode: modifierKey.symbol, modifiers: modifierKey.modifiers, pressed: true)
         }
 
         return true
@@ -318,17 +319,17 @@ extension EmulatorSession {
     @discardableResult
     func handleMouseMoved(deltaX: CGFloat, deltaY: CGFloat) -> Bool {
         guard isMouse1351Assigned,
-              ViceEngineIsRunning() else {
+              engine.isRunning else {
             return false
         }
 
-        return ViceEngineMoveMouse(Float(deltaX), Float(deltaY))
+        return engine.moveMouse(deltaX: deltaX, deltaY: deltaY)
     }
 
     @discardableResult
     func handleMouseButton(_ button: UInt32, pressed: Bool) -> Bool {
         guard isMouse1351Assigned,
-              ViceEngineIsRunning() else {
+              engine.isRunning else {
             return false
         }
 
@@ -339,24 +340,24 @@ extension EmulatorSession {
         }
         updateMouseControlPortValues()
 
-        return ViceEngineSetMouseButton(button, pressed)
+        return engine.setMouseButton(button, pressed: pressed)
     }
 
     func handleMouseCaptureChanged(_ captured: Bool) {
-        guard ViceEngineIsRunning() else {
+        guard engine.isRunning else {
             return
         }
 
         if !captured {
             releaseMouseButtons()
-            _ = ViceEngineResetMouse()
+            _ = engine.resetMouse()
         }
     }
 
     func releaseAllKeys() {
         pressedKeys.removeAll()
         keyboardJoystickPressedKeys.removeAll()
-        ViceEngineReleaseAllKeys()
+        engine.releaseKeyboardKeys()
         releaseMouseButtons()
 
         for device in assignedControlDevices(kind: .keyboard) {
@@ -405,10 +406,7 @@ extension EmulatorSession {
         }
 
         for chunk in chunks {
-            let didQueue = chunk.withCString { pointer in
-                ViceEngineFeedKeyboardText(pointer)
-            }
-            if !didQueue {
+            if !engine.typeText(chunk) {
                 return false
             }
         }
@@ -417,7 +415,7 @@ extension EmulatorSession {
     }
 
     var canReceiveKeyboardText: Bool {
-        ViceEngineIsRunning() && !isPaused
+        engine.isRunning && !isPaused
     }
 
     nonisolated static func keyboardTextChunks(for text: String) -> [String] {
@@ -710,7 +708,7 @@ extension EmulatorSession {
         let buttons = pressedMouseButtons
         pressedMouseButtons.removeAll()
         for button in buttons {
-            _ = ViceEngineSetMouseButton(button, false)
+            _ = engine.setMouseButton(button, pressed: false)
         }
         updateMouseControlPortValues()
     }
@@ -737,11 +735,11 @@ extension EmulatorSession {
             controlPortValues[port] = normalizedValue
         }
 
-        guard ViceEngineIsRunning() else {
+        guard engine.isRunning else {
             return
         }
 
-        _ = ViceEngineSetJoystickValue(port.joystickIndex, UInt32(normalizedValue))
+        _ = engine.setJoystickValue(port: port.joystickIndex, value: UInt32(normalizedValue))
     }
 
     private func uniqueControlDeviceName(baseName: String) -> String {
