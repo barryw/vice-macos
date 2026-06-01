@@ -2,7 +2,7 @@
 
 MacVICEKit is the embeddable Swift package for native Mac VICE integrations. It exposes the shared engine bridge, Metal display view, audio and video frame sources, input forwarding, media attachment, snapshots, and monitor/debugger APIs without requiring a consumer app to understand the MacVICE app shell.
 
-This package is dogfooded by the MacVICE app. Treat the API as internal while the app settles on the package surface; the runtime artifact is built and published with MacVICE releases.
+This package is dogfooded by the MacVICE app. Treat the API as internal while the app settles on the package surface; the release SDK is built and published with MacVICE releases.
 
 ## Add The Package
 
@@ -13,7 +13,7 @@ small SwiftPM adapter manifest so package consumers can add the repo URL
 directly, while local development can also open `MacVICEKit/Package.swift`
 independently in Xcode.
 
-The package builds the Swift and C bridge code. It does not build the VICE engine from source during package resolution. Consumer apps should use one of these runtime locations:
+The source package builds the Swift and C bridge code. It does not build the VICE engine from source during package resolution. Consumer apps should use the release SDK when they want the runtime to travel with the package. Advanced development builds can still use one of these runtime locations:
 
 - `MacVICERuntimeLocation.frameworkBundle(...)` for a bundled `MacVICERuntime.framework`.
 - `MacVICERuntimeLocation.directory(...)` for a prepared runtime directory containing `libvicemac*.dylib` files and `VICEData`.
@@ -22,23 +22,24 @@ The package builds the Swift and C bridge code. It does not build the VICE engin
 ## Release SDK
 
 Release builds produce `MacVICEKit-<version>-arm64.zip` alongside the signed
-DMG. The archive contains:
+DMG. The archive is a self-contained Swift package and contains:
 
-- A SwiftPM package root with `Package.swift`.
-- `MacVICEKit/` with the Swift API, C bridge, tests, and package README.
-- `Runtime/MacVICERuntime.framework`.
+- `Package.swift` with the `MacVICEKit` product and `MacVICERuntime` binary target.
+- `Sources/` with the Swift API and C bridge.
+- `Tests/` with the package tests.
+- `Runtime/MacVICERuntime.xcframework`.
 - `Documentation/MacVICEKit.md`.
 
-The runtime framework contains:
+The runtime xcframework contains:
 
 - `Frameworks/libvicemac*.dylib` for `x64sc`, `x128`, `xvic`, `xpet`, `xplus4`, and `vsid`.
 - `Frameworks/*.dylib` for bundled non-system runtime dependencies.
 - `Resources/VICEData` with the upstream VICE ROMs, keymaps, palettes, and data files.
 - `Resources/MacVICERuntimeManifest.json` with the version, machine targets, architecture, and source SHAs.
 
-Consumers can add the unzipped SDK folder as a local Swift package, embed
-`Runtime/MacVICERuntime.framework` in their app's `Contents/Frameworks` folder,
-and use `.automatic`; no hard-coded paths are needed.
+Consumers add the unzipped SDK folder as a local Swift package, select the
+`MacVICEKit` product, and use `.automatic`; no hard-coded paths or separate
+runtime install step are needed.
 
 The latest SDK is also uploaded with a stable asset name:
 

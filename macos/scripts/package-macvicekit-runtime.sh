@@ -19,7 +19,9 @@ SKIP_BUILD="${VICE_MAC_RUNTIME_SKIP_BUILD:-0}"
 WORK_DIR="${VICE_MAC_RUNTIME_WORK_DIR:-$DIST_DIR/runtime-stage}"
 SDK_NAME="MacVICEKit-$VERSION-arm64"
 SDK_DIR="$WORK_DIR/$SDK_NAME"
-FRAMEWORK_DIR="$SDK_DIR/Runtime/$FRAMEWORK_NAME"
+FRAMEWORK_DIR="$WORK_DIR/$FRAMEWORK_NAME"
+XCFRAMEWORK_NAME="MacVICERuntime.xcframework"
+XCFRAMEWORK_DIR="$SDK_DIR/Runtime/$XCFRAMEWORK_NAME"
 SDK_ZIP_PATH="$DIST_DIR/$SDK_NAME.zip"
 LATEST_SDK_ZIP_PATH="$DIST_DIR/MacVICEKit-latest-arm64.zip"
 
@@ -97,16 +99,24 @@ upstream_git_sha() {
 }
 
 create_framework_skeleton() {
-    local headers_dir="$FRAMEWORK_DIR/Headers"
-    local modules_dir="$FRAMEWORK_DIR/Modules"
-    local resources_dir="$FRAMEWORK_DIR/Resources"
-    local frameworks_dir="$FRAMEWORK_DIR/Frameworks"
+    local version_dir="$FRAMEWORK_DIR/Versions/A"
+    local headers_dir="$version_dir/Headers"
+    local modules_dir="$version_dir/Modules"
+    local resources_dir="$version_dir/Resources"
+    local frameworks_dir="$version_dir/Frameworks"
     local stub_source="$WORK_DIR/MacVICERuntime.c"
 
     rm -rf "$WORK_DIR" "$SDK_ZIP_PATH" "$LATEST_SDK_ZIP_PATH"
     mkdir -p "$headers_dir" "$modules_dir" "$resources_dir" "$frameworks_dir"
 
-    cat > "$FRAMEWORK_DIR/Info.plist" <<EOF
+    ln -s A "$FRAMEWORK_DIR/Versions/Current"
+    ln -s Versions/Current/$FRAMEWORK_EXECUTABLE "$FRAMEWORK_DIR/$FRAMEWORK_EXECUTABLE"
+    ln -s Versions/Current/Headers "$FRAMEWORK_DIR/Headers"
+    ln -s Versions/Current/Modules "$FRAMEWORK_DIR/Modules"
+    ln -s Versions/Current/Resources "$FRAMEWORK_DIR/Resources"
+    ln -s Versions/Current/Frameworks "$FRAMEWORK_DIR/Frameworks"
+
+    cat > "$resources_dir/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -162,7 +172,7 @@ EOF
         -current_version 1 \
         -compatibility_version 1 \
         "$stub_source" \
-        -o "$FRAMEWORK_DIR/$FRAMEWORK_EXECUTABLE"
+        -o "$version_dir/$FRAMEWORK_EXECUTABLE"
 }
 
 copy_runtime_payload() {
@@ -191,42 +201,94 @@ copy_runtime_payload() {
 }
 
 copy_sdk_payload() {
-    local package_dir="$SDK_DIR/MacVICEKit"
     local docs_dir="$SDK_DIR/Documentation"
 
-    mkdir -p "$package_dir" "$docs_dir"
-    cp "$REPO_ROOT/Package.swift" "$SDK_DIR/Package.swift"
+    mkdir -p "$SDK_DIR/Sources" "$SDK_DIR/Tests" "$SDK_DIR/Runtime" "$docs_dir"
+
+    cat > "$SDK_DIR/Package.swift" <<EOF
+// swift-tools-version: 5.9
+
+import PackageDescription
+
+let package = Package(
+    name: "MacVICEKit",
+    platforms: [
+        .macOS(.v13)
+    ],
+    products: [
+        .library(
+            name: "MacVICEKit",
+            targets: ["MacVICEKit"]
+        )
+    ],
+    targets: [
+        .binaryTarget(
+            name: "MacVICERuntime",
+            path: "Runtime/$XCFRAMEWORK_NAME"
+        ),
+        .target(
+            name: "CMacVICEEngineBridge"
+        ),
+        .target(
+            name: "MacVICEKit",
+            dependencies: [
+                "CMacVICEEngineBridge",
+                "MacVICERuntime"
+            ]
+        ),
+        .testTarget(
+            name: "MacVICEKitTests",
+            dependencies: ["MacVICEKit"]
+        )
+    ]
+)
+EOF
 
     rsync -a --delete \
         --exclude ".build" \
         --exclude ".swiftpm" \
         --exclude ".DS_Store" \
-        "$REPO_ROOT/MacVICEKit/" "$package_dir/"
+        "$REPO_ROOT/MacVICEKit/Sources/" "$SDK_DIR/Sources/"
+
+    rsync -a --delete \
+        --exclude ".build" \
+        --exclude ".swiftpm" \
+        --exclude ".DS_Store" \
+        "$REPO_ROOT/MacVICEKit/Tests/" "$SDK_DIR/Tests/"
+
+    cp "$REPO_ROOT/MacVICEKit/README.md" "$SDK_DIR/README.md"
 
     if [[ -f "$REPO_ROOT/docs/MacVICEKit.md" ]]; then
         cp "$REPO_ROOT/docs/MacVICEKit.md" "$docs_dir/MacVICEKit.md"
     fi
+}
 
-    cat > "$SDK_DIR/README.md" <<EOF
+create_runtime_xcframework() {
+    rm -rf "$XCFRAMEWORK_DIR"
+    xcodebuild -create-xcframework \
+        -framework "$FRAMEWORK_DIR" \
+        -output "$XCFRAMEWORK_DIR"
+
+    cat > "$SDK_DIR/SDK-README.md" <<EOF
 # MacVICEKit $VERSION
 
-This archive pairs the MacVICEKit Swift package with the matching signed
-MacVICERuntime.framework built from the same MacVICE release.
+This archive is a self-contained MacVICEKit Swift package. MacVICEKit owns and
+carries the matching signed MacVICERuntime binary artifact built from the same
+MacVICE release.
 
 Contents:
 
 - Package.swift
-- MacVICEKit/
-- Runtime/MacVICERuntime.framework
+- Sources/
+- Tests/
+- Runtime/MacVICERuntime.xcframework
 - Documentation/MacVICEKit.md
 
 Use it from Xcode:
 
 1. Add this folder as a local Swift package.
 2. Select the MacVICEKit product.
-3. Add Runtime/MacVICERuntime.framework to your app target.
-4. Set the framework to Embed & Sign.
-5. Use runtimeLocation: .automatic.
+3. Use runtimeLocation: .automatic.
 
 Users of apps built with this SDK do not need Homebrew, command-line VICE
 binaries, or local VICE build tools.
@@ -302,6 +364,7 @@ require_tool clang "Install Xcode command line tools."
 require_tool codesign "codesign ships with macOS."
 require_tool ditto "ditto ships with macOS."
 require_tool rsync "rsync ships with macOS."
+require_tool xcodebuild "Install Xcode."
 
 if [[ "$SKIP_BUILD" != 1 ]]; then
     VICE_MACOS_MACHINE_TARGETS="$MACHINE_TARGETS" "$SCRIPT_DIR/prepare-vicemac-runtime.sh"
@@ -310,10 +373,11 @@ fi
 mkdir -p "$DIST_DIR"
 create_framework_skeleton
 copy_runtime_payload
-copy_sdk_payload
 write_manifest
 sign_framework_payload
 verify_framework_payload
+copy_sdk_payload
+create_runtime_xcframework
 create_sdk_zip
 
 if [[ "${VICE_MAC_RUNTIME_KEEP_STAGE:-0}" != 1 ]]; then

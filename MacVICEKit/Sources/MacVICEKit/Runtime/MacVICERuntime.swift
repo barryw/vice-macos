@@ -75,7 +75,7 @@ public struct MacVICERuntime: Sendable, Equatable {
         }
 
         throw MacVICEError.runtimeNotFound(
-            "MacVICE runtime not found. Install the MacVICEKit SDK artifact, embed MacVICERuntime.framework, set MACVICE_RUNTIME_DIR, or build the native Mac VICE runtime locally."
+            "MacVICE runtime not found. Add the MacVICEKit release SDK, embed MacVICERuntime.framework, set MACVICE_RUNTIME_DIR, or build the native Mac VICE runtime locally."
         )
     }
 

@@ -546,6 +546,10 @@ verify_binary_dependencies() {
     local binary="$1"
     local dependency
 
+    if ! otool -L "$binary" >/dev/null 2>&1; then
+        return
+    fi
+
     while IFS= read -r dependency; do
         if [[ -n "$dependency" ]] && is_disallowed_runtime_dependency "$dependency"; then
             echo "Release binary has an unbundled local dependency: $binary -> $dependency" >&2
@@ -558,11 +562,17 @@ verify_release_app_dependencies() {
     local app="$1"
     local binary
 
-    for binary in "$app/Contents/MacOS"/* "$app/Contents/Frameworks"/*.dylib; do
+    for binary in "$app/Contents/MacOS"/*; do
         if [[ -f "$binary" ]]; then
             verify_binary_dependencies "$binary"
         fi
     done
+
+    if [[ -d "$app/Contents/Frameworks" ]]; then
+        while IFS= read -r -d '' binary; do
+            verify_binary_dependencies "$binary"
+        done < <(find "$app/Contents/Frameworks" -type f -print0)
+    fi
 }
 
 codesign_release_path() {
@@ -631,6 +641,31 @@ resign_embedded_dylibs() {
     done
 }
 
+resign_macvice_runtime_framework() {
+    local app="$1"
+    local runtime_framework="$app/Contents/Frameworks/MacVICERuntime.framework"
+    local runtime_executable="$runtime_framework/MacVICERuntime"
+    local dylib
+
+    if [[ ! -d "$runtime_framework" ]]; then
+        return
+    fi
+
+    echo "Re-signing MacVICE runtime in $(basename "$app")"
+
+    for dylib in "$runtime_framework/Frameworks"/*.dylib; do
+        if [[ -f "$dylib" ]]; then
+            codesign_release_path "$dylib" --preserve-metadata=identifier,flags
+        fi
+    done
+
+    if [[ -f "$runtime_executable" ]]; then
+        codesign_release_path "$runtime_executable" --preserve-metadata=identifier,flags
+    fi
+
+    codesign_release_path "$runtime_framework" --preserve-metadata=identifier,flags
+}
+
 resign_release_apps() {
     local stage_dir="$1"
     local app_name
@@ -639,6 +674,7 @@ resign_release_apps() {
     for app_name in "${RELEASE_APPS[@]}"; do
         app="$stage_dir/$app_name.app"
         resign_embedded_dylibs "$app"
+        resign_macvice_runtime_framework "$app"
         resign_sparkle_framework "$app"
         codesign_release_path "$app"
     done

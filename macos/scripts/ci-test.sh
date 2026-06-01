@@ -23,7 +23,48 @@ SCHEMES=(
     "VICE Mac VSID"
 )
 
-for scheme in "${SCHEMES[@]}"; do
+APP_PRODUCTS=(
+    x64sc
+    xvic
+    xpet
+    xplus4
+    xc16
+    xc232
+    xv364
+    x128
+    vsid
+)
+
+verify_built_app_runtime() {
+    local app_name="$1"
+    local app="$DERIVED_DATA/Build/Products/$CONFIGURATION/$app_name.app"
+    local runtime_framework="$app/Contents/Frameworks/MacVICERuntime.framework"
+
+    if [[ ! -d "$runtime_framework" ]]; then
+        echo "$app_name.app is missing MacVICERuntime.framework." >&2
+        exit 1
+    fi
+
+    if [[ ! -d "$runtime_framework/Resources/VICEData" ]]; then
+        echo "$app_name.app runtime is missing VICEData." >&2
+        exit 1
+    fi
+
+    if compgen -G "$app/Contents/Frameworks/libvicemac*.dylib" >/dev/null; then
+        echo "$app_name.app still contains loose VICE runtime dylibs." >&2
+        exit 1
+    fi
+
+    if [[ -d "$app/Contents/Resources/VICEData" ]]; then
+        echo "$app_name.app still contains loose VICEData." >&2
+        exit 1
+    fi
+}
+
+for index in "${!SCHEMES[@]}"; do
+    scheme="${SCHEMES[$index]}"
+    app_name="${APP_PRODUCTS[$index]}"
+
     xcodebuild \
         -project "$PROJECT" \
         -scheme "$scheme" \
@@ -31,6 +72,8 @@ for scheme in "${SCHEMES[@]}"; do
         -destination "$DESTINATION" \
         -derivedDataPath "$DERIVED_DATA" \
         build
+
+    verify_built_app_runtime "$app_name"
 done
 
 xcodebuild \
@@ -41,4 +84,5 @@ xcodebuild \
     -destination "$DESTINATION" \
     -derivedDataPath "$DERIVED_DATA"
 
+bash "$SCRIPT_DIR/smoke-test-macvicekit-sdk.sh"
 bash "$SCRIPT_DIR/test-release-notes.sh"

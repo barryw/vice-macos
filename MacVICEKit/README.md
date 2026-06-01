@@ -16,8 +16,9 @@ Use it when you want VICE inside another Mac app: an IDE, a debugger, an educati
 
 ## Use The Release SDK
 
-For app integrations, use the release SDK zip so the Swift package and native
-runtime are guaranteed to match:
+For app integrations, use the release SDK zip. It is one self-contained Swift
+package: the Swift API, C bridge, and matching native VICE runtime are versioned
+and shipped together.
 
 ```text
 https://github.com/barryw/vice-macos/releases/latest/download/MacVICEKit-latest-arm64.zip
@@ -33,9 +34,7 @@ Unzip the archive, then in Xcode:
 
 1. Add the unzipped folder as a local Swift package.
 2. Select the `MacVICEKit` product.
-3. Add `Runtime/MacVICERuntime.framework` to your app target.
-4. Set it to **Embed & Sign**.
-5. Use `runtimeLocation: .automatic` in your `MacVICEMachineConfiguration`.
+3. Use `runtimeLocation: .automatic` in your `MacVICEMachineConfiguration`.
 
 Users should not need Homebrew, command-line VICE binaries, shell scripts, or
 local build tools.
@@ -55,26 +54,32 @@ In Xcode:
    - Use SemVer tags once MacVICEKit starts publishing stable package versions.
 4. Select the `MacVICEKit` product.
 
-The Git package contains the Swift API and the small C bridge. It does not
-contain the native VICE runtime dylibs because those are release artifacts, not
-source-package dependencies. Pair Git checkouts with the matching release SDK
-runtime when you want a reproducible consumer build.
+The Git package contains the Swift API and the small C bridge. It does not carry
+the native VICE runtime dylibs because those are release artifacts, not source
+dependencies. Use the release SDK zip for consumer apps that should build
+without a local VICE checkout.
 
 ## Add The Runtime
 
-MacVICEKit does not build VICE during Swift Package resolution. Consumers need a prepared MacVICE runtime artifact containing:
+MacVICEKit does not build VICE during Swift Package resolution. The release SDK
+already includes the prepared runtime as `Runtime/MacVICERuntime.xcframework`.
+Xcode embeds that binary target when your app depends on the `MacVICEKit`
+product.
+
+The runtime contains:
 
 - `libvicemac*.dylib` runtime libraries.
 - Bundled runtime dependencies.
 - `VICEData` with ROMs, keymaps, palettes, and VICE data files.
 
-MacVICE publishes this as `Runtime/MacVICERuntime.framework` inside the
-MacVICEKit release SDK zip. Embed that framework in your app target when using
-the Git package flow.
+When you are developing from a Git checkout instead of the release SDK, point
+`MACVICE_RUNTIME_DIR` at a prepared runtime directory or embed
+`MacVICERuntime.framework` yourself.
 
 ## Quick Start
 
-This assumes `MacVICERuntime.framework` is embedded in your app target or `MACVICE_RUNTIME_DIR` points at a prepared runtime directory.
+This assumes you added the release SDK package to your app target, or
+`MACVICE_RUNTIME_DIR` points at a prepared runtime directory.
 
 ```swift
 import SwiftUI
@@ -123,7 +128,9 @@ That code starts `x64sc`, renders the machine, and feeds a tiny BASIC program th
 4. A direct app bundle `Frameworks` plus `VICEData` layout
 5. A local MacVICE source checkout build
 
-For IDEs and tools, the recommended distribution model is to embed `MacVICERuntime.framework` in the app bundle so users do not need Homebrew, VICE binaries, or shell setup.
+For IDEs and tools, the recommended distribution model is the release SDK zip:
+add one local Swift package and let Xcode carry the runtime binary target into
+the app.
 
 If you need a custom runtime location during development, set:
 
@@ -139,4 +146,6 @@ That directory must contain the `libvicemac*.dylib` files plus `VICEData`.
 
 ## More Documentation
 
-See [../docs/MacVICEKit.md](../docs/MacVICEKit.md) for runtime packaging details, display configuration, project folder drives, and debugger examples.
+See `docs/MacVICEKit.md` in the source checkout or
+`Documentation/MacVICEKit.md` in the release SDK for runtime packaging details,
+display configuration, project folder drives, and debugger examples.

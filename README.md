@@ -122,10 +122,11 @@ support files. The Mac apps dogfood that package so external tools can
 eventually embed the same VICE runtime without copying app internals.
 
 Release builds also publish `MacVICEKit-<version>-arm64.zip` and
-`MacVICEKit-latest-arm64.zip`, which pair the Swift package source with the
-matching signed `MacVICERuntime.framework`, bundled runtime dependencies,
-VICEData, and a manifest. See `MacVICEKit/README.md` and
-`docs/MacVICEKit.md` for consumer setup and runtime layout.
+`MacVICEKit-latest-arm64.zip`, which are self-contained Swift packages. The
+package carries the Swift API, C bridge, matching signed
+`MacVICERuntime.xcframework`, bundled runtime dependencies, VICEData, and a
+manifest. See `MacVICEKit/README.md` and `docs/MacVICEKit.md` for consumer
+setup and runtime layout.
 
 ## Updates
 
@@ -176,7 +177,7 @@ Build the release DMG:
 macos/scripts/package-vicemac-release.sh
 ```
 
-Build only the reusable runtime artifact:
+Build only the reusable MacVICEKit SDK artifact:
 
 ```sh
 macos/scripts/package-macvicekit-runtime.sh
@@ -227,7 +228,7 @@ On a green push, CI:
 1. Prepares the VICE tree and Metal toolchain.
 2. Builds and tests the native Mac apps.
 3. Packages all machine apps into one Apple Silicon DMG.
-4. Builds the reusable MacVICEKit SDK artifact with `MacVICERuntime.framework`.
+4. Builds the reusable MacVICEKit SDK artifact with `MacVICERuntime.xcframework`.
 5. Signs, notarizes, staples, and smoke-tests the DMG.
 6. Publishes a GitHub Release named `vice-mac-<VICE version>-<git sha>-1`.
 7. Uploads the DMG, MacVICEKit SDK zip, `SHA256SUMS.txt`, and `appcast.xml`.

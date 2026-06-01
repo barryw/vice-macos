@@ -16,6 +16,10 @@ default_engine_build_dir() {
 BUILD_DIR="${VICE_MACOS_ENGINE_BUILD_DIR:-$(default_engine_build_dir)}"
 PRODUCTS_DIR="$MACOS_DIR/BuildProducts"
 read -r -a MACHINE_TARGETS <<< "${VICE_MACOS_MACHINE_TARGETS:-x64sc}"
+FRAMEWORK_NAME="MacVICERuntime.framework"
+FRAMEWORK_EXECUTABLE="MacVICERuntime"
+FRAMEWORK_IDENTIFIER="com.barrywalker.MacVICERuntime"
+RUNTIME_MANIFEST_NAME="MacVICERuntimeManifest.json"
 
 export PATH="/opt/homebrew/bin:/usr/local/bin:/opt/local/bin:$PATH"
 
@@ -265,6 +269,193 @@ codesign_dylib() {
     codesign "${codesign_args[@]}"
 }
 
+runtime_version() {
+    if [[ -n "${VICE_MAC_RUNTIME_VERSION:-}" ]]; then
+        echo "$VICE_MAC_RUNTIME_VERSION"
+    else
+        "$SCRIPT_DIR/compute-vicemac-version.sh" | sed 's/^vice-mac-//'
+    fi
+}
+
+create_runtime_framework_skeleton() {
+    local framework_dir="$1"
+    local version="$2"
+    local version_dir="$framework_dir/Versions/A"
+    local headers_dir="$version_dir/Headers"
+    local modules_dir="$version_dir/Modules"
+    local resources_dir="$version_dir/Resources"
+    local frameworks_dir="$version_dir/Frameworks"
+    local stub_source="$BUILD_DIR/MacVICERuntime.c"
+
+    rm -rf "$framework_dir"
+    mkdir -p "$headers_dir" "$modules_dir" "$resources_dir" "$frameworks_dir"
+
+    ln -s A "$framework_dir/Versions/Current"
+    ln -s Versions/Current/$FRAMEWORK_EXECUTABLE "$framework_dir/$FRAMEWORK_EXECUTABLE"
+    ln -s Versions/Current/Headers "$framework_dir/Headers"
+    ln -s Versions/Current/Modules "$framework_dir/Modules"
+    ln -s Versions/Current/Resources "$framework_dir/Resources"
+    ln -s Versions/Current/Frameworks "$framework_dir/Frameworks"
+
+    cat > "$resources_dir/Info.plist" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleExecutable</key>
+    <string>$FRAMEWORK_EXECUTABLE</string>
+    <key>CFBundleIdentifier</key>
+    <string>$FRAMEWORK_IDENTIFIER</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>$FRAMEWORK_EXECUTABLE</string>
+    <key>CFBundlePackageType</key>
+    <string>FMWK</string>
+    <key>CFBundleShortVersionString</key>
+    <string>$version</string>
+    <key>CFBundleVersion</key>
+    <string>$version</string>
+    <key>MinimumOSVersion</key>
+    <string>$ENGINE_DEPLOYMENT_TARGET</string>
+</dict>
+</plist>
+EOF
+
+    cat > "$headers_dir/MacVICERuntime.h" <<EOF
+#pragma once
+
+int MacVICERuntimeArtifactVersion(void);
+EOF
+
+    cat > "$modules_dir/module.modulemap" <<EOF
+framework module MacVICERuntime {
+    umbrella header "MacVICERuntime.h"
+    export *
+    module * { export * }
+}
+EOF
+
+    cat > "$stub_source" <<EOF
+int MacVICERuntimeArtifactVersion(void)
+{
+    return 1;
+}
+EOF
+
+    clang \
+        -dynamiclib \
+        -arch arm64 \
+        -mmacosx-version-min="$ENGINE_DEPLOYMENT_TARGET" \
+        -install_name "@rpath/$FRAMEWORK_NAME/$FRAMEWORK_EXECUTABLE" \
+        -current_version 1 \
+        -compatibility_version 1 \
+        "$stub_source" \
+        -o "$version_dir/$FRAMEWORK_EXECUTABLE"
+}
+
+copy_runtime_framework_payload() {
+    local framework_dir="$1"
+    local frameworks_dir="$framework_dir/Frameworks"
+    local resources_dir="$framework_dir/Resources"
+    local target
+    local dylib_name
+    local dylib_path
+    local dependency
+
+    for target in "${MACHINE_TARGETS[@]}"; do
+        dylib_name="libvicemac${target}.dylib"
+        dylib_path="$PRODUCTS_DIR/$dylib_name"
+        if [[ ! -f "$dylib_path" ]]; then
+            echo "Missing runtime library: $dylib_path" >&2
+            exit 1
+        fi
+        cp "$dylib_path" "$frameworks_dir/$dylib_name"
+    done
+
+    for dependency in "$PRODUCTS_DIR"/*.dylib; do
+        if [[ ! -f "$dependency" ]]; then
+            continue
+        fi
+
+        case "$(basename "$dependency")" in
+            libvicemac*.dylib)
+                continue
+                ;;
+        esac
+
+        cp "$dependency" "$frameworks_dir/$(basename "$dependency")"
+    done
+
+    rsync -a --delete "$VICE_SRC/data/" "$resources_dir/VICEData/"
+}
+
+write_runtime_framework_manifest() {
+    local framework_dir="$1"
+    local version="$2"
+    local manifest="$framework_dir/Resources/$RUNTIME_MANIFEST_NAME"
+    local target
+    local first=1
+
+    cat > "$manifest" <<EOF
+{
+  "schemaVersion": 1,
+  "artifact": "$FRAMEWORK_NAME",
+  "bundleIdentifier": "$FRAMEWORK_IDENTIFIER",
+  "version": "$version",
+  "minimumMacOSVersion": "$ENGINE_DEPLOYMENT_TARGET",
+  "architecture": "arm64",
+  "macVICEGitSHA": "$(mac_git_sha)",
+  "viceUpstreamGitSHA": "$(upstream_git_sha)",
+  "machines": [
+EOF
+
+    for target in "${MACHINE_TARGETS[@]}"; do
+        if [[ "$first" == 0 ]]; then
+            printf ',\n' >> "$manifest"
+        fi
+        first=0
+        printf '    "%s"' "$target" >> "$manifest"
+    done
+
+    cat >> "$manifest" <<EOF
+
+  ]
+}
+EOF
+}
+
+sign_runtime_framework_payload() {
+    local framework_dir="$1"
+    local dylib
+
+    for dylib in "$framework_dir/Frameworks"/*.dylib; do
+        if [[ -f "$dylib" ]]; then
+            codesign_dylib "$dylib"
+        fi
+    done
+
+    codesign_dylib "$framework_dir/$FRAMEWORK_EXECUTABLE"
+    codesign_dylib "$framework_dir"
+}
+
+embed_runtime_framework_in_app() {
+    local framework_dir="$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH/$FRAMEWORK_NAME"
+    local version
+
+    if [[ -z "${TARGET_BUILD_DIR:-}" || -z "${FRAMEWORKS_FOLDER_PATH:-}" ]]; then
+        return
+    fi
+
+    version="$(runtime_version)"
+    create_runtime_framework_skeleton "$framework_dir" "$version"
+    copy_runtime_framework_payload "$framework_dir"
+    write_runtime_framework_manifest "$framework_dir" "$version"
+    sign_runtime_framework_payload "$framework_dir"
+}
+
 is_system_dylib_dependency() {
     local dependency="$1"
 
@@ -353,32 +544,6 @@ bundle_runtime_dependencies() {
     rewrite_dependency_load_paths "$binary" "$frameworks_dir"
 }
 
-copy_prepared_runtime_dependencies() {
-    local source_dir="$1"
-    local frameworks_dir="$2"
-    local dependency
-    local dependency_name
-    local copied_dependency
-
-    for dependency in "$source_dir"/*.dylib; do
-        if [[ ! -f "$dependency" ]]; then
-            continue
-        fi
-
-        dependency_name="$(basename "$dependency")"
-        case "$dependency_name" in
-            libvicemac*.dylib)
-                continue
-                ;;
-        esac
-
-        copied_dependency="$frameworks_dir/$dependency_name"
-        cp "$dependency" "$copied_dependency"
-        chmod u+w "$copied_dependency"
-        codesign_dylib "$copied_dependency"
-    done
-}
-
 build_machine_runtime_libraries() {
     local machine_target="$1"
 
@@ -431,20 +596,8 @@ for machine_target in "${MACHINE_TARGETS[@]}"; do
     bundle_runtime_dependencies "$dylib_path" "$PRODUCTS_DIR"
     codesign_dylib "$dylib_path"
 
-    if [[ -n "${TARGET_BUILD_DIR:-}" && -n "${FRAMEWORKS_FOLDER_PATH:-}" ]]; then
-        mkdir -p "$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH"
-        cp "$dylib_path" "$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH/$dylib_name"
-        copy_prepared_runtime_dependencies "$PRODUCTS_DIR" "$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH"
-        bundle_runtime_dependencies "$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH/$dylib_name" \
-            "$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH"
-        codesign_dylib "$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH/$dylib_name"
-    fi
 done
 
-
-if [[ -n "${TARGET_BUILD_DIR:-}" && -n "${UNLOCALIZED_RESOURCES_FOLDER_PATH:-}" ]]; then
-    mkdir -p "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/VICEData"
-    rsync -a --delete "$VICE_SRC/data/" "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/VICEData/"
-fi
+embed_runtime_framework_in_app
 
 write_build_metadata
