@@ -14,7 +14,33 @@ Use it when you want VICE inside another Mac app: an IDE, a debugger, an educati
 - Video frame, audio sample, drive status, cartridge status, VSID, and SID voice callbacks.
 - Monitor/debugger APIs for memory peek/poke, disassembly, breakpoints, stepping, and register updates.
 
-## Add The Package
+## Use The Release SDK
+
+For app integrations, use the release SDK zip so the Swift package and native
+runtime are guaranteed to match:
+
+```text
+https://github.com/barryw/vice-macos/releases/latest/download/MacVICEKit-latest-arm64.zip
+```
+
+For reproducible builds, use the versioned release asset instead:
+
+```text
+MacVICEKit-<version>-arm64.zip
+```
+
+Unzip the archive, then in Xcode:
+
+1. Add the unzipped folder as a local Swift package.
+2. Select the `MacVICEKit` product.
+3. Add `Runtime/MacVICERuntime.framework` to your app target.
+4. Set it to **Embed & Sign**.
+5. Use `runtimeLocation: .automatic` in your `MacVICEMachineConfiguration`.
+
+Users should not need Homebrew, command-line VICE binaries, shell scripts, or
+local build tools.
+
+## Add The Package From Git
 
 In Xcode:
 
@@ -29,7 +55,10 @@ In Xcode:
    - Use SemVer tags once MacVICEKit starts publishing stable package versions.
 4. Select the `MacVICEKit` product.
 
-MacVICEKit contains the Swift API and the small C bridge. It does not contain the native VICE runtime dylibs because those are release artifacts, not source-package dependencies.
+The Git package contains the Swift API and the small C bridge. It does not
+contain the native VICE runtime dylibs because those are release artifacts, not
+source-package dependencies. Pair Git checkouts with the matching release SDK
+runtime when you want a reproducible consumer build.
 
 ## Add The Runtime
 
@@ -39,29 +68,9 @@ MacVICEKit does not build VICE during Swift Package resolution. Consumers need a
 - Bundled runtime dependencies.
 - `VICEData` with ROMs, keymaps, palettes, and VICE data files.
 
-MacVICE publishes this as `MacVICERuntime.framework` in GitHub Release assets.
-
-For the newest runtime, download:
-
-```text
-https://github.com/barryw/vice-macos/releases/latest/download/MacVICERuntime-latest-arm64.framework.zip
-```
-
-For reproducible builds, use the versioned release asset instead:
-
-```text
-MacVICERuntime-<version>-arm64.framework.zip
-```
-
-Unzip the archive, then embed `MacVICERuntime.framework` in your app:
-
-1. Open your app target in Xcode.
-2. Go to **General > Frameworks, Libraries, and Embedded Content**.
-3. Add `MacVICERuntime.framework`.
-4. Set it to **Embed & Sign**.
-5. Use `runtimeLocation: .automatic` in your `MacVICEMachineConfiguration`.
-
-Users should not need Homebrew, command-line VICE binaries, shell scripts, or local build tools.
+MacVICE publishes this as `Runtime/MacVICERuntime.framework` inside the
+MacVICEKit release SDK zip. Embed that framework in your app target when using
+the Git package flow.
 
 ## Quick Start
 

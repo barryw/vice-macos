@@ -360,7 +360,7 @@ $(release_note_section "$notes_dir/changed.html" "CHANGED" "#102b3d" "#57c7ff")
 $(release_note_section "$notes_dir/fixed.html" "FIXED" "#302409" "#ffcf5a")
 $(release_note_section "$notes_dir/deprecated.html" "DEPRECATED" "#32151a" "#ff6b7a")
     <p style="margin:12px 0 0 0;color:#b8b8b8;font-size:12px;">
-        Package: notarized Apple Silicon DMG, SHA256 checksums, and Sparkle appcast. Bullets marked <span style="display:inline-block;padding:1px 5px;border-radius:5px;background:#263f77;color:#dce8ff;font-size:10px;font-weight:800;letter-spacing:0;">VICE</span> come from the upstream VICE tree.
+        Package: notarized Apple Silicon DMG, MacVICEKit SDK zip, SHA256 checksums, and Sparkle appcast. Bullets marked <span style="display:inline-block;padding:1px 5px;border-radius:5px;background:#263f77;color:#dce8ff;font-size:10px;font-weight:800;letter-spacing:0;">VICE</span> come from the upstream VICE tree.
     </p>
 </div>
 EOF
@@ -511,9 +511,9 @@ publish_github_release_main() {
     write_appcast "$tag" "$release_label" "$notes_file" "${dmg_artifacts[0]}" "$appcast_file"
 
     artifacts=("${dmg_artifacts[@]}")
-    runtime_artifacts=("$DIST_DIR"/*.zip)
-    if [[ "${#runtime_artifacts[@]}" -gt 0 ]]; then
-        artifacts+=("${runtime_artifacts[@]}")
+    sdk_artifacts=("$DIST_DIR"/*.zip)
+    if [[ "${#sdk_artifacts[@]}" -gt 0 ]]; then
+        artifacts+=("${sdk_artifacts[@]}")
     fi
     if [[ -f "$DIST_DIR/SHA256SUMS.txt" ]]; then
         artifacts+=("$DIST_DIR/SHA256SUMS.txt")

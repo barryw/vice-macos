@@ -121,11 +121,11 @@ URL directly while the real package stays out of the website, k8s, and app
 support files. The Mac apps dogfood that package so external tools can
 eventually embed the same VICE runtime without copying app internals.
 
-Release builds also publish `MacVICERuntime-<version>-arm64.framework.zip` and
-`MacVICERuntime-latest-arm64.framework.zip`, which contain the native VICE
-dylibs, bundled runtime dependencies, VICEData, and a manifest. See
-`MacVICEKit/README.md` and `docs/MacVICEKit.md` for consumer setup and runtime
-layout.
+Release builds also publish `MacVICEKit-<version>-arm64.zip` and
+`MacVICEKit-latest-arm64.zip`, which pair the Swift package source with the
+matching signed `MacVICERuntime.framework`, bundled runtime dependencies,
+VICEData, and a manifest. See `MacVICEKit/README.md` and
+`docs/MacVICEKit.md` for consumer setup and runtime layout.
 
 ## Updates
 
@@ -218,18 +218,19 @@ the ticket, validates the staple, and writes `SHA256SUMS.txt`.
 
 ## CI Release Flow
 
-The Woodpecker `metal-ui` pipeline runs on `macos/native-metal` and on tags
-matching `vice-mac-*`.
+The Woodpecker `metal-ui` pipeline runs on pushes to `macos/native-metal` that
+touch the native Mac app, VICE bridge, packaging, or MacVICEKit sources. Release
+tags do not trigger a second release build.
 
 On a green push, CI:
 
 1. Prepares the VICE tree and Metal toolchain.
 2. Builds and tests the native Mac apps.
 3. Packages all machine apps into one Apple Silicon DMG.
-4. Builds the reusable `MacVICERuntime.framework` artifact.
+4. Builds the reusable MacVICEKit SDK artifact with `MacVICERuntime.framework`.
 5. Signs, notarizes, staples, and smoke-tests the DMG.
 6. Publishes a GitHub Release named `vice-mac-<VICE version>-<git sha>-1`.
-7. Uploads the DMG, runtime framework zip, `SHA256SUMS.txt`, and `appcast.xml`.
+7. Uploads the DMG, MacVICEKit SDK zip, `SHA256SUMS.txt`, and `appcast.xml`.
 
 Required Woodpecker secrets:
 

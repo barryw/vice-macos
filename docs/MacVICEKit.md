@@ -19,32 +19,44 @@ The package builds the Swift and C bridge code. It does not build the VICE engin
 - `MacVICERuntimeLocation.directory(...)` for a prepared runtime directory containing `libvicemac*.dylib` files and `VICEData`.
 - `MacVICERuntimeLocation.automatic`, which checks `MACVICE_RUNTIME_DIR`, then `com.barrywalker.MacVICERuntime`, then an embedded `MacVICERuntime.framework` in the app bundle, then the app bundle's direct Frameworks/VICEData layout, then a local source checkout runtime.
 
-## Runtime Artifact
+## Release SDK
 
-Release builds produce `MacVICERuntime-<version>-arm64.framework.zip` alongside the signed DMG. The framework contains:
+Release builds produce `MacVICEKit-<version>-arm64.zip` alongside the signed
+DMG. The archive contains:
+
+- A SwiftPM package root with `Package.swift`.
+- `MacVICEKit/` with the Swift API, C bridge, tests, and package README.
+- `Runtime/MacVICERuntime.framework`.
+- `Documentation/MacVICEKit.md`.
+
+The runtime framework contains:
 
 - `Frameworks/libvicemac*.dylib` for `x64sc`, `x128`, `xvic`, `xpet`, `xplus4`, and `vsid`.
 - `Frameworks/*.dylib` for bundled non-system runtime dependencies.
 - `Resources/VICEData` with the upstream VICE ROMs, keymaps, palettes, and data files.
 - `Resources/MacVICERuntimeManifest.json` with the version, machine targets, architecture, and source SHAs.
 
-Consumers can embed `MacVICERuntime.framework` in their app's `Contents/Frameworks` folder and use `.automatic`; no hard-coded paths are needed.
+Consumers can add the unzipped SDK folder as a local Swift package, embed
+`Runtime/MacVICERuntime.framework` in their app's `Contents/Frameworks` folder,
+and use `.automatic`; no hard-coded paths are needed.
 
-The latest runtime is also uploaded with a stable asset name:
+The latest SDK is also uploaded with a stable asset name:
 
 ```text
-https://github.com/barryw/vice-macos/releases/latest/download/MacVICERuntime-latest-arm64.framework.zip
+https://github.com/barryw/vice-macos/releases/latest/download/MacVICEKit-latest-arm64.zip
 ```
 
 Use the versioned asset for reproducible releases and the `latest` asset for local setup or quick consumer onboarding.
 
-To build the runtime artifact locally:
+To build the SDK artifact locally:
 
 ```sh
 macos/scripts/package-macvicekit-runtime.sh
 ```
 
-The script builds the required native VICE dylibs unless `VICE_MAC_RUNTIME_SKIP_BUILD=1` is set. It writes both `MacVICERuntime-<version>-arm64.framework.zip` and `MacVICERuntime-latest-arm64.framework.zip`.
+The script builds the required native VICE dylibs unless
+`VICE_MAC_RUNTIME_SKIP_BUILD=1` is set. It writes both
+`MacVICEKit-<version>-arm64.zip` and `MacVICEKit-latest-arm64.zip`.
 
 ## Minimal Engine
 
