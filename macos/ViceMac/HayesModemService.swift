@@ -62,8 +62,51 @@ private enum HayesDialTarget {
     case tcp(host: String, port: NWEndpoint.Port)
 }
 
+private final class HayesModemListenerStartup: @unchecked Sendable {
+    let semaphore = DispatchSemaphore(value: 0)
+
+    private let lock = NSLock()
+    private var result: Result<Void, Error>?
+
+    func succeed() {
+        finish(.success(()))
+    }
+
+    func fail(_ error: Error) {
+        finish(.failure(error))
+    }
+
+    func wait(timeout: DispatchTime) -> Result<Void, Error>? {
+        guard semaphore.wait(timeout: timeout) == .success else {
+            return nil
+        }
+
+        lock.lock()
+        defer {
+            lock.unlock()
+        }
+
+        return result
+    }
+
+    private func finish(_ result: Result<Void, Error>) {
+        lock.lock()
+        let shouldSignal = self.result == nil
+        if shouldSignal {
+            self.result = result
+        }
+        lock.unlock()
+
+        if shouldSignal {
+            semaphore.signal()
+        }
+    }
+}
+
 final class HayesModemService: @unchecked Sendable {
     private static let defaultDialTimeout: DispatchTimeInterval = .seconds(15)
+    private static let listenerStartupAttempts = 8
+    private static let listenerStartupTimeout: DispatchTimeInterval = .milliseconds(750)
     private static let ip232Magic: UInt8 = 0xff
     private static let ip232CarrierDetect: UInt8 = 0x01
     private static let ip232RingIndicator: UInt8 = 0x02
@@ -75,6 +118,7 @@ final class HayesModemService: @unchecked Sendable {
     private static let commandDeleteBytes: Set<UInt8> = [8, 20, 127]
 
     private let queue = DispatchQueue(label: "com.barrywalker.vicemac.hayes-modem")
+    private let listenerQueue = DispatchQueue(label: "com.barrywalker.vicemac.hayes-modem.listener")
     private var configuration = NetworkModemConfiguration.standard
     private var statusHandler: ((NetworkModemRuntimeStatus) -> Void)?
     private var localListener: NWListener?
@@ -144,37 +188,16 @@ final class HayesModemService: @unchecked Sendable {
             quietMode = false
             autoAnswerRings = configuration.autoAnswerRings
 
-            let reservedPort = try Self.reserveLocalPort()
-            let listener = try NWListener(using: .tcp, on: reservedPort)
-            listener.newConnectionHandler = { [weak self] connection in
-                guard let service = self else {
-                    return
-                }
-
-                service.queue.async {
-                    service.acceptSerialConnection(connection)
-                }
-            }
-            listener.stateUpdateHandler = { [weak self] state in
-                guard let service = self else {
-                    return
-                }
-
-                service.queue.async {
-                    service.handleLocalListenerState(state)
-                }
-            }
-            listener.start(queue: queue)
-
-            localListener = listener
-            localPort = Int(reservedPort.rawValue)
+            let localSocket = try makeLocalListener()
+            localListener = localSocket.listener
+            localPort = Int(localSocket.port.rawValue)
 
             if configuration.acceptsIncomingCalls {
                 incomingListener = try makeIncomingListener(port: configuration.incomingPort)
             }
 
-            publishCurrentStatus(message: "Local modem socket on port \(reservedPort.rawValue)")
-            return Int(reservedPort.rawValue)
+            publishCurrentStatus(message: "Local modem socket on port \(localSocket.port.rawValue)")
+            return Int(localSocket.port.rawValue)
         }
     }
 
@@ -227,6 +250,67 @@ final class HayesModemService: @unchecked Sendable {
         }
 
         return endpointPort
+    }
+
+    private func makeLocalListener() throws -> (listener: NWListener, port: NWEndpoint.Port) {
+        var lastFailure: Error?
+
+        for _ in 0..<Self.listenerStartupAttempts {
+            let reservedPort = try Self.reserveLocalPort()
+            let listener = try NWListener(using: .tcp, on: reservedPort)
+            let startup = HayesModemListenerStartup()
+
+            listener.newConnectionHandler = { [weak self] connection in
+                guard let service = self else {
+                    return
+                }
+
+                service.queue.async {
+                    service.acceptSerialConnection(connection)
+                }
+            }
+            listener.stateUpdateHandler = { [weak self, weak listener] state in
+                switch state {
+                case .ready:
+                    startup.succeed()
+                case let .failed(error):
+                    startup.fail(error)
+                default:
+                    break
+                }
+
+                guard let service = self else {
+                    return
+                }
+
+                service.queue.async { [weak listener] in
+                    guard let listener,
+                          service.localListener === listener else {
+                        return
+                    }
+
+                    service.handleLocalListenerState(state)
+                }
+            }
+            listener.start(queue: listenerQueue)
+
+            switch startup.wait(timeout: .now() + Self.listenerStartupTimeout) {
+            case .success:
+                return (listener, reservedPort)
+            case let .failure(error):
+                lastFailure = error
+            case nil:
+                lastFailure = HayesModemServiceError.listenerUnavailable
+            }
+
+            listener.cancel()
+        }
+
+        if let lastFailure {
+            throw lastFailure
+        }
+
+        throw HayesModemServiceError.portReservationUnavailable
     }
 
     private func stopOnQueue(publish: Bool) {
