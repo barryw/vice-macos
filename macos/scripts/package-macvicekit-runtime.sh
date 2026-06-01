@@ -233,6 +233,18 @@ sign_framework_payload() {
     codesign_path "$FRAMEWORK_DIR"
 }
 
+verify_framework_payload() {
+    local dylib
+
+    for dylib in "$FRAMEWORK_DIR/Frameworks"/*.dylib; do
+        if [[ -f "$dylib" ]]; then
+            codesign --verify --strict --verbose=2 "$dylib"
+        fi
+    done
+    codesign --verify --strict --verbose=2 "$FRAMEWORK_DIR/$FRAMEWORK_EXECUTABLE"
+    codesign --verify --strict --verbose=2 "$FRAMEWORK_DIR"
+}
+
 create_zip() {
     (
         cd "$WORK_DIR"
@@ -255,6 +267,7 @@ create_framework_skeleton
 copy_runtime_payload
 write_manifest
 sign_framework_payload
+verify_framework_payload
 create_zip
 
 if [[ "${VICE_MAC_RUNTIME_KEEP_STAGE:-0}" != 1 ]]; then

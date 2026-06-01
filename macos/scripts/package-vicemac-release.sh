@@ -433,6 +433,7 @@ configure_xcodebuild_settings() {
     XCODEBUILD_SETTINGS+=("CURRENT_PROJECT_VERSION=$BUNDLE_VERSION")
     XCODEBUILD_SETTINGS+=("VICE_MAC_GIT_SHA=$MAC_GIT_SHA")
     XCODEBUILD_SETTINGS+=("VICE_UPSTREAM_GIT_SHA=$UPSTREAM_GIT_SHA")
+    XCODEBUILD_SETTINGS+=("CODE_SIGNING_ALLOWED=NO")
 
     # Final artifacts are signed after staging. Passing a manual identity here
     # breaks automatically signed Swift package bundles such as Waveform.
