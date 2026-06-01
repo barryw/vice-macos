@@ -32,6 +32,14 @@ kustomize edit set image ghcr.io/barryw/macvice-website=ghcr.io/barryw/macvice-w
 
 ## Deploy
 
+Create the namespace once before the pipeline deploys namespaced resources:
+
+```sh
+kubectl apply -f k8s/namespace.yaml
+```
+
+Then deploy the website resources:
+
 ```sh
 kubectl apply -k k8s
 kubectl -n macvice rollout status deployment/macvice-website
@@ -60,3 +68,6 @@ The Woodpecker Kubernetes backend must have:
 - a `woodpecker-agent` service account with deploy permissions
 - the existing `github_token` secret with permission to push to GHCR
 - a `default/ghcr-secret` pull secret that can be copied into `macvice`
+
+The pipeline expects the `macvice` namespace to already exist. Namespace
+creation is a cluster bootstrap task, not part of the app deploy.
