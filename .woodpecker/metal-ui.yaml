@@ -5,11 +5,10 @@ when:
       exclude:
         - website/**
         - k8s/**
+        - .woodpecker/metal-ui.yaml
         - .woodpecker/website.yaml
   - event: manual
     evaluate: 'CI_COMMIT_BRANCH == "macos/native-metal"'
-  - event: tag
-    ref: refs/tags/vice-mac-*
 
 labels:
   backend: local
@@ -38,14 +37,14 @@ steps:
     commands:
       - macos/scripts/package-vicemac-release.sh
     when:
-      - event: [push, manual, tag]
+      - event: [push, manual]
 
   - name: release-smoke
     image: bash
     commands:
       - macos/scripts/smoke-test-vicemac-dmg.sh
     when:
-      - event: [push, manual, tag]
+      - event: [push, manual]
 
   - name: github-release
     image: bash
@@ -57,4 +56,4 @@ steps:
     commands:
       - macos/scripts/publish-github-release.sh
     when:
-      - event: [push, tag]
+      - event: [push]
