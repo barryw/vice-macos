@@ -171,6 +171,10 @@ require_tool() {
     fi
 }
 
+clean_xcode_package_resolution_state() {
+    rm -rf "$DERIVED_DATA/SourcePackages"
+}
+
 notarization_enabled() {
     case "$NOTARIZE_MODE" in
         1|true|TRUE|yes|YES|on|ON)
@@ -702,6 +706,7 @@ configure_xcodebuild_args
 
 rm -rf "$DIST_DIR"
 mkdir -p "$DIST_DIR"
+clean_xcode_package_resolution_state
 
 for scheme in "${SCHEMES[@]}"; do
     xcodebuild \
