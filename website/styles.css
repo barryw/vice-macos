@@ -357,6 +357,10 @@ p {
   font-size: 1.08rem;
 }
 
+.qlink-site-link {
+  justify-self: start;
+}
+
 .assistant-panel {
   display: grid;
   align-content: center;
@@ -577,7 +581,8 @@ p {
   }
 
   .hero-actions,
-  .button {
+  .button,
+  .qlink-site-link {
     width: 100%;
   }
 
