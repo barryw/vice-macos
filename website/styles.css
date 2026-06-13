@@ -484,6 +484,42 @@ p {
   color: var(--text);
 }
 
+.notices-section {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(420px, 1.1fr);
+  gap: 36px;
+  max-width: var(--max);
+  margin: 0 auto;
+  padding: 8px 24px 86px;
+}
+
+.notices-heading {
+  align-self: start;
+}
+
+.notices-copy {
+  display: grid;
+  gap: 14px;
+  color: var(--muted);
+}
+
+.notices-copy p {
+  max-width: 68ch;
+}
+
+.notices-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 18px;
+  padding-top: 4px;
+  font-size: 0.95rem;
+}
+
+.notices-links a {
+  color: var(--text);
+  font-weight: 700;
+}
+
 .site-footer {
   display: flex;
   align-items: center;
@@ -497,7 +533,14 @@ p {
   font-size: 0.95rem;
 }
 
-.site-footer a {
+.footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.site-footer a,
+.footer-links a {
   color: var(--text);
   font-weight: 700;
 }
@@ -541,6 +584,7 @@ p {
   .disk-tool-layout,
   .assistant-layout,
   .qlink-layout,
+  .notices-section,
   .download-section {
     grid-template-columns: 1fr;
   }
@@ -558,7 +602,8 @@ p {
 
   .hero,
   .section,
-  .download-section {
+  .download-section,
+  .notices-section {
     padding-left: 18px;
     padding-right: 18px;
   }
