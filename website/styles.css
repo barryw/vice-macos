@@ -233,15 +233,22 @@ p {
 }
 
 .feature-card {
+  min-height: 142px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);
-  padding: 22px;
+  padding: 20px;
+}
+
+.feature-card h3 {
+  font-size: 1.04rem;
 }
 
 .feature-card p {
-  margin-top: 10px;
+  margin-top: 8px;
   color: var(--muted);
+  font-size: 0.96rem;
+  line-height: 1.42;
 }
 
 .gallery-grid {
