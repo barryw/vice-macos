@@ -21,6 +21,12 @@ struct SettingsView: View {
                 }
                 .tag(SettingsPaneID.media.rawValue)
 
+            MetadataSettingsPane()
+                .tabItem {
+                    Label("Metadata", systemImage: "tag")
+                }
+                .tag(SettingsPaneID.metadata.rawValue)
+
             SoundSettingsPane()
                 .tabItem {
                     Label("Sound", systemImage: "speaker.wave.2")
@@ -115,6 +121,7 @@ struct SettingsView: View {
 private enum SettingsPaneID: String {
     case machine
     case media
+    case metadata
     case sound
     case controls
     case keyboard
@@ -130,6 +137,8 @@ private enum SettingsPaneID: String {
             return "Machine"
         case .media:
             return "Media"
+        case .metadata:
+            return "Metadata"
         case .sound:
             return "Sound"
         case .controls:
@@ -257,104 +266,143 @@ private struct SettingsPercentSlider: View {
 }
 
 private struct AIAssistantSettingsPane: View {
+    @EnvironmentObject private var emulator: EmulatorSession
     @EnvironmentObject private var aiSettings: AIAssistantSettings
+    @EnvironmentObject private var aiDocumentLibrary: AIDocumentLibraryStore
+    @State private var selectedDocumentIDs: Set<UUID> = []
+    @State private var importErrorMessage: String?
 
     var body: some View {
-        SettingsPane {
-            Section("Provider") {
-                Picker("Provider", selection: $aiSettings.provider) {
-                    ForEach(AIAssistantProvider.allCases) { provider in
-                        Label(provider.title, systemImage: provider.systemImage)
-                            .tag(provider)
+        SettingsCustomPane {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    modelSettingsForm
+                    documentLibraryForm
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .onAppear {
+            aiSettings.refreshAvailability()
+        }
+        .onChange(of: currentMachineID) { _, _ in
+            selectedDocumentIDs = []
+        }
+        .alert("Import Failed",
+               isPresented: Binding {
+                   importErrorMessage != nil
+               } set: { isPresented in
+                   if !isPresented {
+                       importErrorMessage = nil
+                       aiDocumentLibrary.clearLastError()
+                   }
+               }) {
+            Button("OK", role: .cancel) {
+                importErrorMessage = nil
+                aiDocumentLibrary.clearLastError()
+            }
+        } message: {
+            Text(importErrorMessage ?? "")
+        }
+    }
+
+    private var modelSettingsForm: some View {
+        Form {
+            Section("AI Agent") {
+                LabeledContent("AI features") {
+                    Toggle("Enable assistant", isOn: enabledBinding)
+                }
+
+                if aiSettings.isEnabled {
+                    LabeledContent("Model type") {
+                        Picker("Model type", selection: modelBackendBinding) {
+                            Label(AIAssistantModelBackend.openAICompatible.title,
+                                  systemImage: AIAssistantModelBackend.openAICompatible.systemImage)
+                                .tag(AIAssistantModelBackend.openAICompatible)
+
+                            Label(AIAssistantModelBackend.foundation.title,
+                                  systemImage: AIAssistantModelBackend.foundation.systemImage)
+                                .tag(AIAssistantModelBackend.foundation)
+                                .disabled(true)
+                        }
+                        .labelsHidden()
+                        .frame(width: 220)
+                    }
+
+                    if aiSettings.modelBackend == .foundation {
+                        LabeledContent("Status") {
+                            Label("Paused", systemImage: "pause.circle")
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
             }
 
-            if aiSettings.provider.isServiceProvider {
-                Section("Authentication") {
-                    LabeledContent("Method") {
-                        Label("Provider API key", systemImage: "key")
-                            .foregroundStyle(.secondary)
-                    }
-
-                    LabeledContent("Account") {
-                        Button {
-                            openAuthenticationPage()
-                        } label: {
-                            Label(aiSettings.provider.authenticationButtonTitle,
-                                  systemImage: "person.crop.circle.badge.checkmark")
-                        }
-                        .disabled(aiSettings.provider.authenticationURL == nil)
-                    }
-
-                    LabeledContent("API key") {
-                        HStack(spacing: 8) {
-                            SecureField("API key", text: $aiSettings.apiKey)
-                                .textFieldStyle(.roundedBorder)
-
-                            Button {
-                                aiSettings.apiKey = ""
-                            } label: {
-                                Label("Clear API key", systemImage: "xmark.circle")
+            if aiSettings.isEnabled,
+               aiSettings.modelBackend == .openAICompatible {
+                Section("Provider") {
+                    LabeledContent("Provider") {
+                        Picker("Provider", selection: remoteProviderBinding) {
+                            ForEach(AIAssistantRemoteProvider.allCases) { provider in
+                                Label(provider.title, systemImage: provider.systemImage)
+                                    .tag(provider)
                             }
-                            .labelStyle(.iconOnly)
-                            .disabled(aiSettings.apiKey.isEmpty)
-                            .help("Clear API key")
                         }
+                        .labelsHidden()
+                        .frame(width: 220)
                     }
-                }
 
-                Section("Model") {
-                    LabeledContent("Model") {
-                        HStack(spacing: 8) {
-                            TextField("Model ID", text: $aiSettings.model)
-                                .textFieldStyle(.roundedBorder)
+                    LabeledContent("Base URL") {
+                        TextField("Base URL", text: remoteBaseURLBinding)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(minWidth: 320)
+                    }
 
-                            Menu {
-                                ForEach(modelOptions) { model in
-                                    Button(model.menuTitle) {
-                                        aiSettings.model = model.id
-                                    }
-                                }
-                            } label: {
-                                Label("Choose model", systemImage: "list.bullet")
-                            }
-                            .labelStyle(.iconOnly)
-                            .disabled(aiSettings.availableModels.isEmpty)
-                            .help("Choose fetched model")
-                        }
+                    LabeledContent(aiSettings.remoteProviderRequiresAPIKey ? "API key" : "API key") {
+                        SecureField(aiSettings.remoteProviderRequiresAPIKey ? "Required" : "Optional",
+                                    text: remoteAPIKeyBinding)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(minWidth: 320)
                     }
 
                     LabeledContent("Models") {
-                        HStack(spacing: 10) {
+                        HStack(spacing: 8) {
+                            Picker("Models", selection: selectedRemoteModelBinding) {
+                                if aiSettings.selectedRemoteModelID.isEmpty {
+                                    Text("No model selected").tag("")
+                                }
+
+                                ForEach(aiSettings.remoteModels) { model in
+                                    Text(model.displayName).tag(model.id)
+                                }
+                            }
+                            .labelsHidden()
+                            .frame(minWidth: 260)
+                            .disabled(aiSettings.remoteModels.isEmpty && aiSettings.selectedRemoteModelID.isEmpty)
+
                             Button {
                                 Task {
-                                    await aiSettings.fetchAvailableModels()
+                                    await aiSettings.fetchRemoteModels()
                                 }
                             } label: {
-                                Label("Fetch models", systemImage: "arrow.clockwise")
+                                Label("Refresh", systemImage: "arrow.clockwise")
                             }
-                            .disabled(!aiSettings.canFetchModels)
+                            .disabled(aiSettings.isFetchingRemoteModels)
 
-                            if aiSettings.isFetchingModels {
+                            if aiSettings.isFetchingRemoteModels {
                                 ProgressView()
                                     .controlSize(.small)
                             }
-
-                            if let message = aiSettings.modelFetchMessage {
-                                Text(message)
-                                    .font(.caption)
-                                    .foregroundStyle(modelStatusColor)
-                                    .lineLimit(1)
-                                    .truncationMode(.tail)
-                            }
                         }
                     }
-                }
-            } else {
-                Section("Assistant") {
-                    LabeledContent("Toolbar") {
-                        SettingsValueText("Hidden")
+
+                    LabeledContent("Connection") {
+                        Label(aiSettings.remoteConnectionStatus.title,
+                              systemImage: aiSettings.remoteConnectionStatus.systemImage)
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(remoteConnectionColor)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
             }
@@ -367,46 +415,335 @@ private struct AIAssistantSettingsPane: View {
                 }
 
                 LabeledContent("VICE tools") {
-                    SettingsValueText("Input and memory tools enabled", lineLimit: nil)
+                    SettingsValueText("Input, memory, debugger, display color, VICE resource, and indexed document tools available to the selected model", lineLimit: nil)
                         .fixedSize(horizontal: false, vertical: true)
+                }
+
+                LabeledContent("Foundation") {
+                    HStack(spacing: 10) {
+                        Label(foundationAvailabilityTitle,
+                              systemImage: foundationAvailabilityImage)
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(.secondary)
+
+                        Button {
+                            aiSettings.refreshAvailability()
+                        } label: {
+                            Label("Refresh", systemImage: "arrow.clockwise")
+                        }
+                    }
                 }
             }
         }
+        .formStyle(.grouped)
     }
 
-    private var modelOptions: [AIAssistantModel] {
-        let selectedModel = aiSettings.model.trimmingCharacters(in: .whitespacesAndNewlines)
-        var options = aiSettings.availableModels
-        if !selectedModel.isEmpty,
-           !options.contains(where: { $0.id == selectedModel }) {
-            options.insert(AIAssistantModel(id: selectedModel), at: 0)
-        }
+    private var documentLibraryForm: some View {
+        Form {
+            Section("Document Library") {
+                LabeledContent("Machine") {
+                    Label(emulator.machineDisplayName, systemImage: "cpu")
+                        .foregroundStyle(.secondary)
+                }
 
-        return options
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 8) {
+                        Text("Books")
+                            .font(.callout.weight(.medium))
+
+                        Spacer()
+
+                        Button {
+                            chooseDocuments()
+                        } label: {
+                            Label("Add", systemImage: "plus")
+                        }
+                        .disabled(aiDocumentLibrary.isImporting)
+
+                        Button {
+                            removeSelectedDocuments()
+                        } label: {
+                            Label("Remove", systemImage: "minus")
+                        }
+                        .disabled(selectedDocumentIDs.isEmpty || aiDocumentLibrary.isImporting)
+                    }
+
+                    SettingsTableContainer(minHeight: 250) {
+                        List(selection: $selectedDocumentIDs) {
+                            ForEach(filteredDocuments) { document in
+                                AIDocumentLibrarySettingsRow(document: document)
+                                    .tag(document.id)
+                            }
+                        }
+                        .listStyle(.inset)
+                        .overlay {
+                            if filteredDocuments.isEmpty {
+                                ContentUnavailableView("No Books",
+                                                       systemImage: "book.closed")
+                            }
+                        }
+                    } footer: {
+                        AIDocumentLibraryFooter(documents: filteredDocuments,
+                                                isImporting: aiDocumentLibrary.isImporting)
+                    }
+                }
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private var enabledBinding: Binding<Bool> {
+        Binding {
+            aiSettings.isEnabled
+        } set: { enabled in
+            aiSettings.setEnabled(enabled)
+        }
+    }
+
+    private var modelBackendBinding: Binding<AIAssistantModelBackend> {
+        Binding {
+            aiSettings.modelBackend
+        } set: { backend in
+            aiSettings.setModelBackend(backend)
+        }
+    }
+
+    private var remoteProviderBinding: Binding<AIAssistantRemoteProvider> {
+        Binding {
+            aiSettings.remoteProvider
+        } set: { provider in
+            aiSettings.setRemoteProvider(provider)
+        }
+    }
+
+    private var remoteBaseURLBinding: Binding<String> {
+        Binding {
+            aiSettings.remoteBaseURLString
+        } set: { baseURLString in
+            aiSettings.setRemoteBaseURLString(baseURLString)
+        }
+    }
+
+    private var remoteAPIKeyBinding: Binding<String> {
+        Binding {
+            aiSettings.credential(for: aiSettings.remoteProvider)
+        } set: { apiKey in
+            aiSettings.setCredential(apiKey, for: aiSettings.remoteProvider)
+        }
+    }
+
+    private var selectedRemoteModelBinding: Binding<String> {
+        Binding {
+            aiSettings.selectedRemoteModelID
+        } set: { modelID in
+            aiSettings.setSelectedRemoteModelID(modelID)
+        }
     }
 
     private var toolbarStatusTitle: String {
-        aiSettings.isConfigured ? "Assistant visible" : "Hidden until provider, API key, and model are set"
+        if aiSettings.isConfigured {
+            return "Assistant visible"
+        }
+
+        if !aiSettings.isEnabled {
+            return "Hidden until AI features are enabled"
+        }
+
+        switch aiSettings.modelBackend {
+        case .foundation:
+            return "Hidden because Foundation is paused"
+        case .openAICompatible:
+            if aiSettings.remoteProviderRequiresAPIKey,
+               aiSettings.credential(for: aiSettings.remoteProvider).isEmpty {
+                return "Hidden until an API key is saved"
+            }
+
+            if aiSettings.selectedRemoteModelID.isEmpty {
+                return "Hidden until a model is selected"
+            }
+
+            return "Hidden until the provider is configured"
+        }
     }
 
     private var toolbarStatusImage: String {
         aiSettings.isConfigured ? "checkmark.circle.fill" : "eye.slash"
     }
 
-    private var modelStatusColor: Color {
-        guard let message = aiSettings.modelFetchMessage else {
-            return .secondary
+    private var remoteConnectionColor: Color {
+        if aiSettings.remoteConnectionStatus.isConnected {
+            return .green
         }
 
-        return message.hasPrefix("Fetched") ? .green : .secondary
+        if aiSettings.remoteConnectionStatus.isFailed {
+            return .orange
+        }
+
+        return .secondary
     }
 
-    private func openAuthenticationPage() {
-        guard let url = aiSettings.provider.authenticationURL else {
+    private var foundationAvailabilityTitle: String {
+        "Paused; \(aiSettings.availability.title)"
+    }
+
+    private var foundationAvailabilityImage: String {
+        aiSettings.availability.systemImage
+    }
+
+    private var filteredDocuments: [AIDocumentRecord] {
+        aiDocumentLibrary.documents(for: currentMachineID)
+    }
+
+    private var currentMachineID: String {
+        emulator.machine.id.rawValue
+    }
+
+    private func chooseDocuments() {
+        let panel = NSOpenPanel()
+        panel.title = "Add Documentation"
+        panel.prompt = "Add"
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = true
+        panel.allowedContentTypes = [.pdf]
+
+        NSApp.activate(ignoringOtherApps: true)
+        panel.center()
+
+        guard panel.runModal() == .OK,
+              !panel.urls.isEmpty else {
             return
         }
 
-        NSWorkspace.shared.open(url)
+        Task {
+            await aiDocumentLibrary.importPDFs(panel.urls,
+                                               machineID: currentMachineID)
+            if let message = aiDocumentLibrary.lastErrorMessage {
+                importErrorMessage = message
+            }
+        }
+    }
+
+    private func removeSelectedDocuments() {
+        aiDocumentLibrary.removeDocuments(ids: selectedDocumentIDs)
+        selectedDocumentIDs = []
+    }
+}
+
+private struct AIDocumentLibrarySettingsRow: View {
+    let document: AIDocumentRecord
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: statusSystemImage)
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(statusColor)
+                .frame(width: 22)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(document.title)
+                    .font(.body.weight(.medium))
+                    .lineLimit(1)
+
+                Text(document.originalFilename)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+
+            Spacer(minLength: 10)
+
+            Label(statusTitle, systemImage: statusSystemImage)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(statusColor)
+                .labelStyle(.titleAndIcon)
+                .lineLimit(1)
+                .frame(width: 132, alignment: .leading)
+
+            Text("\(document.pageCount) pages")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+                .frame(width: 70, alignment: .trailing)
+
+            Text("\(document.chunkCount) chunks")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+                .frame(width: 80, alignment: .trailing)
+        }
+        .padding(.vertical, 4)
+        .help(helpText)
+    }
+
+    private var statusTitle: String {
+        switch document.status {
+        case .indexed:
+            return "Ready to search"
+        case .failed:
+            return "Failed"
+        }
+    }
+
+    private var statusSystemImage: String {
+        switch document.status {
+        case .indexed:
+            return "checkmark.circle.fill"
+        case .failed:
+            return "exclamationmark.triangle.fill"
+        }
+    }
+
+    private var statusColor: Color {
+        switch document.status {
+        case .indexed:
+            return .green
+        case .failed:
+            return .orange
+        }
+    }
+
+    private var helpText: String {
+        if let errorMessage = document.errorMessage,
+           !errorMessage.isEmpty {
+            return errorMessage
+        }
+
+        return "\(document.title) indexed and ready to search."
+    }
+}
+
+private struct AIDocumentLibraryFooter: View {
+    let documents: [AIDocumentRecord]
+    let isImporting: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if isImporting {
+                ProgressView()
+                    .controlSize(.small)
+                Text("Indexing")
+                    .foregroundStyle(.secondary)
+            } else {
+                Label("\(readyCount) ready", systemImage: "checkmark.circle")
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Label("\(chunkCount) chunks", systemImage: "text.page")
+                .foregroundStyle(.secondary)
+        }
+        .font(.caption)
+    }
+
+    private var readyCount: Int {
+        documents.filter { $0.status == .indexed }.count
+    }
+
+    private var chunkCount: Int {
+        documents.reduce(0) { $0 + $1.chunkCount }
     }
 }
 
@@ -974,6 +1311,12 @@ private struct NetworkSettingsPane: View {
             }
 
             Section("Dialing") {
+                LabeledContent("Default host") {
+                    TextField("Host", text: $emulator.networkModem.defaultDialHost)
+                        .textFieldStyle(.roundedBorder)
+                        .disabled(!emulator.networkModem.isEnabled)
+                }
+
                 LabeledContent("Default port") {
                     TextField("Port",
                               value: $emulator.networkModem.defaultDialPort,
@@ -1191,30 +1534,31 @@ private struct ControlSettingsPane: View {
                 SettingsTableContainer(minHeight: 245) {
                     Table(emulator.controlDevices, selection: selectedDeviceIDBinding) {
                         TableColumn("Name") { device in
-                            HStack(spacing: 6) {
-                                Label(device.name, systemImage: device.systemImage)
+                            controlDeviceTableCell(for: device) {
+                                HStack(spacing: 6) {
+                                    Label(device.name, systemImage: device.systemImage)
 
-                                if !emulator.connectionState(for: device).isConnected {
-                                    Image(systemName: "exclamationmark.triangle")
-                                        .foregroundStyle(.orange)
-                                        .help(emulator.connectionState(for: device).title)
+                                    if !emulator.connectionState(for: device).isConnected {
+                                        Image(systemName: "exclamationmark.triangle")
+                                            .foregroundStyle(.orange)
+                                            .help(emulator.connectionState(for: device).title)
+                                    }
                                 }
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(Rectangle())
-                            .onTapGesture(count: 2) {
-                                editDevice(device)
                             }
                         }
 
                         TableColumn("Type") { device in
-                            Text(device.kind.title)
-                                .foregroundStyle(.secondary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .contentShape(Rectangle())
-                                .onTapGesture(count: 2) {
-                                    editDevice(device)
-                                }
+                            controlDeviceTableCell(for: device) {
+                                Text(device.kind.title)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+
+                        TableColumn("Hardware") { device in
+                            controlDeviceTableCell(for: device) {
+                                SettingsValueText(emulator.hardwareTitle(for: device),
+                                                  truncationMode: .middle)
+                            }
                         }
                     }
                 } footer: {
@@ -1301,6 +1645,22 @@ private struct ControlSettingsPane: View {
         }
     }
 
+    private func controlDeviceTableCell<Content: View>(
+        for device: ControlDeviceConfiguration,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        content()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .overlay {
+                ControlDeviceCellClickHandler {
+                    selectedDeviceID = device.id
+                } onDoubleClick: {
+                    editDevice(device)
+                }
+            }
+    }
+
     private var selectedDeviceIDBinding: Binding<UUID?> {
         Binding {
             if let selectedDeviceID,
@@ -1354,6 +1714,53 @@ private struct ControlSettingsPane: View {
         emulator.removeControlDevice(id: device.id)
         selectedDeviceID = emulator.controlDevices.first?.id
         removalCandidate = nil
+    }
+}
+
+private struct ControlDeviceCellClickHandler: NSViewRepresentable {
+    let onSelect: () -> Void
+    let onDoubleClick: () -> Void
+
+    func makeNSView(context: Context) -> ClickView {
+        let view = ClickView()
+        view.onSelect = onSelect
+        view.onDoubleClick = onDoubleClick
+        return view
+    }
+
+    func updateNSView(_ nsView: ClickView, context: Context) {
+        nsView.onSelect = onSelect
+        nsView.onDoubleClick = onDoubleClick
+    }
+
+    final class ClickView: NSView {
+        var onSelect: () -> Void = {}
+        var onDoubleClick: () -> Void = {}
+
+        override func mouseDown(with event: NSEvent) {
+            if let tableView = enclosingTableView {
+                window?.makeFirstResponder(tableView)
+            }
+
+            onSelect()
+
+            if event.clickCount >= 2 {
+                onDoubleClick()
+            }
+        }
+
+        private var enclosingTableView: NSTableView? {
+            var view = superview
+            while let currentView = view {
+                if let tableView = currentView as? NSTableView {
+                    return tableView
+                }
+
+                view = currentView.superview
+            }
+
+            return nil
+        }
     }
 }
 
@@ -1453,8 +1860,9 @@ private struct ControlDeviceEditorSheet: View {
             Form {
                 Section("Device") {
                     LabeledContent("Name") {
-                        TextField("Name", text: $device.name)
+                        TextField("", text: $device.name)
                             .textFieldStyle(.roundedBorder)
+                            .accessibilityLabel("Name")
                     }
 
                     LabeledContent("Type") {
@@ -1502,7 +1910,7 @@ private struct ControlDeviceEditorSheet: View {
         case .keyboard:
             return 460
         case .joystick:
-            return 560
+            return 610
         case .mouse1351:
             return 260
         }
@@ -1533,12 +1941,33 @@ private struct GameControllerJoystickMappingEditor: View {
     @EnvironmentObject private var emulator: EmulatorSession
     @Binding var mapping: GameControllerJoystickMapping
 
+    private static let legacyControllerTagPrefix = "legacy:"
+
     var body: some View {
         Picker("Hardware", selection: preferredControllerBinding) {
             Text("Any connected controller").tag("")
 
-            ForEach(emulator.sortedGameControllerNames, id: \.self) { name in
-                Text(name).tag(name)
+            if let missingControllerSelection {
+                Text(missingControllerSelection.title).tag(missingControllerSelection.tag)
+            }
+
+            ForEach(emulator.sortedGameControllers) { controller in
+                Text(controller.title).tag(controller.id)
+            }
+        }
+        .onAppear(perform: upgradeLegacyControllerSelection)
+        .onChange(of: emulator.gameControllers) { _, _ in
+            upgradeLegacyControllerSelection()
+        }
+
+        LabeledContent("Identify") {
+            HStack(spacing: 8) {
+                GameControllerHardwareCaptureButton(mapping: $mapping,
+                                                    deadZone: mapping.deadZone)
+
+                if let selectedController {
+                    SettingsValueText(selectedController.detailTitle)
+                }
             }
         }
 
@@ -1563,6 +1992,7 @@ private struct GameControllerJoystickMappingEditor: View {
         ForEach(JoystickAction.allCases) { action in
             LabeledContent(action.title) {
                 JoystickControlCaptureButton(control: controlBinding(for: action),
+                                             preferredControllerIdentifier: mapping.preferredControllerIdentifier,
                                              preferredControllerName: mapping.preferredControllerName,
                                              deadZone: mapping.deadZone)
             }
@@ -1571,10 +2001,74 @@ private struct GameControllerJoystickMappingEditor: View {
 
     private var preferredControllerBinding: Binding<String> {
         Binding {
-            mapping.preferredControllerName ?? ""
-        } set: { name in
-            mapping.preferredControllerName = name.isEmpty ? nil : name
+            preferredControllerTag
+        } set: { tag in
+            if tag.isEmpty {
+                mapping.setPreferredController(nil)
+                return
+            }
+
+            if let controller = emulator.connectedGameController(id: tag) {
+                mapping.setPreferredController(controller)
+                return
+            }
+
+            if let legacyName = legacyControllerName(from: tag) {
+                mapping.preferredControllerIdentifier = nil
+                mapping.preferredControllerName = legacyName
+            }
         }
+    }
+
+    private var preferredControllerTag: String {
+        if let selectedController {
+            return selectedController.id
+        }
+
+        if let preferredControllerIdentifier = mapping.preferredControllerIdentifier {
+            return preferredControllerIdentifier
+        }
+
+        if let preferredControllerName = mapping.preferredControllerName {
+            return legacyControllerTag(for: preferredControllerName)
+        }
+
+        return ""
+    }
+
+    private var selectedController: ConnectedGameController? {
+        emulator.preferredGameController(for: mapping)
+    }
+
+    private var missingControllerSelection: (tag: String, title: String)? {
+        guard selectedController == nil,
+              let preferredControllerName = mapping.preferredControllerName else {
+            return nil
+        }
+
+        return (preferredControllerTag, "Missing \(preferredControllerName)")
+    }
+
+    private func upgradeLegacyControllerSelection() {
+        guard mapping.preferredControllerIdentifier == nil,
+              mapping.preferredControllerName != nil,
+              let controller = emulator.preferredGameController(for: mapping) else {
+            return
+        }
+
+        mapping.setPreferredController(controller)
+    }
+
+    private func legacyControllerTag(for name: String) -> String {
+        "\(Self.legacyControllerTagPrefix)\(name)"
+    }
+
+    private func legacyControllerName(from tag: String) -> String? {
+        guard tag.hasPrefix(Self.legacyControllerTagPrefix) else {
+            return nil
+        }
+
+        return String(tag.dropFirst(Self.legacyControllerTagPrefix.count))
     }
 
     private func controlBinding(for action: JoystickAction) -> Binding<GameControllerControl> {
@@ -1590,19 +2084,78 @@ private struct GameControllerJoystickMappingEditor: View {
     }
 
     private var connectionState: ControlDeviceConnectionState {
-        if let preferredControllerName = mapping.preferredControllerName {
-            return emulator.gameControllerNames.contains(preferredControllerName)
-                ? .connected
-                : .unavailable("Missing \(preferredControllerName)")
+        emulator.connectionState(for: mapping)
+    }
+}
+
+private struct GameControllerHardwareCaptureButton: View {
+    @EnvironmentObject private var emulator: EmulatorSession
+    @Binding var mapping: GameControllerJoystickMapping
+
+    let deadZone: Double
+
+    @State private var isCapturing = false
+    @State private var captureTask: Task<Void, Never>?
+
+    var body: some View {
+        Button {
+            startCapturing()
+        } label: {
+            Label(isCapturing ? "Press a Button" : "Select by Input",
+                  systemImage: isCapturing ? "record.circle" : "gamecontroller")
+                .frame(minWidth: 150)
+        }
+        .disabled(!emulator.hasGameControllers && !isCapturing)
+        .help("Press any connected controller button or direction to select that hardware")
+        .onDisappear {
+            stopCapturing()
+        }
+    }
+
+    private func startCapturing() {
+        guard !isCapturing,
+              emulator.hasGameControllers else {
+            return
         }
 
-        return emulator.hasGameControllers ? .connected : .unavailable("No controller connected")
+        isCapturing = true
+        captureTask = Task { @MainActor in
+            while !Task.isCancelled {
+                if let controller = capturedController() {
+                    mapping.setPreferredController(controller)
+                    stopCapturing()
+                    return
+                }
+
+                try? await Task.sleep(for: .milliseconds(25))
+            }
+        }
+    }
+
+    private func stopCapturing() {
+        isCapturing = false
+        captureTask?.cancel()
+        captureTask = nil
+    }
+
+    private func capturedController() -> ConnectedGameController? {
+        let deadZone = Float(deadZone)
+        let controllers = EmulatorSession.connectedGameControllers(for: GCController.controllers())
+
+        for controller in controllers {
+            if GameControllerControl.capturedControl(from: controller.controller, deadZone: deadZone) != nil {
+                return controller.descriptor
+            }
+        }
+
+        return nil
     }
 }
 
 private struct JoystickControlCaptureButton: View {
     @Binding var control: GameControllerControl
 
+    let preferredControllerIdentifier: String?
     let preferredControllerName: String?
     let deadZone: Double
 
@@ -1648,26 +2201,24 @@ private struct JoystickControlCaptureButton: View {
 
     private func capturedControl() -> GameControllerControl? {
         let deadZone = Float(deadZone)
-        let controllers = GCController.controllers()
-        let preferredControllers: [GCController]
+        let controllers = EmulatorSession.connectedGameControllers(for: GCController.controllers())
+        let preferredControllers: [(controller: GCController, descriptor: ConnectedGameController)]
 
-        if let preferredControllerName {
-            preferredControllers = controllers.filter { displayName(for: $0) == preferredControllerName }
+        if let preferredControllerIdentifier {
+            preferredControllers = controllers.filter { $0.descriptor.id == preferredControllerIdentifier }
+        } else if let preferredControllerName {
+            preferredControllers = controllers.filter { $0.descriptor.vendorName == preferredControllerName }
         } else {
             preferredControllers = controllers
         }
 
         for controller in preferredControllers {
-            if let control = GameControllerControl.capturedControl(from: controller, deadZone: deadZone) {
+            if let control = GameControllerControl.capturedControl(from: controller.controller, deadZone: deadZone) {
                 return control
             }
         }
 
         return nil
-    }
-
-    private func displayName(for controller: GCController) -> String {
-        controller.vendorName ?? "Game Controller"
     }
 }
 
@@ -2045,4 +2596,6 @@ private struct SettingsPane<Content: View>: View {
     SettingsView()
         .environmentObject(EmulatorSession())
         .environmentObject(AIAssistantSettings())
+        .environmentObject(AIDocumentLibraryStore(rootURL: FileManager.default.temporaryDirectory.appendingPathComponent("ViceMacPreviewAIDocuments", isDirectory: true)))
+        .environmentObject(MetadataIngestionSettings())
 }

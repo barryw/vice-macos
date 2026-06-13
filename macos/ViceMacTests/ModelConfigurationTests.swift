@@ -1,12 +1,52 @@
 import AppKit
 import CoreGraphics
+import CoreText
 import Darwin
 import Foundation
+import FoundationModels
 import MacVICEKit
 @preconcurrency import Network
 import XCTest
+import zlib
 
 final class ModelConfigurationTests: XCTestCase {
+    @MainActor
+    func testAIDocumentLibraryImportsSearchablePDFAndReturnsContext() async throws {
+        let rootURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ViceMacAIDocumentLibraryTests-\(UUID().uuidString)", isDirectory: true)
+        let pdfURL = rootURL.appendingPathComponent("Mapping Test.pdf")
+        try FileManager.default.createDirectory(at: rootURL,
+                                                withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.removeItem(at: rootURL)
+        }
+
+        let pdfText = """
+        C64 SID volume and filter control are mapped near $D418. The low nybble of $D418 controls volume from 0 to 15.
+        A BASIC program can use POKE 54296,15 to set the SID volume to the maximum value before playing sound.
+        This test text is intentionally long enough to pass the searchable PDF threshold without relying on OCR.
+        """
+        try writeSearchablePDF(text: pdfText, to: pdfURL)
+
+        let store = AIDocumentLibraryStore(rootURL: rootURL.appendingPathComponent("Library", isDirectory: true))
+        let imported = await store.importPDFs([pdfURL],
+                                              machineID: MachineID.x64sc.rawValue)
+
+        XCTAssertEqual(imported.count, 1)
+        XCTAssertEqual(store.documents(for: MachineID.x64sc.rawValue).first?.status, .indexed)
+
+        let matches = try store.search(machineID: MachineID.x64sc.rawValue,
+                                       query: "SID volume D418",
+                                       limit: 5)
+        XCTAssertFalse(matches.isEmpty)
+
+        let context = try XCTUnwrap(store.context(machineID: MachineID.x64sc.rawValue,
+                                                  chunkID: matches[0].chunkID,
+                                                  before: 0,
+                                                  after: 0))
+        XCTAssertTrue(context.chunks.map(\.text).joined(separator: " ").contains("$D418"))
+    }
+
     func testDriveConfigurationDecodesLegacyValues() throws {
         let json = """
         {
@@ -344,7 +384,7 @@ final class ModelConfigurationTests: XCTestCase {
         let modem = NetworkModemConfiguration(isEnabled: true,
                                               interface: .turbo232,
                                               baudRate: 38400,
-                                              transportMode: .raw,
+                                              transportMode: .telnet,
                                               acceptsIncomingCalls: false,
                                               incomingPort: 6400,
                                               autoAnswerRings: 0,
@@ -366,7 +406,7 @@ final class ModelConfigurationTests: XCTestCase {
         let modem = NetworkModemConfiguration(isEnabled: true,
                                               interface: .swiftLink,
                                               baudRate: 9600,
-                                              transportMode: .raw,
+                                              transportMode: .telnet,
                                               acceptsIncomingCalls: false,
                                               incomingPort: 6400,
                                               autoAnswerRings: 0,
@@ -445,6 +485,90 @@ final class ModelConfigurationTests: XCTestCase {
 
         XCTAssertEqual(modem.supportedBaudRates, [300, 1200, 2400])
         XCTAssertEqual(modem.baudRate, 2400)
+    }
+
+    func testQLinkReloadedModemRequirementsAcceptPreset() {
+        let modem = QLinkReloadedModemRequirements.preset(preservingValuesFrom: .standard)
+
+        XCTAssertTrue(QLinkReloadedModemRequirements.isCompatible(modem, for: .x64sc))
+        XCTAssertEqual(modem.interface, .userPort)
+        XCTAssertEqual(modem.baudRate, 1200)
+        XCTAssertEqual(modem.transportMode, .raw)
+        XCTAssertEqual(modem.defaultDialHost, "q-link.net")
+        XCTAssertEqual(modem.defaultDialPort, 5190)
+        XCTAssertTrue(modem.verboseResultCodes)
+        XCTAssertFalse(modem.connectResultIncludesBaudRate)
+    }
+
+    func testQLinkReloadedModemRequirementsRejectIncompatibleUserSettings() {
+        let modem = NetworkModemConfiguration(isEnabled: true,
+                                              interface: .swiftLink,
+                                              baudRate: 9600,
+                                              transportMode: .telnet,
+                                              acceptsIncomingCalls: false,
+                                              incomingPort: 6400,
+                                              autoAnswerRings: 0,
+                                              echoCommands: true,
+                                              verboseResultCodes: false,
+                                              defaultDialPort: 23,
+                                              defaultDialHost: "bbs.example",
+                                              aciaBaseAddress: .de00)
+
+        let issues = QLinkReloadedModemRequirements.incompatibilities(in: modem, for: .x64sc)
+
+        XCTAssertTrue(issues.contains("Hardware is SwiftLink, not User Port"))
+        XCTAssertTrue(issues.contains("Speed is 9600 baud, not 1200 baud"))
+        XCTAssertTrue(issues.contains("Connection is Telnet, not Raw TCP"))
+        XCTAssertTrue(issues.contains("Default host is bbs.example, not q-link.net"))
+        XCTAssertTrue(issues.contains("Default port is 23, not 5190"))
+        XCTAssertTrue(issues.contains("Verbose result codes are off"))
+        XCTAssertTrue(issues.contains("CONNECT response includes baud rate"))
+        XCTAssertFalse(QLinkReloadedModemRequirements.isCompatible(modem, for: .x64sc))
+    }
+
+    func testQLinkReloadedDriveRequirementsAcceptWritableDrive8() {
+        let drives = QLinkReloadedDriveRequirements.preset(preservingValuesFrom: EmulatedMachine.x64sc.defaultDriveConfigurations(),
+                                                           for: .x64sc)
+
+        XCTAssertTrue(QLinkReloadedDriveRequirements.isCompatible(drives, for: .x64sc))
+        let drive8 = drives.first { $0.unit == 8 }
+        XCTAssertEqual(drive8?.storageKind, .diskImage)
+        XCTAssertEqual(drive8?.driveType, .c1541)
+        XCTAssertFalse(drive8?.protectsInsertedDisks ?? true)
+    }
+
+    func testQLinkReloadedDrivePresetOnlyChangesDrive8Requirements() {
+        var drives = EmulatedMachine.x64sc.defaultDriveConfigurations()
+        drives[0].soundEnabled = true
+        drives[1].isAttached = true
+        drives[1].protectsInsertedDisks = true
+
+        let patchedDrives = QLinkReloadedDriveRequirements.preset(preservingValuesFrom: drives, for: .x64sc)
+
+        XCTAssertFalse(patchedDrives[0].protectsInsertedDisks)
+        XCTAssertTrue(patchedDrives[0].soundEnabled)
+        XCTAssertEqual(patchedDrives[1], drives[1])
+    }
+
+    func testQLinkReloadedDriveRequirementsRejectProtectedDrive8() {
+        let drives = EmulatedMachine.x64sc.defaultDriveConfigurations()
+
+        let issues = QLinkReloadedDriveRequirements.incompatibilities(in: drives, for: .x64sc)
+
+        XCTAssertTrue(issues.contains("Drive 8 protects inserted disks"))
+        XCTAssertFalse(QLinkReloadedDriveRequirements.isCompatible(drives, for: .x64sc))
+    }
+
+    func testQLinkReloadedIncompatibleSettingsMessageGroupsIssues() {
+        let message = QLinkReloadedServiceError.incompatibleSettings(
+            modemIssues: ["Connection is Telnet, not Raw TCP"],
+            driveIssues: ["Drive 8 protects inserted disks"]
+        ).localizedDescription
+
+        XCTAssertTrue(message.contains("VICE Mac did not change them"))
+        XCTAssertTrue(message.contains("Modem:\n- Connection is Telnet, not Raw TCP"))
+        XCTAssertTrue(message.contains("Drive:\n- Drive 8 protects inserted disks"))
+        XCTAssertTrue(message.contains("writable disk image in drive 8"))
     }
 
     func testModemCapabilitiesMatchVICERS232Targets() {
@@ -542,6 +666,92 @@ final class ModelConfigurationTests: XCTestCase {
         wait(for: [remoteReady, response], timeout: 3)
         let printableResponse = capture.printableResponse
         XCTAssertTrue(printableResponse.contains("CONNECT 9600"))
+        XCTAssertTrue(printableResponse.contains("WELCOME"))
+    }
+
+    func testHayesModemServiceCanSendPlainConnectResult() throws {
+        let queue = DispatchQueue(label: "com.barrywalker.vicemac.tests.hayes-plain-connect")
+        let service = HayesModemService()
+        addTeardownBlock {
+            service.stop()
+        }
+
+        let remoteReady = expectation(description: "remote connection ready")
+        let remoteEndpointPort = try NetworkTestPort.reserveLoopbackPort()
+        let remoteListener = try NWListener(using: .tcp, on: remoteEndpointPort)
+        addTeardownBlock {
+            remoteListener.cancel()
+        }
+        remoteListener.newConnectionHandler = { connection in
+            connection.stateUpdateHandler = { state in
+                if case .ready = state {
+                    remoteReady.fulfill()
+                    connection.send(content: Data("WELCOME".utf8),
+                                    completion: .contentProcessed { _ in })
+                }
+            }
+            connection.start(queue: queue)
+        }
+        remoteListener.start(queue: queue)
+        let remotePort = remoteEndpointPort.rawValue
+
+        let modem = NetworkModemConfiguration(isEnabled: true,
+                                              interface: .userPort,
+                                              baudRate: 1200,
+                                              transportMode: .raw,
+                                              acceptsIncomingCalls: false,
+                                              incomingPort: 6400,
+                                              autoAnswerRings: 0,
+                                              echoCommands: true,
+                                              verboseResultCodes: true,
+                                              connectResultIncludesBaudRate: false,
+                                              defaultDialPort: Int(remotePort),
+                                              defaultDialHost: "127.0.0.1")
+        let localPort = try service.start(configuration: modem) { _ in }
+        let serialPort = try XCTUnwrap(NWEndpoint.Port(rawValue: UInt16(localPort)))
+        let serialConnection = NWConnection(host: .ipv4(.loopback),
+                                            port: serialPort,
+                                            using: .tcp)
+        addTeardownBlock {
+            serialConnection.cancel()
+        }
+
+        let serialReady = expectation(description: "serial connection ready")
+        serialConnection.stateUpdateHandler = { state in
+            if case .ready = state {
+                serialReady.fulfill()
+            }
+        }
+        serialConnection.start(queue: queue)
+        wait(for: [serialReady], timeout: 2)
+
+        let response = expectation(description: "plain Hayes connect response")
+        let capture = NetworkTestCapture()
+
+        @Sendable func receiveSerial() {
+            serialConnection.receive(minimumIncompleteLength: 1,
+                                     maximumLength: 4096) { data, _, isComplete, error in
+                if let data,
+                   !data.isEmpty,
+                   capture.append(data, matching: ["CONNECT", "WELCOME"]) {
+                    response.fulfill()
+                }
+
+                if !isComplete,
+                   error == nil {
+                    receiveSerial()
+                }
+            }
+        }
+
+        receiveSerial()
+        serialConnection.send(content: Data("atdt 5551212\r".utf8),
+                              completion: .contentProcessed { _ in })
+
+        wait(for: [remoteReady, response], timeout: 3)
+        let printableResponse = capture.printableResponse
+        XCTAssertTrue(printableResponse.contains("\r\nCONNECT\r\n"))
+        XCTAssertFalse(printableResponse.contains("CONNECT 1200"))
         XCTAssertTrue(printableResponse.contains("WELCOME"))
     }
 
@@ -1494,6 +1704,315 @@ final class ModelConfigurationTests: XCTestCase {
         XCTAssertEqual(sanitized.devices.first?.name, ControlDeviceKind.keyboard.defaultName)
     }
 
+    func testGameControllerJoystickMappingDecodesLegacyControllerSelection() throws {
+        let json = """
+        {
+          "preferredControllerName": "8BitDo SN30 Pro",
+          "deadZone": 0.28,
+          "up": "dpadUp",
+          "down": "dpadDown",
+          "left": "dpadLeft",
+          "right": "dpadRight",
+          "fire": "buttonSouth"
+        }
+        """.data(using: .utf8)!
+
+        let mapping = try JSONDecoder().decode(GameControllerJoystickMapping.self, from: json)
+
+        XCTAssertEqual(mapping.preferredControllerName, "8BitDo SN30 Pro")
+        XCTAssertNil(mapping.preferredControllerIdentifier)
+    }
+
+    func testGameControllerJoystickMappingNormalizesControllerSelection() {
+        var mapping = GameControllerJoystickMapping.standard
+        mapping.preferredControllerName = "  8BitDo SN30 Pro  "
+        mapping.preferredControllerIdentifier = "   "
+        mapping.deadZone = 2
+
+        let normalized = mapping.normalized()
+
+        XCTAssertEqual(normalized.preferredControllerName, "8BitDo SN30 Pro")
+        XCTAssertNil(normalized.preferredControllerIdentifier)
+        XCTAssertEqual(normalized.deadZone, 0.95)
+    }
+
+    func testConnectedGameControllerTitlesDisambiguateDuplicates() {
+        let firstController = ConnectedGameController(id: "first",
+                                                      vendorName: "USB Gamepad",
+                                                      productCategory: "",
+                                                      duplicateIndex: 0,
+                                                      duplicateCount: 2)
+        let secondController = ConnectedGameController(id: "second",
+                                                       vendorName: "USB Gamepad",
+                                                       productCategory: "External HID Device",
+                                                       duplicateIndex: 1,
+                                                       duplicateCount: 2)
+
+        XCTAssertEqual(firstController.title, "USB Gamepad #1")
+        XCTAssertEqual(secondController.title, "USB Gamepad #2")
+        XCTAssertEqual(firstController.detailTitle, "Game controller")
+        XCTAssertEqual(secondController.detailTitle, "External HID Device")
+        XCTAssertEqual(
+            ConnectedGameController.identifier(vendorName: "USB Gamepad",
+                                               productCategory: "External HID Device",
+                                               duplicateIndex: 1),
+            "name=USB Gamepad|category=External HID Device|index=1"
+        )
+    }
+
+    func testGameControllerJoystickMappingStoresPreferredControllerDescriptor() {
+        let controller = ConnectedGameController(id: "controller-id",
+                                                 vendorName: "USB Gamepad",
+                                                 productCategory: "",
+                                                 duplicateIndex: 0,
+                                                 duplicateCount: 1)
+        var mapping = GameControllerJoystickMapping.standard
+
+        mapping.setPreferredController(controller)
+
+        XCTAssertEqual(mapping.preferredControllerIdentifier, "controller-id")
+        XCTAssertEqual(mapping.preferredControllerName, "USB Gamepad")
+
+        mapping.setPreferredController(nil)
+
+        XCTAssertNil(mapping.preferredControllerIdentifier)
+        XCTAssertNil(mapping.preferredControllerName)
+    }
+
+    func testMediaLibraryImportsManagedCopyAndDeduplicatesByHash() throws {
+        let rootURL = temporaryDirectoryURL("MediaLibrary")
+        let sourceDirectoryURL = temporaryDirectoryURL("MediaLibrarySources")
+        let sourceURL = sourceDirectoryURL.appendingPathComponent("my_game.prg")
+        defer {
+            try? FileManager.default.removeItem(at: rootURL)
+            try? FileManager.default.removeItem(at: sourceDirectoryURL)
+        }
+
+        try FileManager.default.createDirectory(at: sourceDirectoryURL,
+                                                withIntermediateDirectories: true)
+        try Data([0x01, 0x08, 0x60]).write(to: sourceURL)
+
+        let store = try MediaLibraryStore(rootURL: rootURL)
+        let imported = try store.importURLs([sourceURL])
+
+        XCTAssertEqual(imported.count, 1)
+
+        let item = try XCTUnwrap(imported.first)
+        let managedURL = store.primaryFileURL(for: item)
+
+        XCTAssertTrue(managedURL.path.hasPrefix(rootURL.path))
+        XCTAssertNotEqual(managedURL.path, sourceURL.path)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: managedURL.path))
+        XCTAssertEqual(item.title, "my game")
+        XCTAssertEqual(item.primaryFile.originalPath, sourceURL.path)
+        XCTAssertEqual(item.primaryFile.kind, .program)
+        XCTAssertEqual(item.primaryFile.mediaType, "prg")
+
+        let duplicateImport = try store.importURLs([sourceURL])
+        XCTAssertEqual(duplicateImport.first?.id, item.id)
+        XCTAssertEqual(try store.items().count, 1)
+
+        try store.removeItem(id: item.id)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: managedURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: sourceURL.path))
+        XCTAssertEqual(try store.items().count, 0)
+    }
+
+    func testQLinkReloadedDiskPatcherConfiguresConnectionAndPreservesAccountProfile() throws {
+        var data = makeQLinkD64ProfileFixture()
+        let originalProfile = try QLinkReloadedDiskPatcher.decryptedProfileSector(from: data)
+
+        let changed = try QLinkReloadedDiskPatcher.configureReloadedProfile(in: &data)
+        let patchedProfile = try QLinkReloadedDiskPatcher.decryptedProfileSector(from: data)
+
+        XCTAssertTrue(changed)
+        XCTAssertEqual(Array(patchedProfile[0..<6]), [5, 1, 2, 0, 0x44, 1])
+        XCTAssertEqual(Array(patchedProfile[30..<50]),
+                       [5, 5, 5, 1, 2, 1, 2] + Array(repeating: 0x80, count: 13))
+        XCTAssertEqual(Array(patchedProfile[9..<30]), Array(originalProfile[9..<30]))
+        XCTAssertEqual(Array(patchedProfile[50..<96]), Array(originalProfile[50..<96]))
+
+        let secondPatchChangedDisk = try QLinkReloadedDiskPatcher.configureReloadedProfile(in: &data)
+        XCTAssertFalse(secondPatchChangedDisk)
+    }
+
+    func testQLinkReloadedDiskPatcherWritesOnlyRequestedManagedCopy() throws {
+        let rootURL = temporaryDirectoryURL("QLinkReloadedPatchCopy")
+        let sourceURL = rootURL.appendingPathComponent("QuantumLink.d64")
+        let managedCopyURL = rootURL.appendingPathComponent("ManagedQuantumLink.d64")
+        defer {
+            try? FileManager.default.removeItem(at: rootURL)
+        }
+
+        try FileManager.default.createDirectory(at: rootURL,
+                                                withIntermediateDirectories: true)
+        let sourceData = makeQLinkD64ProfileFixture()
+        try sourceData.write(to: sourceURL)
+        try sourceData.write(to: managedCopyURL)
+
+        let version = QLinkReloadedDiskVersion(profileAgnosticSHA256: "fixture",
+                                               displayTitle: "Fixture Q-Link")
+        let result = try QLinkReloadedDiskPatcher.configureReloadedProfile(at: managedCopyURL,
+                                                                           version: version)
+
+        XCTAssertTrue(result.changedDisk)
+        XCTAssertEqual(try Data(contentsOf: sourceURL), sourceData)
+        XCTAssertNotEqual(try Data(contentsOf: managedCopyURL), sourceData)
+    }
+
+    @MainActor
+    func testMetadataIngestionSettingsPersistProviderAndMatchingConfiguration() throws {
+        let defaults = try temporaryUserDefaults("MetadataProvider")
+        let credentialStore = MetadataIngestionMemoryCredentialStore()
+        let settings = MetadataIngestionSettings(defaults: defaults,
+                                                 credentialStore: credentialStore)
+
+        settings.setEnabled(true, for: .mobyGames)
+        settings.matchStrategy = .hashFirst
+        settings.cachesArtworkLocally = false
+        settings.artworkPreference = .screenshot
+
+        let reloadedSettings = MetadataIngestionSettings(defaults: defaults,
+                                                         credentialStore: credentialStore)
+        let configuration = reloadedSettings.configuration(for: .mobyGames)
+        let snapshot = try XCTUnwrap(reloadedSettings.providerSnapshots.first { $0.providerID == .mobyGames })
+
+        XCTAssertTrue(configuration.isEnabled)
+        XCTAssertEqual(reloadedSettings.matchStrategy, .hashFirst)
+        XCTAssertFalse(reloadedSettings.cachesArtworkLocally)
+        XCTAssertEqual(reloadedSettings.artworkPreference, .screenshot)
+        XCTAssertFalse(snapshot.isReady)
+        XCTAssertEqual(snapshot.statusTitle, "Needs setup")
+    }
+
+    @MainActor
+    func testMetadataIngestionSettingsUseCredentialsForAPIReadiness() throws {
+        let defaults = try temporaryUserDefaults("MetadataCredentials")
+        let credentialStore = MetadataIngestionMemoryCredentialStore()
+        let settings = MetadataIngestionSettings(defaults: defaults,
+                                                 credentialStore: credentialStore)
+
+        XCTAssertFalse(try metadataSnapshot(.igdb, in: settings).isReady)
+
+        settings.setCredential("client-1", providerID: .igdb, field: .clientID)
+
+        XCTAssertFalse(try metadataSnapshot(.igdb, in: settings).isReady)
+
+        settings.setCredential("token-1", providerID: .igdb, field: .accessToken)
+        settings.setEnabled(true, for: .igdb)
+
+        let configuredSnapshot = try metadataSnapshot(.igdb, in: settings)
+        XCTAssertTrue(configuredSnapshot.isReady)
+        XCTAssertEqual(configuredSnapshot.statusTitle, "Enabled")
+        XCTAssertEqual(settings.credential(providerID: .igdb, field: .clientID), "client-1")
+        XCTAssertEqual(settings.credential(providerID: .igdb, field: .accessToken), "token-1")
+
+        settings.clearCredentials(for: .igdb)
+
+        XCTAssertFalse(try metadataSnapshot(.igdb, in: settings).isReady)
+    }
+
+    @MainActor
+    func testMetadataIngestionSettingsKeepUnsupportedSourcesDisabled() throws {
+        let defaults = try temporaryUserDefaults("MetadataUnsupported")
+        let settings = MetadataIngestionSettings(defaults: defaults,
+                                                 credentialStore: MetadataIngestionMemoryCredentialStore())
+
+        settings.setEnabled(true, for: .csdb)
+
+        let configuration = settings.configuration(for: .csdb)
+        let snapshot = try metadataSnapshot(.csdb, in: settings)
+
+        XCTAssertFalse(configuration.isEnabled)
+        XCTAssertFalse(snapshot.isReady)
+        XCTAssertEqual(snapshot.statusTitle, "Unavailable")
+    }
+
+    @MainActor
+    func testMetadataIngestionSettingsImportGameBase64MDBIntoManagedStorage() throws {
+        let defaults = try temporaryUserDefaults("MetadataGameBase64MDB")
+        let metadataDirectoryURL = temporaryDirectoryURL("MetadataSources")
+        let sourceDirectoryURL = temporaryDirectoryURL("MetadataSourceFiles")
+        try FileManager.default.createDirectory(at: sourceDirectoryURL, withIntermediateDirectories: true)
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: metadataDirectoryURL)
+            try? FileManager.default.removeItem(at: sourceDirectoryURL)
+        }
+
+        let sourceURL = sourceDirectoryURL.appendingPathComponent("GBC_v19.mdb")
+        let databaseData = fakeAccessDatabaseData()
+        try databaseData.write(to: sourceURL)
+        let settings = MetadataIngestionSettings(defaults: defaults,
+                                                 credentialStore: MetadataIngestionMemoryCredentialStore(),
+                                                 metadataSourceDirectoryURL: metadataDirectoryURL)
+
+        let result = try settings.importDatabasePackage(sourceURL, for: .gameBase64)
+
+        let configuration = settings.configuration(for: .gameBase64)
+        let snapshot = try metadataSnapshot(.gameBase64, in: settings)
+
+        XCTAssertEqual(MetadataProviderID.gameBase64.connectionKind, .importedDatabase)
+        XCTAssertEqual(MetadataProviderID.gameBase64.importFilenameExtensions, ["mdb", "zip", "exe"])
+        XCTAssertEqual(result.packageKind, .accessDatabase)
+        XCTAssertTrue(result.databaseURL.path.hasPrefix(metadataDirectoryURL.path))
+        XCTAssertEqual(configuration.databasePath, result.databaseURL.path)
+        XCTAssertNotNil(configuration.lastImportedAt)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: result.databaseURL.path))
+        XCTAssertEqual(try Data(contentsOf: result.databaseURL), databaseData)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: sourceURL.path))
+        XCTAssertTrue(snapshot.isReady)
+        XCTAssertEqual(snapshot.statusTitle, "Ready")
+    }
+
+    func testGameBase64ImporterExtractsMDBFromZIPWithoutShellingOut() throws {
+        let rootURL = temporaryDirectoryURL("GameBase64ZIPImport")
+        let sourceDirectoryURL = temporaryDirectoryURL("GameBase64ZIPSources")
+        try FileManager.default.createDirectory(at: sourceDirectoryURL, withIntermediateDirectories: true)
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: rootURL)
+            try? FileManager.default.removeItem(at: sourceDirectoryURL)
+        }
+
+        let databaseData = fakeAccessDatabaseData()
+        let zipURL = sourceDirectoryURL.appendingPathComponent("gb64v19.zip")
+        try makeStoredZIP(filename: "Database/GBC_v19.mdb", contents: databaseData).write(to: zipURL)
+
+        let result = try GameBase64MetadataImporter().importPackage(at: zipURL, into: rootURL)
+
+        XCTAssertEqual(result.packageKind, .zipArchive)
+        XCTAssertEqual(result.databaseURL.lastPathComponent, "GBC_v19.mdb")
+        XCTAssertTrue(result.databaseURL.path.hasPrefix(rootURL.path))
+        XCTAssertEqual(try Data(contentsOf: result.databaseURL), databaseData)
+    }
+
+    func testGameBase64ImporterUsesEmbeddedInnoExtractorBoundaryForInstallers() throws {
+        let rootURL = temporaryDirectoryURL("GameBase64InstallerImport")
+        let sourceDirectoryURL = temporaryDirectoryURL("GameBase64InstallerSources")
+        try FileManager.default.createDirectory(at: sourceDirectoryURL, withIntermediateDirectories: true)
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: rootURL)
+            try? FileManager.default.removeItem(at: sourceDirectoryURL)
+        }
+
+        let installerURL = sourceDirectoryURL.appendingPathComponent("gb64v19.exe")
+        try fakeInnoSetupInstallerData().write(to: installerURL)
+        let extractedDatabaseURL = sourceDirectoryURL.appendingPathComponent("GBC_v19.mdb")
+        let databaseData = fakeAccessDatabaseData()
+        try databaseData.write(to: extractedDatabaseURL)
+
+        XCTAssertThrowsError(try GameBase64MetadataImporter().importPackage(at: installerURL, into: rootURL)) { error in
+            XCTAssertEqual(error as? GameBase64MetadataImportError, .nativeInnoExtractorUnavailable)
+        }
+
+        let importer = GameBase64MetadataImporter(extractor: StubInnoSetupExtractor(databaseURL: extractedDatabaseURL))
+        let result = try importer.importPackage(at: installerURL, into: rootURL)
+
+        XCTAssertEqual(result.packageKind, .innoSetupInstaller)
+        XCTAssertTrue(result.databaseURL.path.hasPrefix(rootURL.path))
+        XCTAssertEqual(try Data(contentsOf: result.databaseURL), databaseData)
+    }
+
     func testVIC20RAMExpansionPlanUsesBlockResources() {
         let plan = RAMExpansion.vic20_24k.resourcePlan(for: EmulatedMachine.xvic)
 
@@ -1533,105 +2052,25 @@ final class ModelConfigurationTests: XCTestCase {
         XCTAssertEqual(EmulatorSession.MemorySpace.drive11.rawValue, 5)
     }
 
-    func testOpenAIModelListDecodesModelIDs() throws {
-        let json = """
-        {
-          "object": "list",
-          "data": [
-            { "id": "gpt-5.5", "object": "model" },
-            { "id": "gpt-5.4", "object": "model" }
-          ]
-        }
-        """.data(using: .utf8)!
-
-        let models = try AIAssistantModelService.decodeOpenAIModels(from: json)
-
-        XCTAssertEqual(models.map(\.id), ["gpt-5.5", "gpt-5.4"])
-        XCTAssertEqual(models.first?.menuTitle, "gpt-5.5")
+    func testFoundationModelAvailabilityMapsRuntimeReasons() {
+        XCTAssertEqual(AIAssistantFoundationModelAvailability.from(systemAvailability: .available), .available)
+        XCTAssertEqual(AIAssistantFoundationModelAvailability.from(systemAvailability: .unavailable(.deviceNotEligible)),
+                       .unavailable(.deviceNotEligible))
+        XCTAssertEqual(AIAssistantFoundationModelAvailability.from(systemAvailability: .unavailable(.appleIntelligenceNotEnabled)),
+                       .unavailable(.appleIntelligenceNotEnabled))
+        XCTAssertEqual(AIAssistantFoundationModelAvailability.from(systemAvailability: .unavailable(.modelNotReady)),
+                       .unavailable(.modelNotReady))
     }
 
-    func testAnthropicModelListDecodesDisplayNames() throws {
-        let json = """
-        {
-          "data": [
-            {
-              "type": "model",
-              "id": "claude-sonnet-4-5-20250929",
-              "display_name": "Claude Sonnet 4.5",
-              "created_at": "2025-09-29T00:00:00Z"
-            }
-          ],
-          "has_more": false
-        }
-        """.data(using: .utf8)!
+    func testFoundationModelUnavailableReasonsExplainDisabledAssistant() {
+        let notEligible = AIAssistantFoundationModelAvailability.unavailable(.deviceNotEligible)
+        let appleIntelligenceOff = AIAssistantFoundationModelAvailability.unavailable(.appleIntelligenceNotEnabled)
+        let modelNotReady = AIAssistantFoundationModelAvailability.unavailable(.modelNotReady)
 
-        let models = try AIAssistantModelService.decodeAnthropicModels(from: json)
-
-        XCTAssertEqual(models.first?.id, "claude-sonnet-4-5-20250929")
-        XCTAssertEqual(models.first?.menuTitle, "Claude Sonnet 4.5 (claude-sonnet-4-5-20250929)")
-    }
-
-    func testOpenAIResponseDecodesTextAndFunctionCalls() throws {
-        let json = """
-        {
-          "id": "resp_123",
-          "output": [
-            {
-              "type": "message",
-              "content": [
-                {
-                  "type": "output_text",
-                  "text": "I can do that."
-                }
-              ]
-            },
-            {
-              "type": "function_call",
-              "call_id": "call_123",
-              "name": "submit_line",
-              "arguments": "{\\"line\\":\\"10 PRINT \\\\\\"HI\\\\\\"\\"}"
-            }
-          ]
-        }
-        """.data(using: .utf8)!
-
-        let response = try AIAssistantConversationService.decodeOpenAIResponse(from: json)
-
-        XCTAssertEqual(response.id, "resp_123")
-        XCTAssertEqual(response.text, "I can do that.")
-        XCTAssertEqual(response.toolCalls.first?.id, "call_123")
-        XCTAssertEqual(response.toolCalls.first?.name, "submit_line")
-    }
-
-    func testAnthropicResponseDecodesTextAndToolUse() throws {
-        let json = """
-        {
-          "id": "msg_123",
-          "type": "message",
-          "role": "assistant",
-          "content": [
-            {
-              "type": "text",
-              "text": "Writing the line now."
-            },
-            {
-              "type": "tool_use",
-              "id": "toolu_123",
-              "name": "submit_line",
-              "input": {
-                "line": "10 PRINT \\"HI\\""
-              }
-            }
-          ]
-        }
-        """.data(using: .utf8)!
-
-        let response = try AIAssistantConversationService.decodeAnthropicResponse(from: json)
-
-        XCTAssertEqual(response.text, "Writing the line now.")
-        XCTAssertEqual(response.toolCalls.first?.id, "toolu_123")
-        XCTAssertEqual(response.toolCalls.first?.name, "submit_line")
-        XCTAssertEqual(response.rawContent.count, 2)
+        XCTAssertFalse(notEligible.isAvailable)
+        XCTAssertTrue(notEligible.detail.contains("does not support Apple Intelligence"))
+        XCTAssertTrue(appleIntelligenceOff.detail.contains("Turn on Apple Intelligence"))
+        XCTAssertTrue(modelNotReady.detail.contains("downloading or preparing"))
     }
 
     func testGEOSProgramValidatorAcceptsLinkedPRGPayload() {
@@ -2152,6 +2591,156 @@ final class ModelConfigurationTests: XCTestCase {
             .appendingPathExtension(pathExtension)
     }
 
+    private func temporaryDirectoryURL(_ prefix: String) -> URL {
+        URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent("\(prefix)-\(UUID().uuidString)", isDirectory: true)
+    }
+
+    private func temporaryUserDefaults(_ prefix: String) throws -> UserDefaults {
+        let suiteName = "com.barrywalker.vicemac.tests.\(prefix).\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        addTeardownBlock {
+            UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
+        }
+        return defaults
+    }
+
+    private func makeQLinkD64ProfileFixture() -> Data {
+        var data = Data(repeating: 0, count: QLinkReloadedDiskPatcher.d64ByteCount)
+        var profile = [UInt8](repeating: 0, count: 256)
+        profile[0] = 0
+        profile[1] = 0
+        profile[2] = 3
+        profile[3] = 1
+        profile[4] = 0x44
+        profile[5] = 0
+        profile.replaceSubrange(9..<13, with: Array("1234".utf8))
+        for index in 13..<30 {
+            profile[index] = UInt8(index + 0x20)
+        }
+        profile[30] = 9
+        profile[31] = 9
+        profile[32] = 9
+        profile[33] = 0x80
+        for index in 50..<96 {
+            profile[index] = UInt8(index)
+        }
+
+        data.replaceSubrange(qLinkProfileSectorRange(), with: encryptedQLinkProfile(profile))
+        return data
+    }
+
+    private func qLinkProfileSectorRange() -> Range<Data.Index> {
+        func sectors(onTrack track: Int) -> Int {
+            switch track {
+            case 1...17:
+                return 21
+            case 18...24:
+                return 19
+            case 25...30:
+                return 18
+            default:
+                return 17
+            }
+        }
+
+        let precedingSectorCount = (1..<QLinkReloadedDiskPatcher.profileSectorTrack)
+            .map(sectors(onTrack:))
+            .reduce(0, +)
+        let offset = (precedingSectorCount + QLinkReloadedDiskPatcher.profileSector) * 256
+        return offset..<(offset + 256)
+    }
+
+    private func encryptedQLinkProfile(_ profile: [UInt8]) -> Data {
+        var encryptedProfile = profile
+        var crypto: UInt8 = 0x6e
+        for index in encryptedProfile.indices {
+            encryptedProfile[index] ^= crypto
+            crypto &+= 1
+        }
+        return Data(encryptedProfile)
+    }
+
+    private func fakeAccessDatabaseData() -> Data {
+        var data = Data([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1])
+        data.append(Data("GameBase64 MDB test fixture".utf8))
+        data.append(Data(repeating: 0, count: 512))
+        return data
+    }
+
+    private func fakeInnoSetupInstallerData() -> Data {
+        var data = Data([0x4d, 0x5a])
+        data.append(Data(repeating: 0, count: 128))
+        data.append(Data("Inno Setup Setup Data (6.1.0) (u)".utf8))
+        return data
+    }
+
+    private func makeStoredZIP(filename: String, contents: Data) -> Data {
+        let nameData = Data(filename.utf8)
+        let checksum = contents.withUnsafeBytes { buffer -> UInt32 in
+            guard let baseAddress = buffer.bindMemory(to: Bytef.self).baseAddress else {
+                return UInt32(crc32(0, nil, 0))
+            }
+
+            return UInt32(crc32(0, baseAddress, uInt(contents.count)))
+        }
+
+        var data = Data()
+        let localHeaderOffset = UInt32(data.count)
+        data.appendUInt32LE(0x04034b50)
+        data.appendUInt16LE(20)
+        data.appendUInt16LE(0)
+        data.appendUInt16LE(0)
+        data.appendUInt16LE(0)
+        data.appendUInt16LE(0)
+        data.appendUInt32LE(checksum)
+        data.appendUInt32LE(UInt32(contents.count))
+        data.appendUInt32LE(UInt32(contents.count))
+        data.appendUInt16LE(UInt16(nameData.count))
+        data.appendUInt16LE(0)
+        data.append(nameData)
+        data.append(contents)
+
+        let centralDirectoryOffset = UInt32(data.count)
+        data.appendUInt32LE(0x02014b50)
+        data.appendUInt16LE(20)
+        data.appendUInt16LE(20)
+        data.appendUInt16LE(0)
+        data.appendUInt16LE(0)
+        data.appendUInt16LE(0)
+        data.appendUInt16LE(0)
+        data.appendUInt32LE(checksum)
+        data.appendUInt32LE(UInt32(contents.count))
+        data.appendUInt32LE(UInt32(contents.count))
+        data.appendUInt16LE(UInt16(nameData.count))
+        data.appendUInt16LE(0)
+        data.appendUInt16LE(0)
+        data.appendUInt16LE(0)
+        data.appendUInt16LE(0)
+        data.appendUInt32LE(0)
+        data.appendUInt32LE(localHeaderOffset)
+        data.append(nameData)
+
+        let centralDirectorySize = UInt32(data.count) - centralDirectoryOffset
+        data.appendUInt32LE(0x06054b50)
+        data.appendUInt16LE(0)
+        data.appendUInt16LE(0)
+        data.appendUInt16LE(1)
+        data.appendUInt16LE(1)
+        data.appendUInt32LE(centralDirectorySize)
+        data.appendUInt32LE(centralDirectoryOffset)
+        data.appendUInt16LE(0)
+
+        return data
+    }
+
+    @MainActor
+    private func metadataSnapshot(_ providerID: MetadataProviderID,
+                                  in settings: MetadataIngestionSettings) throws -> MetadataProviderSnapshot {
+        try XCTUnwrap(settings.providerSnapshots.first { $0.providerID == providerID })
+    }
+
     private func writeSector(_ sector: Data,
                              at address: CommodoreDiskAddress,
                              geometry: CommodoreDiskGeometry,
@@ -2208,6 +2797,58 @@ final class ModelConfigurationTests: XCTestCase {
         let entry = 4 + (track - 1) * 4
         bam[entry + 1 + sector / 8] &= ~UInt8(1 << (sector % 8))
         bam[entry] = bam[entry] &- 1
+    }
+}
+
+private func writeSearchablePDF(text: String, to url: URL) throws {
+    let data = NSMutableData()
+    guard let consumer = CGDataConsumer(data: data as CFMutableData) else {
+        throw NSError(domain: "ViceMacTests", code: 1)
+    }
+
+    var mediaBox = CGRect(x: 0, y: 0, width: 612, height: 792)
+    guard let context = CGContext(consumer: consumer,
+                                  mediaBox: &mediaBox,
+                                  nil) else {
+        throw NSError(domain: "ViceMacTests", code: 2)
+    }
+
+    context.beginPDFPage(nil)
+    let attributedText = NSAttributedString(string: text,
+                                            attributes: [.font: NSFont.systemFont(ofSize: 12)])
+    let framesetter = CTFramesetterCreateWithAttributedString(attributedText)
+    let textPath = CGPath(rect: CGRect(x: 72, y: 72, width: 468, height: 648),
+                          transform: nil)
+    let frame = CTFramesetterCreateFrame(framesetter,
+                                         CFRange(location: 0, length: attributedText.length),
+                                         textPath,
+                                         nil)
+    CTFrameDraw(frame, context)
+    context.endPDFPage()
+    context.closePDF()
+    try data.write(to: url)
+}
+
+private struct StubInnoSetupExtractor: InnoSetupExtracting {
+    var databaseURL: URL
+
+    func extractAccessDatabase(from installerURL: URL,
+                               to temporaryDirectoryURL: URL) throws -> URL {
+        databaseURL
+    }
+}
+
+private extension Data {
+    mutating func appendUInt16LE(_ value: UInt16) {
+        append(UInt8(value & 0x00ff))
+        append(UInt8((value >> 8) & 0x00ff))
+    }
+
+    mutating func appendUInt32LE(_ value: UInt32) {
+        append(UInt8(value & 0x000000ff))
+        append(UInt8((value >> 8) & 0x000000ff))
+        append(UInt8((value >> 16) & 0x000000ff))
+        append(UInt8((value >> 24) & 0x000000ff))
     }
 }
 

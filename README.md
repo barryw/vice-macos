@@ -108,9 +108,9 @@ controls.
 
 ### Optional AI Assistant
 
-The app can expose an assistant panel backed by OpenAI or Anthropic API keys
-stored in the macOS keychain. It can answer questions about the current machine
-or operate the emulator through the app's internal tool surface.
+The app can expose an assistant panel backed by Apple Foundation Models on Macs
+with Apple Intelligence available. It can answer questions about the current
+machine or operate the emulator through the app's internal tool surface.
 
 ### MacVICEKit
 

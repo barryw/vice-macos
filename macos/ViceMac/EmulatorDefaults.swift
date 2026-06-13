@@ -408,6 +408,11 @@ enum EmulatorDefaults {
         return EmulatorSession.normalizedDriveConfigurations(configurations, for: machine)
     }
 
+    static func hasSavedDriveConfigurations(for machine: EmulatedMachine) -> Bool {
+        UserDefaults.standard.data(forKey: key(driveConfigurationsKey, machine: machine)) != nil
+            || legacyData(forKey: driveConfigurationsKey, machine: machine) != nil
+    }
+
     static func saveDriveConfigurations(_ configurations: [DriveConfiguration], for machine: EmulatedMachine) {
         guard let data = try? JSONEncoder().encode(configurations) else {
             return
@@ -444,6 +449,15 @@ enum EmulatorDefaults {
         }
 
         return configuration.normalized(for: machine)
+    }
+
+    static func hasSavedNetworkModem(for machine: EmulatedMachine) -> Bool {
+        guard machine.capabilities.supportsNetworking else {
+            return false
+        }
+
+        return UserDefaults.standard.data(forKey: key(networkModemKey, machine: machine)) != nil
+            || legacyData(forKey: networkModemKey, machine: machine) != nil
     }
 
     static func saveNetworkModem(_ configuration: NetworkModemConfiguration,

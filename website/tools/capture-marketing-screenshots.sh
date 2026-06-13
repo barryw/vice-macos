@@ -175,6 +175,29 @@ find_geos128_showcase_disk() {
     return 1
 }
 
+find_qlink_showcase_disk() {
+    local explicit="${VICE_MAC_SCREENSHOT_QLINK_DISK:-}"
+    local candidate
+
+    if [[ -n "$explicit" && -f "$explicit" ]]; then
+        printf '%s\n' "$explicit"
+        return 0
+    fi
+
+    for candidate in \
+        "$HOME/Downloads/QuantumLink.d64" \
+        "$HOME/QuantumLink.d64" \
+        "$HOME/Downloads/Q-Link.d64" \
+        "$HOME/Q-Link.d64"; do
+        if [[ -f "$candidate" ]]; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
 paste_into_emulator() {
     local process_name="$1"
     local text="$2"
@@ -350,6 +373,30 @@ capture_x128_geos_showcase() {
     quit_app "x128"
 }
 
+capture_x64sc_qlink_showcase() {
+    local qlink_disk
+
+    qlink_disk="$(find_qlink_showcase_disk || true)"
+    if [[ -z "$qlink_disk" ]]; then
+        echo "No Q-Link disk found; skipping Q-Link screenshot." >&2
+        return 0
+    fi
+
+    quit_app "x64sc"
+    safe_open -n "$APP_DIR/x64sc.app"
+    wait_for_window "x64sc" ""
+    set_window_bounds "x64sc" "" 90 80 930 700
+    sleep 2.0
+
+    open_media_with_app "x64sc" "$qlink_disk"
+    paste_into_emulator "x64sc" $'LOAD"*",8,1\n'
+    sleep 8
+    paste_into_emulator "x64sc" $'RUN\n'
+    sleep 24
+    capture_window "x64sc" "" "x64sc-qlink-reloaded.png"
+    quit_app "x64sc"
+}
+
 open_disk_image_manager() {
     local process_name="$1"
 
@@ -434,6 +481,13 @@ if [[ "$SCREENSHOT_ONLY" == "showcase" ]]; then
     exit 0
 fi
 
+if [[ "$SCREENSHOT_ONLY" == "qlink" ]]; then
+    capture_x64sc_qlink_showcase
+    make_web_copy "x64sc-qlink-reloaded.png" 1600
+    echo "Captured screenshots in $OUT_DIR"
+    exit 0
+fi
+
 if [[ "$SCREENSHOT_ONLY" == "x64sc-showcase" ]]; then
     capture_x64sc_hvsc_showcase
     make_web_copy "x64sc-hvsc.png" 1800
@@ -442,6 +496,8 @@ if [[ "$SCREENSHOT_ONLY" == "x64sc-showcase" ]]; then
 fi
 
 capture_x64sc_hvsc_showcase
+
+capture_x64sc_qlink_showcase
 
 capture_disk_image_manager
 
@@ -457,6 +513,7 @@ capture_machine "xplus4" "com.barrywalker.vicemac.plus4" "xplus4-basic.png" $'10
 quit_app "xplus4"
 
 make_web_copy "x64sc-hvsc.png" 1800
+make_web_copy "x64sc-qlink-reloaded.png" 1600
 make_web_copy "disk-manager-files.png" 1600
 make_web_copy "disk-manager-new-image.png" 1200
 make_web_copy "x128-geos.png" 1800

@@ -1,5 +1,199 @@
+import CryptoKit
 import Foundation
 import MacVICEKit
+
+enum QLinkReloadedServiceError: LocalizedError {
+    case unsupportedDisk
+    case unknownVersion
+    case unsupportedDiskLayout
+    case incompatibleSettings(modemIssues: [String], driveIssues: [String])
+
+    var errorDescription: String? {
+        switch self {
+        case .unsupportedDisk:
+            return "Choose a supported Commodore disk image for Q-Link."
+        case .unknownVersion:
+            return "Sorry - unknown version"
+        case .unsupportedDiskLayout:
+            return "This Q-Link disk image is not in a patchable D64 layout."
+        case let .incompatibleSettings(modemIssues, driveIssues):
+            var issueSections: [String] = []
+            if !modemIssues.isEmpty {
+                issueSections.append("Modem:\n" + modemIssues.map { "- \($0)" }.joined(separator: "\n"))
+            }
+            if !driveIssues.isEmpty {
+                issueSections.append("Drive:\n" + driveIssues.map { "- \($0)" }.joined(separator: "\n"))
+            }
+            let issueText = issueSections.joined(separator: "\n\n")
+            return """
+            Some current settings are not compatible with Q-Link Reloaded. VICE Mac did not change them.
+
+            Q-Link Reloaded needs a User Port modem at 1200 baud using Raw TCP to q-link.net:5190, plus a writable disk image in drive 8 so the client can validate and update its disk.
+
+            Current differences:
+            \(issueText)
+            """
+        }
+    }
+}
+
+struct QLinkReloadedDiskPatchResult {
+    var version: QLinkReloadedDiskVersion
+    var changedDisk: Bool
+}
+
+struct QLinkReloadedDiskVersion: Equatable {
+    var profileAgnosticSHA256: String
+    var displayTitle: String
+}
+
+enum QLinkReloadedDiskPatcher {
+    static let d64ByteCount = 174_848
+    static let profileSectorTrack = 18
+    static let profileSector = 15
+
+    private static let encryptedProfileSeed: UInt8 = 0x6e
+    private static let hayesCommandModemType: UInt8 = 5
+    private static let baud1200ProfileValue: UInt8 = 1
+    private static let telenetNetworkProfileValue: UInt8 = 2
+    private static let toneDialProfileValue: UInt8 = 0
+    private static let automaticDialProfileValue: UInt8 = 1
+    private static let qLinkReloadedPhoneDigits: [UInt8] = [5, 5, 5, 1, 2, 1, 2]
+    private static let encodedPhoneTerminator: UInt8 = 0x80
+
+    private static let knownVersions: [QLinkReloadedDiskVersion] = [
+        QLinkReloadedDiskVersion(profileAgnosticSHA256: "0a82272d2bee8d91c891090cfca8f1dc63d116678cfabf6c084900886f45348b",
+                                 displayTitle: "Q-Link Version 4"),
+        QLinkReloadedDiskVersion(profileAgnosticSHA256: "7ed3024b8b0e0d2745d82615c94484c51fe990e4e6924ff4ba9fde5f2710b5ae",
+                                 displayTitle: "Q-Link Version 4 2400 Test"),
+        QLinkReloadedDiskVersion(profileAgnosticSHA256: "189c71a0f306d54eccb3aef06ac95886a41c01933eb34426c2d4f958e1f8d3fa",
+                                 displayTitle: "MyQLink Version 4"),
+        QLinkReloadedDiskVersion(profileAgnosticSHA256: "be75bf5a2f74a4cbad1dba706fedefe9deb5cf995de146ce50e68f54c6de7db7",
+                                 displayTitle: "Q-Link Version 4 Keith 2001"),
+        QLinkReloadedDiskVersion(profileAgnosticSHA256: "23c13564d841f2fd6da3b7327fad62ed2fa0287976395bf7d4d442bfaa803908",
+                                 displayTitle: "Q-Link Version 4 Keith 2010")
+    ]
+
+    static func knownVersion(for url: URL) throws -> QLinkReloadedDiskVersion {
+        let data = try Data(contentsOf: url)
+        return try knownVersion(for: data)
+    }
+
+    static func knownVersion(for data: Data) throws -> QLinkReloadedDiskVersion {
+        guard data.count == d64ByteCount else {
+            throw QLinkReloadedServiceError.unknownVersion
+        }
+
+        let profileAgnosticHash = try profileAgnosticSHA256Hex(for: data)
+        guard let version = knownVersions.first(where: { $0.profileAgnosticSHA256 == profileAgnosticHash }) else {
+            throw QLinkReloadedServiceError.unknownVersion
+        }
+
+        return version
+    }
+
+    static func configureReloadedProfile(at url: URL,
+                                         version: QLinkReloadedDiskVersion) throws -> QLinkReloadedDiskPatchResult {
+        var data = try Data(contentsOf: url)
+        let changedDisk = try configureReloadedProfile(in: &data)
+        if changedDisk {
+            try data.write(to: url, options: .atomic)
+        }
+
+        return QLinkReloadedDiskPatchResult(version: version,
+                                            changedDisk: changedDisk)
+    }
+
+    @discardableResult
+    static func configureReloadedProfile(in data: inout Data) throws -> Bool {
+        guard data.count == d64ByteCount else {
+            throw QLinkReloadedServiceError.unsupportedDiskLayout
+        }
+
+        let profileRange = try sectorRange(track: profileSectorTrack, sector: profileSector)
+        var profile = Array(data[profileRange])
+        xorProfileSector(&profile)
+        let originalProfile = profile
+
+        profile[0] = hayesCommandModemType
+        profile[1] = baud1200ProfileValue
+        profile[2] = telenetNetworkProfileValue
+        profile[3] = toneDialProfileValue
+        profile[5] = automaticDialProfileValue
+        for index in 0..<20 {
+            profile[30 + index] = index < qLinkReloadedPhoneDigits.count
+                ? qLinkReloadedPhoneDigits[index]
+                : encodedPhoneTerminator
+        }
+
+        guard profile != originalProfile else {
+            return false
+        }
+
+        xorProfileSector(&profile)
+        data.replaceSubrange(profileRange, with: profile)
+        return true
+    }
+
+    static func decryptedProfileSector(from data: Data) throws -> [UInt8] {
+        guard data.count == d64ByteCount else {
+            throw QLinkReloadedServiceError.unsupportedDiskLayout
+        }
+
+        let profileRange = try sectorRange(track: profileSectorTrack, sector: profileSector)
+        var profile = Array(data[profileRange])
+        xorProfileSector(&profile)
+        return profile
+    }
+
+    private static func profileAgnosticSHA256Hex(for data: Data) throws -> String {
+        var fingerprintData = data
+        let profileRange = try sectorRange(track: profileSectorTrack, sector: profileSector)
+        fingerprintData.replaceSubrange(profileRange, with: Data(repeating: 0, count: profileRange.count))
+        return sha256Hex(for: fingerprintData)
+    }
+
+    private static func xorProfileSector(_ sector: inout [UInt8]) {
+        var crypto = encryptedProfileSeed
+        for index in sector.indices {
+            sector[index] ^= crypto
+            crypto &+= 1
+        }
+    }
+
+    private static func sectorRange(track: Int, sector: Int) throws -> Range<Data.Index> {
+        guard (1...35).contains(track),
+              sector >= 0,
+              sector < sectors(onTrack: track) else {
+            throw QLinkReloadedServiceError.unsupportedDiskLayout
+        }
+
+        let precedingSectorCount = (1..<track)
+            .map(sectors(onTrack:))
+            .reduce(0, +)
+        let offset = (precedingSectorCount + sector) * 256
+        return offset..<(offset + 256)
+    }
+
+    private static func sectors(onTrack track: Int) -> Int {
+        switch track {
+        case 1...17:
+            return 21
+        case 18...24:
+            return 19
+        case 25...30:
+            return 18
+        default:
+            return 17
+        }
+    }
+
+    private static func sha256Hex(for data: Data) -> String {
+        SHA256.hash(data: data)
+            .map { String(format: "%02x", $0) }
+            .joined()
+    }
+}
 
 enum EmulatorMediaFile: Equatable {
     case disk(DiskImageFileType)
@@ -575,6 +769,137 @@ struct NetworkModemRuntimeStatus: Equatable {
     }
 }
 
+enum QLinkReloadedModemRequirements {
+    static let serverHost = "q-link.net"
+    static let serverPort = 5190
+    static let baudRate = 1200
+    static let interface = NetworkModemInterface.userPort
+    static let transportMode = NetworkTransportMode.raw
+
+    static func preset(preservingValuesFrom configuration: NetworkModemConfiguration) -> NetworkModemConfiguration {
+        NetworkModemConfiguration(isEnabled: true,
+                                  interface: interface,
+                                  baudRate: baudRate,
+                                  transportMode: transportMode,
+                                  acceptsIncomingCalls: false,
+                                  incomingPort: configuration.incomingPort,
+                                  autoAnswerRings: 0,
+                                  echoCommands: true,
+                                  verboseResultCodes: true,
+                                  connectResultIncludesBaudRate: false,
+                                  defaultDialPort: serverPort,
+                                  defaultDialHost: serverHost,
+                                  aciaBaseAddress: configuration.aciaBaseAddress)
+    }
+
+    static func incompatibilities(in configuration: NetworkModemConfiguration,
+                                  for machine: EmulatedMachine) -> [String] {
+        let modem = configuration.normalized(for: machine)
+        var issues: [String] = []
+
+        if !modem.isEnabled {
+            issues.append("Modem is off")
+        }
+
+        if modem.interface != interface {
+            issues.append("Hardware is \(modem.interface.title), not User Port")
+        }
+
+        if modem.baudRate != baudRate {
+            issues.append("Speed is \(modem.baudRate) baud, not \(baudRate) baud")
+        }
+
+        if modem.transportMode != transportMode {
+            issues.append("Connection is \(modem.transportMode.title), not Raw TCP")
+        }
+
+        if modem.defaultDialHost.compare(serverHost, options: [.caseInsensitive, .diacriticInsensitive]) != .orderedSame {
+            let host = modem.defaultDialHost.isEmpty ? "blank" : modem.defaultDialHost
+            issues.append("Default host is \(host), not \(serverHost)")
+        }
+
+        if modem.defaultDialPort != serverPort {
+            issues.append("Default port is \(modem.defaultDialPort), not \(serverPort)")
+        }
+
+        if !modem.verboseResultCodes {
+            issues.append("Verbose result codes are off")
+        }
+
+        if modem.connectResultIncludesBaudRate {
+            issues.append("CONNECT response includes baud rate")
+        }
+
+        return issues
+    }
+
+    static func isCompatible(_ configuration: NetworkModemConfiguration,
+                             for machine: EmulatedMachine) -> Bool {
+        incompatibilities(in: configuration, for: machine).isEmpty
+    }
+
+    static var summary: String {
+        "User Port, \(baudRate) baud, Raw TCP, \(serverHost):\(serverPort), plain CONNECT response"
+    }
+}
+
+enum QLinkReloadedDriveRequirements {
+    static let unit = 8
+    static let diskImageType = DiskImageFileType.d64
+
+    static func preset(preservingValuesFrom configurations: [DriveConfiguration],
+                       for machine: EmulatedMachine) -> [DriveConfiguration] {
+        var updatedConfigurations = configurations
+        guard let index = updatedConfigurations.firstIndex(where: { $0.unit == unit }) else {
+            return updatedConfigurations
+        }
+
+        updatedConfigurations[index].isAttached = true
+        updatedConfigurations[index].storageKind = .diskImage
+        if !updatedConfigurations[index].driveType.supportsDiskImage(diskImageType) {
+            updatedConfigurations[index].driveType = machine.capabilities.defaultDriveType
+        }
+        updatedConfigurations[index].protectsInsertedDisks = false
+        return EmulatorSession.normalizedDriveConfigurations(updatedConfigurations, for: machine)
+    }
+
+    static func incompatibilities(in configurations: [DriveConfiguration],
+                                  for machine: EmulatedMachine) -> [String] {
+        let drives = EmulatorSession.normalizedDriveConfigurations(configurations, for: machine)
+        guard let drive = drives.first(where: { $0.unit == unit }) else {
+            return ["Drive \(unit) is missing"]
+        }
+
+        var issues: [String] = []
+        if !drive.isAttached {
+            issues.append("Drive \(unit) is disabled")
+        }
+
+        if drive.storageKind == .sharedFolder {
+            issues.append("Drive \(unit) is a Shared Mac Folder, not a disk image drive")
+        }
+
+        if !drive.driveType.supportsDiskImage(diskImageType) {
+            issues.append("Drive \(unit) does not support \(diskImageType.title) disk images")
+        }
+
+        if drive.protectsInsertedDisks {
+            issues.append("Drive \(unit) protects inserted disks")
+        }
+
+        return issues
+    }
+
+    static func isCompatible(_ configurations: [DriveConfiguration],
+                             for machine: EmulatedMachine) -> Bool {
+        incompatibilities(in: configurations, for: machine).isEmpty
+    }
+
+    static var summary: String {
+        "Drive \(unit), writable \(diskImageType.title) disk image"
+    }
+}
+
 struct NetworkModemConfiguration: Codable, Equatable {
     var isEnabled: Bool
     var interface: NetworkModemInterface
@@ -585,7 +910,9 @@ struct NetworkModemConfiguration: Codable, Equatable {
     var autoAnswerRings: Int
     var echoCommands: Bool
     var verboseResultCodes: Bool
+    var connectResultIncludesBaudRate: Bool
     var defaultDialPort: Int
+    var defaultDialHost: String
     var aciaBaseAddress: NetworkModemACIAAddress
 
     static let standard = NetworkModemConfiguration(isEnabled: false,
@@ -597,7 +924,9 @@ struct NetworkModemConfiguration: Codable, Equatable {
                                                     autoAnswerRings: 0,
                                                     echoCommands: true,
                                                     verboseResultCodes: true,
+                                                    connectResultIncludesBaudRate: true,
                                                     defaultDialPort: 23,
+                                                    defaultDialHost: "",
                                                     aciaBaseAddress: .de00)
 
     init(isEnabled: Bool,
@@ -609,7 +938,9 @@ struct NetworkModemConfiguration: Codable, Equatable {
          autoAnswerRings: Int,
          echoCommands: Bool,
          verboseResultCodes: Bool,
+         connectResultIncludesBaudRate: Bool = true,
          defaultDialPort: Int,
+         defaultDialHost: String = "",
          aciaBaseAddress: NetworkModemACIAAddress = .de00) {
         self.isEnabled = isEnabled
         self.interface = interface
@@ -620,7 +951,9 @@ struct NetworkModemConfiguration: Codable, Equatable {
         self.autoAnswerRings = Self.normalizedAutoAnswerRings(autoAnswerRings)
         self.echoCommands = echoCommands
         self.verboseResultCodes = verboseResultCodes
+        self.connectResultIncludesBaudRate = connectResultIncludesBaudRate
         self.defaultDialPort = Self.normalizedTCPPort(defaultDialPort, fallback: 23)
+        self.defaultDialHost = Self.normalizedDialHost(defaultDialHost)
         self.aciaBaseAddress = aciaBaseAddress
     }
 
@@ -648,9 +981,14 @@ struct NetworkModemConfiguration: Codable, Equatable {
             ?? defaults.echoCommands
         verboseResultCodes = try container.decodeIfPresent(Bool.self, forKey: .verboseResultCodes)
             ?? defaults.verboseResultCodes
+        connectResultIncludesBaudRate = try container.decodeIfPresent(Bool.self,
+                                                                       forKey: .connectResultIncludesBaudRate)
+            ?? defaults.connectResultIncludesBaudRate
         defaultDialPort = Self.normalizedTCPPort(try container.decodeIfPresent(Int.self, forKey: .defaultDialPort)
                                                  ?? defaults.defaultDialPort,
                                                  fallback: defaults.defaultDialPort)
+        defaultDialHost = Self.normalizedDialHost(try container.decodeIfPresent(String.self, forKey: .defaultDialHost)
+                                                  ?? defaults.defaultDialHost)
         aciaBaseAddress = try container.decodeIfPresent(NetworkModemACIAAddress.self, forKey: .aciaBaseAddress)
             ?? defaults.aciaBaseAddress
     }
@@ -672,7 +1010,9 @@ struct NetworkModemConfiguration: Codable, Equatable {
     }
 
     var dialCommandPreview: String {
-        "ATD host:\(defaultDialPort)"
+        defaultDialHost.isEmpty
+            ? "ATD host:\(defaultDialPort)"
+            : "ATD \(defaultDialHost):\(defaultDialPort)"
     }
 
     var testDialCommand: String {
@@ -725,7 +1065,9 @@ struct NetworkModemConfiguration: Codable, Equatable {
                                   autoAnswerRings: autoAnswerRings,
                                   echoCommands: echoCommands,
                                   verboseResultCodes: verboseResultCodes,
+                                  connectResultIncludesBaudRate: connectResultIncludesBaudRate,
                                   defaultDialPort: defaultDialPort,
+                                  defaultDialHost: defaultDialHost,
                                   aciaBaseAddress: aciaBaseAddress)
     }
 
@@ -744,6 +1086,12 @@ struct NetworkModemConfiguration: Codable, Equatable {
         default:
             return fallback
         }
+    }
+
+    private static func normalizedDialHost(_ host: String) -> String {
+        host
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
     }
 
     private static func normalizedAutoAnswerRings(_ rings: Int) -> Int {

@@ -12,6 +12,9 @@ struct ViceMacApp: App {
     @NSApplicationDelegateAdaptor(ViceMacAppDelegate.self) private var appDelegate
     @StateObject private var emulator = EmulatorSession()
     @StateObject private var aiSettings = AIAssistantSettings()
+    @StateObject private var aiDocumentLibrary = AIDocumentLibraryStore()
+    @StateObject private var metadataSettings = MetadataIngestionSettings()
+    @StateObject private var qLinkReloaded = QLinkReloadedService()
     #if VICE_MAC_APP_VSID
     @StateObject private var vsid = VSIDSession()
     #endif
@@ -96,6 +99,9 @@ struct ViceMacApp: App {
             }
                 .environmentObject(emulator)
                 .environmentObject(aiSettings)
+                .environmentObject(aiDocumentLibrary)
+                .environmentObject(metadataSettings)
+                .environmentObject(qLinkReloaded)
         }
         .commands {
             CommandGroup(replacing: .appInfo) {
@@ -200,6 +206,11 @@ struct ViceMacApp: App {
             }
 
             CommandMenu("Media") {
+                Button("Media Library...") {
+                    openWindow(id: MediaLibraryWindow.id)
+                }
+                .keyboardShortcut("l", modifiers: [.command, .shift])
+
                 Button("Disk Image Manager...") {
                     openWindow(id: DiskImageManagerWindow.id)
                 }
@@ -337,6 +348,24 @@ struct ViceMacApp: App {
                 }
             }
 
+            CommandMenu("Online") {
+                Button("Connect to Q-Link Reloaded") {
+                    qLinkReloaded.connect(emulator: emulator)
+                }
+                .keyboardShortcut("q", modifiers: [.command, .shift])
+                .disabled(!qLinkReloaded.supports(machine: emulator.machine) || qLinkReloaded.isConnecting)
+
+                Button("Choose Q-Link Disk...") {
+                    qLinkReloaded.chooseDisk(for: emulator.machine)
+                }
+                .disabled(!qLinkReloaded.supports(machine: emulator.machine) || qLinkReloaded.isConnecting)
+
+                Button("Forget Q-Link Disk") {
+                    qLinkReloaded.forgetDisk()
+                }
+                .disabled(!qLinkReloaded.hasConfiguredDisk || qLinkReloaded.isConnecting)
+            }
+
             CommandMenu("Debug") {
                 Button("Debugger...") {
                     openWindow(id: DebuggerWindow.id)
@@ -401,6 +430,14 @@ struct ViceMacApp: App {
         .defaultSize(width: DiskImageManagerWindow.size.width,
                      height: DiskImageManagerWindow.size.height)
 
+        Window("Media Library", id: MediaLibraryWindow.id) {
+            MediaLibraryView()
+                .environmentObject(emulator)
+                .environmentObject(metadataSettings)
+        }
+        .defaultSize(width: MediaLibraryWindow.size.width,
+                     height: MediaLibraryWindow.size.height)
+
         Window("Debugger", id: DebuggerWindow.id) {
             DebuggerView()
                 .environmentObject(emulator)
@@ -419,6 +456,8 @@ struct ViceMacApp: App {
             SettingsView()
                 .environmentObject(emulator)
                 .environmentObject(aiSettings)
+                .environmentObject(aiDocumentLibrary)
+                .environmentObject(metadataSettings)
         }
         #endif
     }
@@ -753,6 +792,11 @@ private enum DiskImageManagerWindow {
     static let size = CGSize(width: 1_180, height: 780)
 }
 
+private enum MediaLibraryWindow {
+    static let id = "media-library"
+    static let size = CGSize(width: 960, height: 640)
+}
+
 private enum DebuggerWindow {
     static let id = "debugger"
     static let size = CGSize(width: 1_320, height: 860)
@@ -938,6 +982,366 @@ private struct PrintPagePreview: View {
                                    description: Text(url.lastPathComponent))
         }
     }
+}
+
+struct QLinkReloadedAlert: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
+    var kind: QLinkReloadedAlertKind = .message
+}
+
+enum QLinkReloadedAlertKind {
+    case message
+    case incompatibleSettings
+}
+
+@MainActor
+final class QLinkReloadedService: ObservableObject {
+    @Published var alert: QLinkReloadedAlert?
+    @Published private(set) var configuredDiskTitle: String?
+    @Published private(set) var configuredDiskVersionTitle: String?
+    @Published private(set) var isConnecting = false
+
+    private static let defaultsKey = "vice.qlinkReloaded.mediaItemID"
+    private static let versionDefaultsKey = "vice.qlinkReloaded.diskVersion"
+    private static let defaults = UserDefaults.standard
+
+    init() {
+        refreshConfiguredDiskTitle()
+    }
+
+    var hasConfiguredDisk: Bool {
+        configuredDiskTitle != nil
+    }
+
+    func supports(machine: EmulatedMachine) -> Bool {
+        switch machine.family {
+        case .c64, .c128:
+            return machine.capabilities.supportsNetworking
+        case .pet, .vic20, .ted:
+            return false
+        }
+    }
+
+    func connect(emulator: EmulatorSession) {
+        guard !isConnecting else {
+            return
+        }
+
+        guard supports(machine: emulator.machine) else {
+            presentError(title: "Q-Link Reloaded",
+                         message: "Q-Link Reloaded can only be connected from a C64 or C128 machine with networking support.")
+            return
+        }
+
+        isConnecting = true
+
+        Task { @MainActor in
+            defer {
+                isConnecting = false
+            }
+
+            await connectAndConfigure(emulator: emulator)
+        }
+    }
+
+    func setQLinkRequiredSettingsAndConnect(emulator: EmulatorSession) {
+        guard !isConnecting else {
+            return
+        }
+
+        guard supports(machine: emulator.machine) else {
+            presentError(title: "Q-Link Reloaded",
+                         message: "Q-Link Reloaded can only be connected from a C64 or C128 machine with networking support.")
+            return
+        }
+
+        isConnecting = true
+
+        Task { @MainActor in
+            defer {
+                isConnecting = false
+            }
+
+            await connectAndConfigure(emulator: emulator,
+                                      allowSettingsOverride: true)
+        }
+    }
+
+    private func connectAndConfigure(emulator: EmulatorSession,
+                                     allowSettingsOverride: Bool = false) async {
+        do {
+            let modemPreparation = qLinkModemPreparation(for: emulator)
+            var shouldApplyModemPreset = false
+            var modemIssues: [String] = []
+            var requiresSettingsConfirmation = false
+            var noticeMessages: [String] = []
+            switch modemPreparation {
+            case .compatible:
+                break
+            case let .needsPreset(issues):
+                shouldApplyModemPreset = true
+                modemIssues = issues
+            case let .incompatible(issues):
+                shouldApplyModemPreset = true
+                modemIssues = issues
+                requiresSettingsConfirmation = true
+            }
+
+            let drivePreparation = qLinkDrivePreparation(for: emulator)
+            var shouldApplyDrivePreset = false
+            var driveIssues: [String] = []
+            switch drivePreparation {
+            case .compatible:
+                break
+            case let .needsPreset(issues):
+                shouldApplyDrivePreset = true
+                driveIssues = issues
+            case let .incompatible(issues):
+                shouldApplyDrivePreset = true
+                driveIssues = issues
+                requiresSettingsConfirmation = true
+            }
+
+            if requiresSettingsConfirmation && !allowSettingsOverride {
+                presentIncompatibleSettings(modemIssues: modemIssues,
+                                            driveIssues: driveIssues)
+                return
+            }
+
+            let diskURL = try preparedDiskURL(for: emulator.machine, promptIfNeeded: true)
+            guard let diskURL else {
+                return
+            }
+
+            if shouldApplyModemPreset {
+                applyQLinkModemPreset(to: emulator)
+                noticeMessages.append("enabled the Q-Link Reloaded modem preset: \(QLinkReloadedModemRequirements.summary)")
+            }
+
+            if shouldApplyDrivePreset {
+                applyQLinkDrivePreset(to: emulator)
+                noticeMessages.append("made drive 8 writable for the managed Q-Link disk")
+            }
+
+            if emulator.isMachineRunning {
+                emulator.reset(kind: .hard)
+            }
+
+            guard emulator.openMedia(url: diskURL, behavior: .run) else {
+                presentError(title: "Q-Link Reloaded",
+                             message: "VICE Mac configured the modem, but the selected Q-Link disk could not be started.")
+                return
+            }
+
+            emulator.statusText = "Q-Link Reloaded connecting through q-link.net:5190"
+            if !noticeMessages.isEmpty {
+                presentNotice(title: "Q-Link Reloaded",
+                              message: "VICE Mac \(noticeMessages.joined(separator: " and ")).")
+            }
+        } catch {
+            presentError(title: "Q-Link Reloaded", message: error.localizedDescription)
+        }
+    }
+
+    func chooseDisk(for machine: EmulatedMachine) {
+        guard supports(machine: machine) else {
+            presentError(title: "Q-Link Reloaded",
+                         message: "\(machine.displayName) does not support the Q-Link Reloaded preset.")
+            return
+        }
+
+        do {
+            _ = try importDisk(for: machine)
+        } catch {
+            presentError(title: "Q-Link Reloaded", message: error.localizedDescription)
+        }
+    }
+
+    func forgetDisk() {
+        Self.defaults.removeObject(forKey: Self.defaultsKey)
+        Self.defaults.removeObject(forKey: Self.versionDefaultsKey)
+        configuredDiskTitle = nil
+        configuredDiskVersionTitle = nil
+    }
+
+    private func preparedDiskURL(for machine: EmulatedMachine,
+                                 promptIfNeeded: Bool) throws -> URL? {
+        if let item = try configuredDiskItem(),
+           let url = try diskURL(for: item) {
+            try refreshManagedDiskPatch(at: url)
+            return url
+        }
+
+        guard promptIfNeeded else {
+            return nil
+        }
+
+        return try importDisk(for: machine)
+    }
+
+    private func refreshManagedDiskPatch(at url: URL) throws {
+        let version = try QLinkReloadedDiskPatcher.knownVersion(for: url)
+        let patchResult = try QLinkReloadedDiskPatcher.configureReloadedProfile(at: url,
+                                                                                version: version)
+        Self.defaults.set(patchResult.version.displayTitle, forKey: Self.versionDefaultsKey)
+        configuredDiskVersionTitle = patchResult.version.displayTitle
+    }
+
+    private func importDisk(for machine: EmulatedMachine) throws -> URL? {
+        let panel = NSOpenPanel()
+        panel.title = "Choose Q-Link Disk"
+        panel.message = "Choose your Quantum Link disk image. VICE Mac will copy it into the media library and use it for one-click Q-Link Reloaded connections."
+        panel.prompt = "Use Disk"
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = diskContentTypes(for: machine)
+
+        NSApp.activate(ignoringOtherApps: true)
+        panel.center()
+
+        guard panel.runModal() == .OK,
+              let sourceURL = panel.url else {
+            return nil
+        }
+
+        let diskVersion = try QLinkReloadedDiskPatcher.knownVersion(for: sourceURL)
+        let store = try MediaLibraryStore()
+        let importedItems = try store.importURLs([sourceURL])
+        guard let item = importedItems.first(where: { $0.primaryFile.kind == .disk }) else {
+            throw QLinkReloadedServiceError.unsupportedDisk
+        }
+        let managedURL = store.primaryFileURL(for: item)
+        let patchResult = try QLinkReloadedDiskPatcher.configureReloadedProfile(at: managedURL,
+                                                                                version: diskVersion)
+
+        Self.defaults.set(item.id.uuidString, forKey: Self.defaultsKey)
+        Self.defaults.set(patchResult.version.displayTitle, forKey: Self.versionDefaultsKey)
+        configuredDiskTitle = item.title
+        configuredDiskVersionTitle = patchResult.version.displayTitle
+        return managedURL
+    }
+
+    private func configuredDiskItem() throws -> MediaLibraryItem? {
+        guard let rawID = Self.defaults.string(forKey: Self.defaultsKey),
+              let id = UUID(uuidString: rawID) else {
+            configuredDiskTitle = nil
+            configuredDiskVersionTitle = nil
+            return nil
+        }
+
+        let store = try MediaLibraryStore()
+        guard let item = try store.items().first(where: { $0.id == id }) else {
+            Self.defaults.removeObject(forKey: Self.defaultsKey)
+            Self.defaults.removeObject(forKey: Self.versionDefaultsKey)
+            configuredDiskTitle = nil
+            configuredDiskVersionTitle = nil
+            return nil
+        }
+
+        configuredDiskTitle = item.title
+        configuredDiskVersionTitle = Self.defaults.string(forKey: Self.versionDefaultsKey)
+        return item
+    }
+
+    private func diskURL(for item: MediaLibraryItem) throws -> URL? {
+        let store = try MediaLibraryStore()
+        let url = store.primaryFileURL(for: item)
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            Self.defaults.removeObject(forKey: Self.defaultsKey)
+            Self.defaults.removeObject(forKey: Self.versionDefaultsKey)
+            configuredDiskTitle = nil
+            configuredDiskVersionTitle = nil
+            return nil
+        }
+
+        return url
+    }
+
+    private func refreshConfiguredDiskTitle() {
+        _ = try? configuredDiskItem()
+    }
+
+    private func qLinkModemPreparation(for emulator: EmulatorSession) -> QLinkReloadedModemPreparation {
+        let issues = QLinkReloadedModemRequirements.incompatibilities(in: emulator.networkModem,
+                                                                      for: emulator.machine)
+        if issues.isEmpty {
+            return .compatible
+        }
+
+        let defaultModem = NetworkModemConfiguration.standard.normalized(for: emulator.machine)
+        guard !EmulatorDefaults.hasSavedNetworkModem(for: emulator.machine),
+              emulator.networkModem == defaultModem else {
+            return .incompatible(issues)
+        }
+
+        return .needsPreset(issues)
+    }
+
+    private func qLinkDrivePreparation(for emulator: EmulatorSession) -> QLinkReloadedDrivePreparation {
+        let issues = QLinkReloadedDriveRequirements.incompatibilities(in: emulator.driveConfigurations,
+                                                                      for: emulator.machine)
+        if issues.isEmpty {
+            return .compatible
+        }
+
+        let defaultDrives = emulator.machine.defaultDriveConfigurations()
+        guard !EmulatorDefaults.hasSavedDriveConfigurations(for: emulator.machine),
+              emulator.driveConfigurations == defaultDrives else {
+            return .incompatible(issues)
+        }
+
+        return .needsPreset(issues)
+    }
+
+    private func applyQLinkModemPreset(to emulator: EmulatorSession) {
+        let configuration = QLinkReloadedModemRequirements.preset(preservingValuesFrom: emulator.networkModem)
+        emulator.networkModem = configuration.normalized(for: emulator.machine)
+    }
+
+    private func applyQLinkDrivePreset(to emulator: EmulatorSession) {
+        emulator.driveConfigurations = QLinkReloadedDriveRequirements.preset(preservingValuesFrom: emulator.driveConfigurations,
+                                                                             for: emulator.machine)
+    }
+
+    private func diskContentTypes(for machine: EmulatedMachine) -> [UTType] {
+        let extensions = Set(machine.capabilities.driveTypes
+            .flatMap(\.supportedDiskImageTypes)
+            .map(\.rawValue))
+
+        let types = extensions.compactMap { UTType(filenameExtension: $0) }
+        return types.isEmpty ? [.data] : types
+    }
+
+    private func presentError(title: String, message: String) {
+        alert = QLinkReloadedAlert(title: title, message: message)
+    }
+
+    private func presentNotice(title: String, message: String) {
+        alert = QLinkReloadedAlert(title: title, message: message)
+    }
+
+    private func presentIncompatibleSettings(modemIssues: [String], driveIssues: [String]) {
+        alert = QLinkReloadedAlert(title: "Q-Link Reloaded",
+                                   message: QLinkReloadedServiceError.incompatibleSettings(modemIssues: modemIssues,
+                                                                                          driveIssues: driveIssues)
+                                       .localizedDescription,
+                                   kind: .incompatibleSettings)
+    }
+}
+
+private enum QLinkReloadedModemPreparation: Equatable {
+    case compatible
+    case needsPreset([String])
+    case incompatible([String])
+}
+
+private enum QLinkReloadedDrivePreparation: Equatable {
+    case compatible
+    case needsPreset([String])
+    case incompatible([String])
 }
 
 @MainActor

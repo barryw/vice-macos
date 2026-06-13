@@ -204,11 +204,14 @@ int autostart_prg_with_disk_image(int unit, int drive, const char *file_name,
     const int secondary = 1;
     autostart_prg_t *prg;
     vdrive_t *vdrive;
+    disk_image_t *image;
     int i;
     int file_name_size;
     uint8_t data;
     unsigned int disk_image_type;
     int result, result2;
+    int saved_readonly = 0;
+    int restore_readonly = 0;
     char tempname[32];
 
     DBG(("autostart_prg_with_disk_image (unit: %d drive: %d file_name :%s image_name :%s)",
@@ -277,6 +280,12 @@ int autostart_prg_with_disk_image(int unit, int drive, const char *file_name,
             break;
         }
 
+        if (resources_get_int_sprintf("AttachDevice%dd%dReadonly", &saved_readonly, unit, drive) == 0
+            && saved_readonly != 0) {
+            restore_readonly = 1;
+            resources_set_int_sprintf("AttachDevice%dd%dReadonly", 0, unit, drive);
+        }
+
         /* attach disk image */
         if (file_system_attach_disk(unit, drive, image_name) < 0) {
             log_error(log, "Could not attach disk image: %s", image_name);
@@ -287,6 +296,14 @@ int autostart_prg_with_disk_image(int unit, int drive, const char *file_name,
         vdrive = file_system_get_vdrive((unsigned int)unit);
         if (vdrive == NULL) {
             break;
+        }
+        /* The scratch autostart image must stay writable even when normal
+           disk attachments are configured read-only. */
+        image = vdrive_get_image(vdrive, (unsigned int)drive);
+        if (image != NULL) {
+            image->read_only = 0;
+            vdrive->image = image;
+            vdrive->image_mode = 0;
         }
 
         /* create name for saving the file to the temporary disk. truncate to
@@ -343,6 +360,10 @@ int autostart_prg_with_disk_image(int unit, int drive, const char *file_name,
         }
         result = result2;
     } while (0);
+
+    if (restore_readonly) {
+        resources_set_int_sprintf("AttachDevice%dd%dReadonly", saved_readonly, unit, drive);
+    }
 
     /* free prg file */
     free_prg(prg);

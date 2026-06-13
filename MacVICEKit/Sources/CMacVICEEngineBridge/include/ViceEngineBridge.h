@@ -177,6 +177,8 @@ void ViceEngineReleaseAllKeys(void);
 bool ViceEngineFeedKeyboardText(const char *text);
 bool ViceEngineSetIntResource(const char *name, int32_t value);
 bool ViceEngineSetStringResource(const char *name, const char *value);
+bool ViceEngineGetIntResource(const char *name, int32_t *value);
+bool ViceEngineGetStringResource(const char *name, char *buffer, uint32_t bufferCapacity);
 bool ViceEngineSetJoystickValue(uint32_t port, uint32_t value);
 bool ViceEngineMoveMouse(float deltaX, float deltaY);
 bool ViceEngineSetMouseButton(uint32_t button, bool pressed);

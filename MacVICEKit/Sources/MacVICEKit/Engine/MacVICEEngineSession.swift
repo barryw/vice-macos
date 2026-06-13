@@ -605,6 +605,32 @@ public final class MacVICEEngineSession {
         }
     }
 
+    /// Reads a raw VICE integer resource.
+    public func intResource(_ name: String) -> Int32? {
+        var value: Int32 = 0
+        let didRead = name.withCString { resourceName in
+            ViceEngineGetIntResource(resourceName, &value)
+        }
+        return didRead ? value : nil
+    }
+
+    /// Reads a raw VICE string resource.
+    public func stringResource(_ name: String) -> String? {
+        var buffer = [CChar](repeating: 0, count: 4096)
+        let didRead = name.withCString { resourceName in
+            buffer.withUnsafeMutableBufferPointer { pointer in
+                guard let baseAddress = pointer.baseAddress else {
+                    return false
+                }
+
+                return ViceEngineGetStringResource(resourceName,
+                                                   baseAddress,
+                                                   UInt32(pointer.count))
+            }
+        }
+        return didRead ? String(cString: buffer) : nil
+    }
+
     /// Autostarts media in the running machine.
     @discardableResult
     public func autostart(_ url: URL, runMode: MacVICEMediaRunMode = .run) -> Bool {

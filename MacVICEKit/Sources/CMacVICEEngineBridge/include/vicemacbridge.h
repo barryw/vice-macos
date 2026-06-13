@@ -218,6 +218,8 @@ int vicemac_queue_keyboard_clear(void);
 int vicemac_queue_keyboard_text(const char *text);
 int vicemac_queue_resource_int(const char *name, int value);
 int vicemac_queue_resource_string(const char *name, const char *value);
+int vicemac_get_resource_int(const char *name, int *value);
+int vicemac_get_resource_string(const char *name, char *buffer, uint32_t buffer_capacity);
 int vicemac_queue_joystick_value(uint32_t port, uint32_t value);
 int vicemac_queue_mouse_move(float delta_x, float delta_y);
 int vicemac_queue_mouse_button(uint32_t button, int pressed);

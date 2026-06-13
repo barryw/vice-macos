@@ -6,7 +6,7 @@
     <title>mac VICE - Native Commodore emulation for macOS</title>
     <meta
       name="description"
-      content="mac VICE packages the VICE emulator as native Apple Silicon Mac apps with Metal display output, Mac settings, and signed DMG releases."
+      content="mac VICE packages the VICE emulator as native Apple Silicon Mac apps with Metal display output, media library, disk tools, controller setup, Q-Link Reloaded setup, optional AI tools, and signed DMG releases."
     >
     <meta property="og:title" content="mac VICE">
     <meta property="og:description" content="VICE emulator apps for Apple Silicon Macs.">
@@ -23,8 +23,10 @@
         <span>mac VICE</span>
       </a>
       <nav class="site-nav" aria-label="Primary">
+        <a href="#features">Features</a>
         <a href="#gallery">Gallery</a>
         <a href="#disk-tool">Disk Manager</a>
+        <a href="#qlink">Q-Link</a>
         <a href="#download">Download</a>
       </nav>
     </header>
@@ -36,7 +38,8 @@
           <h1 id="hero-title">mac VICE</h1>
           <p class="hero-subtitle">
             Current VICE, packaged for Apple Silicon Macs with Metal display
-            output, Mac settings, and signed DMG releases.
+            output, Mac settings, media tools, controller setup, Q-Link
+            Reloaded help, optional AI, and signed DMG releases.
           </p>
           <div class="hero-actions">
             <a
@@ -61,6 +64,69 @@
             >
             <figcaption>x64sc running the HVSC intro disk.</figcaption>
           </figure>
+        </div>
+      </section>
+
+      <section class="section feature-overview-section" id="features" aria-labelledby="features-title">
+        <div class="section-heading">
+          <p class="eyebrow">Native Mac workflow</p>
+          <h2 id="features-title">VICE underneath. Mac app on top.</h2>
+        </div>
+
+        <div class="feature-grid">
+          <article class="feature-card">
+            <h3>Metal display output</h3>
+            <p>
+              Low-latency native rendering with LCD, CRT, PVM, RF, and phosphor
+              profiles plus scanline, mask, curvature, halation, persistence,
+              saturation, and warmth controls.
+            </p>
+          </article>
+
+          <article class="feature-card">
+            <h3>Media library</h3>
+            <p>
+              Import disks, programs, tapes, cartridges, and snapshots into a
+              stable library location, search them, favorite them, inspect
+              directories, and run, load, or attach them.
+            </p>
+          </article>
+
+          <article class="feature-card">
+            <h3>Controller setup</h3>
+            <p>
+              Name keyboard, joystick, and 1351 mouse devices, bind them to
+              ports, identify connected game controllers by input, and keep
+              per-device mappings.
+            </p>
+          </article>
+
+          <article class="feature-card">
+            <h3>Machine-aware settings</h3>
+            <p>
+              Models, ROMs, RAM expansion, SID layouts, display outputs,
+              storage, printing, modem hardware, tape, snapshots, and video
+              filters are scoped to the machine you are running.
+            </p>
+          </article>
+
+          <article class="feature-card">
+            <h3>Network modem</h3>
+            <p>
+              Configure User Port, SwiftLink, or Turbo232 modem hardware where
+              supported, choose Raw TCP or Telnet transport, dial outbound, and
+              accept incoming calls.
+            </p>
+          </article>
+
+          <article class="feature-card">
+            <h3>Debug and print tools</h3>
+            <p>
+              Open a native debugger for CPU state, disassembly, registers,
+              memory, breakpoints, and watchpoints. Preview and export printer
+              output from a Mac print queue.
+            </p>
+          </article>
         </div>
       </section>
 
@@ -153,10 +219,49 @@
         </div>
       </section>
 
+      <section class="section workflow-section" id="workflow" aria-labelledby="workflow-title">
+        <div class="section-heading">
+          <p class="eyebrow">Setup without archaeology</p>
+          <h2 id="workflow-title">Settings are native, explicit, and reversible.</h2>
+        </div>
+
+        <div class="workflow-layout">
+          <article class="gallery-card">
+            <img
+              class="product-shot"
+              src="assets/screenshots/x128-machine-settings.png"
+              width="1400"
+              height="1091"
+              loading="lazy"
+              alt="Machine settings in a native mac VICE settings window"
+            >
+            <div class="caption">
+              <h3>Machine settings</h3>
+              <p>Use normal Mac controls for models, video standards, ROMs, RAM, and runtime behavior.</p>
+            </div>
+          </article>
+
+          <article class="gallery-card">
+            <img
+              class="product-shot"
+              src="assets/screenshots/x64sc-display-settings.png"
+              width="1400"
+              height="1091"
+              loading="lazy"
+              alt="Display settings for video filter profiles in mac VICE"
+            >
+            <div class="caption">
+              <h3>Display profiles</h3>
+              <p>Dial in clean LCD output or period-correct CRT character from the same settings UI.</p>
+            </div>
+          </article>
+        </div>
+      </section>
+
       <section class="section disk-tool-section" id="disk-tool" aria-labelledby="disk-tool-title">
         <div class="section-heading">
           <p class="eyebrow">Disk image manager</p>
-          <h2 id="disk-tool-title">Disk images, without leaving the app.</h2>
+          <h2 id="disk-tool-title">Disk images and media, without leaving the app.</h2>
         </div>
 
         <div class="disk-tool-layout">
@@ -193,12 +298,84 @@
             </article>
 
             <ul class="disk-tool-points">
+              <li>Media library copies files into stable app-managed storage</li>
+              <li>Search, favorite, run, load, attach, reveal, and remove</li>
               <li>D64, D67, D71, D80, D81, and D82</li>
               <li>Import, export, rename, and delete</li>
               <li>Sector maps, BAM allocation, and clean rebuilds</li>
               <li>GEOS helpers where they actually save pain</li>
             </ul>
           </aside>
+        </div>
+      </section>
+
+      <section class="section assistant-section" id="assistant" aria-labelledby="assistant-title">
+        <div class="section-heading">
+          <p class="eyebrow">Optional AI tools</p>
+          <h2 id="assistant-title">A chat sidebar that can inspect the running machine.</h2>
+        </div>
+
+        <div class="assistant-layout">
+          <div class="assistant-copy">
+            <p>
+              The assistant is off until configured. When enabled, it uses an
+              OpenAI-compatible provider, including local servers, and exposes
+              focused emulator tools for machine context, debugger snapshots,
+              memory reads and writes, display color changes, VICE resources,
+              typing, and BASIC line submission.
+            </p>
+            <p>
+              Searchable PDFs can be added per current machine. Text-only PDFs
+              are chunked into SQLite FTS5 so the assistant can search uploaded
+              manuals and then read nearby context without loading entire books.
+            </p>
+          </div>
+
+          <div class="assistant-panel" aria-label="Assistant capabilities">
+            <div class="assistant-row user-row">Change border and background to black.</div>
+            <div class="assistant-row tool-row">apply_changes: display style, resources, memory</div>
+            <div class="assistant-row reply-row">Done. Used 1 tool.</div>
+            <div class="assistant-status" aria-hidden="true"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section qlink-section" id="qlink" aria-labelledby="qlink-title">
+        <div class="section-heading">
+          <p class="eyebrow">Q-Link Reloaded</p>
+          <h2 id="qlink-title">Bring your own disk. Skip the setup maze.</h2>
+        </div>
+
+        <div class="qlink-layout">
+          <article class="qlink-shot gallery-card">
+            <img
+              class="product-shot"
+              src="assets/screenshots/qlink-reloaded.png"
+              width="2930"
+              height="2142"
+              loading="lazy"
+              alt="x64sc connected to Q-Link Reloaded with the Quantum Link main menu visible"
+            >
+            <div class="caption">
+              <p class="machine-name">Online</p>
+              <h3>Q-Link Reloaded, launched from mac VICE.</h3>
+              <p>Known disk versions get copied, patched, checked, and started from one native command.</p>
+            </div>
+          </article>
+
+          <div class="qlink-copy">
+            <p>
+              Choose a Quantum Link D64 you already own and mac VICE copies it
+              into the media library, fingerprints the known disk version, and
+              patches only that managed copy for Q-Link Reloaded.
+            </p>
+            <ul class="qlink-points">
+              <li>Original disk image stays untouched.</li>
+              <li>Unknown Q-Link disks are rejected instead of guessed.</li>
+              <li>Required modem and writable drive settings are checked before launch.</li>
+              <li>If existing settings conflict, mac VICE asks before changing anything.</li>
+            </ul>
+          </div>
         </div>
       </section>
 

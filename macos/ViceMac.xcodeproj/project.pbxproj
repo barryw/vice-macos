@@ -21,6 +21,11 @@
 		A10000000000000000000053 /* ControlConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003B /* ControlConfiguration.swift */; };
 		A10000000000000000000054 /* DriveConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003C /* DriveConfiguration.swift */; };
 		A10000000000000000000055 /* MediaConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003D /* MediaConfiguration.swift */; };
+		AC0E01000000000000000000 /* MediaLibraryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100E000000000000000000 /* MediaLibraryStore.swift */; };
+		AC0F01000000000000000000 /* MediaLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100F000000000000000000 /* MediaLibraryView.swift */; };
+		AC1010010000000000000000 /* MetadataIngestionConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1010000000000000000000 /* MetadataIngestionConfiguration.swift */; };
+		AC1020010000000000000000 /* GameBase64MetadataImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1020000000000000000000 /* GameBase64MetadataImporter.swift */; };
+		AC1011010000000000000000 /* MetadataSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1011000000000000000000 /* MetadataSettingsPane.swift */; };
 		A10000000000000000000056 /* AIAssistantConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003E /* AIAssistantConfiguration.swift */; };
 		A10000000000000000000057 /* DebuggerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003F /* DebuggerView.swift */; };
 		AA2000000000000000000010 /* CommodoreDiskImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000000000000000000020 /* CommodoreDiskImage.swift */; };
@@ -39,6 +44,11 @@
 		B20000000000000000000053 /* ControlConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003B /* ControlConfiguration.swift */; };
 		B20000000000000000000054 /* DriveConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003C /* DriveConfiguration.swift */; };
 		B20000000000000000000055 /* MediaConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003D /* MediaConfiguration.swift */; };
+		AC0E02000000000000000000 /* MediaLibraryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100E000000000000000000 /* MediaLibraryStore.swift */; };
+		AC0F02000000000000000000 /* MediaLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100F000000000000000000 /* MediaLibraryView.swift */; };
+		AC1010020000000000000000 /* MetadataIngestionConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1010000000000000000000 /* MetadataIngestionConfiguration.swift */; };
+		AC1020020000000000000000 /* GameBase64MetadataImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1020000000000000000000 /* GameBase64MetadataImporter.swift */; };
+		AC1011020000000000000000 /* MetadataSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1011000000000000000000 /* MetadataSettingsPane.swift */; };
 		B20000000000000000000056 /* AIAssistantConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003E /* AIAssistantConfiguration.swift */; };
 		B20000000000000000000057 /* DebuggerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003F /* DebuggerView.swift */; };
 		B20000000000000000000070 /* CommodoreDiskImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000000000000000000020 /* CommodoreDiskImage.swift */; };
@@ -57,6 +67,11 @@
 		C30000000000000000000053 /* ControlConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003B /* ControlConfiguration.swift */; };
 		C30000000000000000000054 /* DriveConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003C /* DriveConfiguration.swift */; };
 		C30000000000000000000055 /* MediaConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003D /* MediaConfiguration.swift */; };
+		AC0E03000000000000000000 /* MediaLibraryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100E000000000000000000 /* MediaLibraryStore.swift */; };
+		AC0F03000000000000000000 /* MediaLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100F000000000000000000 /* MediaLibraryView.swift */; };
+		AC1010030000000000000000 /* MetadataIngestionConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1010000000000000000000 /* MetadataIngestionConfiguration.swift */; };
+		AC1020030000000000000000 /* GameBase64MetadataImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1020000000000000000000 /* GameBase64MetadataImporter.swift */; };
+		AC1011030000000000000000 /* MetadataSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1011000000000000000000 /* MetadataSettingsPane.swift */; };
 		C30000000000000000000056 /* AIAssistantConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003E /* AIAssistantConfiguration.swift */; };
 		C30000000000000000000057 /* DebuggerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003F /* DebuggerView.swift */; };
 		C30000000000000000000070 /* CommodoreDiskImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000000000000000000020 /* CommodoreDiskImage.swift */; };
@@ -75,6 +90,11 @@
 		D40000000000000000000053 /* ControlConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003B /* ControlConfiguration.swift */; };
 		D40000000000000000000054 /* DriveConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003C /* DriveConfiguration.swift */; };
 		D40000000000000000000055 /* MediaConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003D /* MediaConfiguration.swift */; };
+		AC0E04000000000000000000 /* MediaLibraryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100E000000000000000000 /* MediaLibraryStore.swift */; };
+		AC0F04000000000000000000 /* MediaLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100F000000000000000000 /* MediaLibraryView.swift */; };
+		AC1010040000000000000000 /* MetadataIngestionConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1010000000000000000000 /* MetadataIngestionConfiguration.swift */; };
+		AC1020040000000000000000 /* GameBase64MetadataImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1020000000000000000000 /* GameBase64MetadataImporter.swift */; };
+		AC1011040000000000000000 /* MetadataSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1011000000000000000000 /* MetadataSettingsPane.swift */; };
 		D40000000000000000000056 /* AIAssistantConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003E /* AIAssistantConfiguration.swift */; };
 		D40000000000000000000057 /* DebuggerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003F /* DebuggerView.swift */; };
 		D40000000000000000000070 /* CommodoreDiskImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000000000000000000020 /* CommodoreDiskImage.swift */; };
@@ -93,6 +113,11 @@
 		E50000000000000000000053 /* ControlConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003B /* ControlConfiguration.swift */; };
 		E50000000000000000000054 /* DriveConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003C /* DriveConfiguration.swift */; };
 		E50000000000000000000055 /* MediaConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003D /* MediaConfiguration.swift */; };
+		AC0E05000000000000000000 /* MediaLibraryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100E000000000000000000 /* MediaLibraryStore.swift */; };
+		AC0F05000000000000000000 /* MediaLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100F000000000000000000 /* MediaLibraryView.swift */; };
+		AC1010050000000000000000 /* MetadataIngestionConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1010000000000000000000 /* MetadataIngestionConfiguration.swift */; };
+		AC1020050000000000000000 /* GameBase64MetadataImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1020000000000000000000 /* GameBase64MetadataImporter.swift */; };
+		AC1011050000000000000000 /* MetadataSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1011000000000000000000 /* MetadataSettingsPane.swift */; };
 		E50000000000000000000056 /* AIAssistantConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003E /* AIAssistantConfiguration.swift */; };
 		E50000000000000000000057 /* DebuggerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003F /* DebuggerView.swift */; };
 		E50000000000000000000070 /* CommodoreDiskImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000000000000000000020 /* CommodoreDiskImage.swift */; };
@@ -111,6 +136,11 @@
 		170000000000000000000053 /* ControlConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003B /* ControlConfiguration.swift */; };
 		170000000000000000000054 /* DriveConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003C /* DriveConfiguration.swift */; };
 		170000000000000000000055 /* MediaConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003D /* MediaConfiguration.swift */; };
+		AC0E06000000000000000000 /* MediaLibraryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100E000000000000000000 /* MediaLibraryStore.swift */; };
+		AC0F06000000000000000000 /* MediaLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100F000000000000000000 /* MediaLibraryView.swift */; };
+		AC1010060000000000000000 /* MetadataIngestionConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1010000000000000000000 /* MetadataIngestionConfiguration.swift */; };
+		AC1020060000000000000000 /* GameBase64MetadataImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1020000000000000000000 /* GameBase64MetadataImporter.swift */; };
+		AC1011060000000000000000 /* MetadataSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1011000000000000000000 /* MetadataSettingsPane.swift */; };
 		170000000000000000000056 /* AIAssistantConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003E /* AIAssistantConfiguration.swift */; };
 		170000000000000000000057 /* DebuggerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003F /* DebuggerView.swift */; };
 		170000000000000000000070 /* CommodoreDiskImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000000000000000000020 /* CommodoreDiskImage.swift */; };
@@ -129,6 +159,11 @@
 		180000000000000000000053 /* ControlConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003B /* ControlConfiguration.swift */; };
 		180000000000000000000054 /* DriveConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003C /* DriveConfiguration.swift */; };
 		180000000000000000000055 /* MediaConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003D /* MediaConfiguration.swift */; };
+		AC0E07000000000000000000 /* MediaLibraryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100E000000000000000000 /* MediaLibraryStore.swift */; };
+		AC0F07000000000000000000 /* MediaLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100F000000000000000000 /* MediaLibraryView.swift */; };
+		AC1010070000000000000000 /* MetadataIngestionConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1010000000000000000000 /* MetadataIngestionConfiguration.swift */; };
+		AC1020070000000000000000 /* GameBase64MetadataImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1020000000000000000000 /* GameBase64MetadataImporter.swift */; };
+		AC1011070000000000000000 /* MetadataSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1011000000000000000000 /* MetadataSettingsPane.swift */; };
 		180000000000000000000056 /* AIAssistantConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003E /* AIAssistantConfiguration.swift */; };
 		180000000000000000000057 /* DebuggerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003F /* DebuggerView.swift */; };
 		180000000000000000000070 /* CommodoreDiskImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000000000000000000020 /* CommodoreDiskImage.swift */; };
@@ -147,6 +182,11 @@
 		190000000000000000000053 /* ControlConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003B /* ControlConfiguration.swift */; };
 		190000000000000000000054 /* DriveConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003C /* DriveConfiguration.swift */; };
 		190000000000000000000055 /* MediaConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003D /* MediaConfiguration.swift */; };
+		AC0E08000000000000000000 /* MediaLibraryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100E000000000000000000 /* MediaLibraryStore.swift */; };
+		AC0F08000000000000000000 /* MediaLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100F000000000000000000 /* MediaLibraryView.swift */; };
+		AC1010080000000000000000 /* MetadataIngestionConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1010000000000000000000 /* MetadataIngestionConfiguration.swift */; };
+		AC1020080000000000000000 /* GameBase64MetadataImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1020000000000000000000 /* GameBase64MetadataImporter.swift */; };
+		AC1011080000000000000000 /* MetadataSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1011000000000000000000 /* MetadataSettingsPane.swift */; };
 		190000000000000000000056 /* AIAssistantConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003E /* AIAssistantConfiguration.swift */; };
 		190000000000000000000057 /* DebuggerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003F /* DebuggerView.swift */; };
 		190000000000000000000070 /* CommodoreDiskImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000000000000000000020 /* CommodoreDiskImage.swift */; };
@@ -165,6 +205,11 @@
 		1A0000000000000000000053 /* ControlConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003B /* ControlConfiguration.swift */; };
 		1A0000000000000000000054 /* DriveConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003C /* DriveConfiguration.swift */; };
 		1A0000000000000000000055 /* MediaConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003D /* MediaConfiguration.swift */; };
+		AC0E09000000000000000000 /* MediaLibraryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100E000000000000000000 /* MediaLibraryStore.swift */; };
+		AC0F09000000000000000000 /* MediaLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100F000000000000000000 /* MediaLibraryView.swift */; };
+		AC1010090000000000000000 /* MetadataIngestionConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1010000000000000000000 /* MetadataIngestionConfiguration.swift */; };
+		AC1020090000000000000000 /* GameBase64MetadataImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1020000000000000000000 /* GameBase64MetadataImporter.swift */; };
+		AC1011090000000000000000 /* MetadataSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1011000000000000000000 /* MetadataSettingsPane.swift */; };
 		1A0000000000000000000056 /* AIAssistantConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003E /* AIAssistantConfiguration.swift */; };
 		1A0000000000000000000057 /* DebuggerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003F /* DebuggerView.swift */; };
 		1A0000000000000000000070 /* CommodoreDiskImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000000000000000000020 /* CommodoreDiskImage.swift */; };
@@ -182,9 +227,22 @@
 		F60000000000000000000053 /* ControlConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003B /* ControlConfiguration.swift */; };
 		F60000000000000000000054 /* DriveConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003C /* DriveConfiguration.swift */; };
 		F60000000000000000000055 /* MediaConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003D /* MediaConfiguration.swift */; };
+		AC0E0A000000000000000000 /* MediaLibraryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC100E000000000000000000 /* MediaLibraryStore.swift */; };
+		AC10100A0000000000000000 /* MetadataIngestionConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1010000000000000000000 /* MetadataIngestionConfiguration.swift */; };
+		AC10200A0000000000000000 /* GameBase64MetadataImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1020000000000000000000 /* GameBase64MetadataImporter.swift */; };
 		F60000000000000000000056 /* AIAssistantConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003E /* AIAssistantConfiguration.swift */; };
 		F60000000000000000000070 /* CommodoreDiskImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000000000000000000020 /* CommodoreDiskImage.swift */; };
 		F60000000000000000000071 /* DiskImageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1000000000000000000022 /* DiskImageService.swift */; };
+		AC1030010000000000000000 /* AIDocumentLibraryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1030000000000000000000 /* AIDocumentLibraryStore.swift */; };
+		AC1030020000000000000000 /* AIDocumentLibraryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1030000000000000000000 /* AIDocumentLibraryStore.swift */; };
+		AC1030030000000000000000 /* AIDocumentLibraryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1030000000000000000000 /* AIDocumentLibraryStore.swift */; };
+		AC1030040000000000000000 /* AIDocumentLibraryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1030000000000000000000 /* AIDocumentLibraryStore.swift */; };
+		AC1030050000000000000000 /* AIDocumentLibraryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1030000000000000000000 /* AIDocumentLibraryStore.swift */; };
+		AC1030060000000000000000 /* AIDocumentLibraryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1030000000000000000000 /* AIDocumentLibraryStore.swift */; };
+		AC1030070000000000000000 /* AIDocumentLibraryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1030000000000000000000 /* AIDocumentLibraryStore.swift */; };
+		AC1030080000000000000000 /* AIDocumentLibraryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1030000000000000000000 /* AIDocumentLibraryStore.swift */; };
+		AC1030090000000000000000 /* AIDocumentLibraryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1030000000000000000000 /* AIDocumentLibraryStore.swift */; };
+		AC10300A0000000000000000 /* AIDocumentLibraryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1030000000000000000000 /* AIDocumentLibraryStore.swift */; };
 		FA0000000000000000000010 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = FA0000000000000000000020 /* Sparkle */; };
 		FA0000000000000000000011 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = FA0000000000000000000021 /* Sparkle */; };
 		FA0000000000000000000012 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = FA0000000000000000000022 /* Sparkle */; };
@@ -423,6 +481,12 @@
 		A1000000000000000000003B /* ControlConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlConfiguration.swift; sourceTree = "<group>"; };
 		A1000000000000000000003C /* DriveConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveConfiguration.swift; sourceTree = "<group>"; };
 		A1000000000000000000003D /* MediaConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaConfiguration.swift; sourceTree = "<group>"; };
+		AC100E000000000000000000 /* MediaLibraryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaLibraryStore.swift; sourceTree = "<group>"; };
+		AC100F000000000000000000 /* MediaLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaLibraryView.swift; sourceTree = "<group>"; };
+		AC1010000000000000000000 /* MetadataIngestionConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetadataIngestionConfiguration.swift; sourceTree = "<group>"; };
+		AC1020000000000000000000 /* GameBase64MetadataImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameBase64MetadataImporter.swift; sourceTree = "<group>"; };
+		AC1030000000000000000000 /* AIDocumentLibraryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIDocumentLibraryStore.swift; sourceTree = "<group>"; };
+		AC1011000000000000000000 /* MetadataSettingsPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetadataSettingsPane.swift; sourceTree = "<group>"; };
 		A1000000000000000000003E /* AIAssistantConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIAssistantConfiguration.swift; sourceTree = "<group>"; };
 		A1000000000000000000003F /* DebuggerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebuggerView.swift; sourceTree = "<group>"; };
 		AA1000000000000000000020 /* CommodoreDiskImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommodoreDiskImage.swift; sourceTree = "<group>"; };
@@ -575,6 +639,7 @@
 				AD1000000000000000000002 /* Session */,
 				AD1000000000000000000003 /* Configuration */,
 				AD1000000000000000000004 /* Disk Images */,
+				AD100000000000000000000E /* Media Library */,
 				AD1000000000000000000005 /* Display */,
 				AD1000000000000000000006 /* Input */,
 				A10000000000000000000033 /* Settings */,
@@ -617,9 +682,12 @@
 			children = (
 				A10000000000000000000038 /* EmulatorDefaults.swift */,
 				A1000000000000000000003E /* AIAssistantConfiguration.swift */,
+				AC1030000000000000000000 /* AIDocumentLibraryStore.swift */,
 				A1000000000000000000003B /* ControlConfiguration.swift */,
 				A1000000000000000000003C /* DriveConfiguration.swift */,
 				A1000000000000000000003D /* MediaConfiguration.swift */,
+				AC1010000000000000000000 /* MetadataIngestionConfiguration.swift */,
+				AC1020000000000000000000 /* GameBase64MetadataImporter.swift */,
 				AB1001000000000000000020 /* RAMExpansion.swift */,
 			);
 			name = Configuration;
@@ -636,6 +704,15 @@
 				AC1002000000000000000000 /* GEOSPackageService.swift */,
 			);
 			name = "Disk Images";
+			sourceTree = "<group>";
+		};
+		AD100000000000000000000E /* Media Library */ = {
+			isa = PBXGroup;
+			children = (
+				AC100E000000000000000000 /* MediaLibraryStore.swift */,
+				AC100F000000000000000000 /* MediaLibraryView.swift */,
+			);
+			name = "Media Library";
 			sourceTree = "<group>";
 		};
 		AD1000000000000000000005 /* Display */ = {
@@ -724,6 +801,7 @@
 			children = (
 				A10000000000000000000025 /* SettingsView.swift */,
 				AC1005000000000000000000 /* KeyboardSettingsPane.swift */,
+				AC1011000000000000000000 /* MetadataSettingsPane.swift */,
 				AC100D000000000000000000 /* SettingsCommonUI.swift */,
 			);
 			path = Settings;
@@ -1347,6 +1425,7 @@
 			files = (
 				A10000000000000000000010 /* ViceMacApp.swift in Sources */,
 				A10000000000000000000056 /* AIAssistantConfiguration.swift in Sources */,
+				AC1030010000000000000000 /* AIDocumentLibraryStore.swift in Sources */,
 				A10000000000000000000057 /* DebuggerView.swift in Sources */,
 				AC0C01000000000000000000 /* DebuggerModels.swift in Sources */,
 				AA2000000000000000000010 /* CommodoreDiskImage.swift in Sources */,
@@ -1354,6 +1433,11 @@
 				AC0101000000000000000000 /* CPMDiskImage.swift in Sources */,
 				AC0201000000000000000000 /* GEOSPackageService.swift in Sources */,
 				AC0301000000000000000000 /* DiskImageManagerModel.swift in Sources */,
+				AC0E01000000000000000000 /* MediaLibraryStore.swift in Sources */,
+				AC0F01000000000000000000 /* MediaLibraryView.swift in Sources */,
+				AC1010010000000000000000 /* MetadataIngestionConfiguration.swift in Sources */,
+				AC1020010000000000000000 /* GameBase64MetadataImporter.swift in Sources */,
+				AC1011010000000000000000 /* MetadataSettingsPane.swift in Sources */,
 				AC0401000000000000000000 /* ContentView+DriveIndicators.swift in Sources */,
 				AC0501000000000000000000 /* KeyboardSettingsPane.swift in Sources */,
 				AC0D01000000000000000000 /* SettingsCommonUI.swift in Sources */,
@@ -1391,6 +1475,7 @@
 			files = (
 				B20000000000000000000010 /* ViceMacApp.swift in Sources */,
 				B20000000000000000000056 /* AIAssistantConfiguration.swift in Sources */,
+				AC1030020000000000000000 /* AIDocumentLibraryStore.swift in Sources */,
 				B20000000000000000000057 /* DebuggerView.swift in Sources */,
 				AC0C02000000000000000000 /* DebuggerModels.swift in Sources */,
 				B20000000000000000000070 /* CommodoreDiskImage.swift in Sources */,
@@ -1398,6 +1483,11 @@
 				AC0102000000000000000000 /* CPMDiskImage.swift in Sources */,
 				AC0202000000000000000000 /* GEOSPackageService.swift in Sources */,
 				AC0302000000000000000000 /* DiskImageManagerModel.swift in Sources */,
+				AC0E02000000000000000000 /* MediaLibraryStore.swift in Sources */,
+				AC0F02000000000000000000 /* MediaLibraryView.swift in Sources */,
+				AC1010020000000000000000 /* MetadataIngestionConfiguration.swift in Sources */,
+				AC1020020000000000000000 /* GameBase64MetadataImporter.swift in Sources */,
+				AC1011020000000000000000 /* MetadataSettingsPane.swift in Sources */,
 				AC0402000000000000000000 /* ContentView+DriveIndicators.swift in Sources */,
 				AC0502000000000000000000 /* KeyboardSettingsPane.swift in Sources */,
 				AC0D02000000000000000000 /* SettingsCommonUI.swift in Sources */,
@@ -1435,6 +1525,7 @@
 			files = (
 				C30000000000000000000010 /* ViceMacApp.swift in Sources */,
 				C30000000000000000000056 /* AIAssistantConfiguration.swift in Sources */,
+				AC1030030000000000000000 /* AIDocumentLibraryStore.swift in Sources */,
 				C30000000000000000000057 /* DebuggerView.swift in Sources */,
 				AC0C03000000000000000000 /* DebuggerModels.swift in Sources */,
 				C30000000000000000000070 /* CommodoreDiskImage.swift in Sources */,
@@ -1442,6 +1533,11 @@
 				AC0103000000000000000000 /* CPMDiskImage.swift in Sources */,
 				AC0203000000000000000000 /* GEOSPackageService.swift in Sources */,
 				AC0303000000000000000000 /* DiskImageManagerModel.swift in Sources */,
+				AC0E03000000000000000000 /* MediaLibraryStore.swift in Sources */,
+				AC0F03000000000000000000 /* MediaLibraryView.swift in Sources */,
+				AC1010030000000000000000 /* MetadataIngestionConfiguration.swift in Sources */,
+				AC1020030000000000000000 /* GameBase64MetadataImporter.swift in Sources */,
+				AC1011030000000000000000 /* MetadataSettingsPane.swift in Sources */,
 				AC0403000000000000000000 /* ContentView+DriveIndicators.swift in Sources */,
 				AC0503000000000000000000 /* KeyboardSettingsPane.swift in Sources */,
 				AC0D03000000000000000000 /* SettingsCommonUI.swift in Sources */,
@@ -1479,6 +1575,7 @@
 			files = (
 				D40000000000000000000010 /* ViceMacApp.swift in Sources */,
 				D40000000000000000000056 /* AIAssistantConfiguration.swift in Sources */,
+				AC1030040000000000000000 /* AIDocumentLibraryStore.swift in Sources */,
 				D40000000000000000000057 /* DebuggerView.swift in Sources */,
 				AC0C04000000000000000000 /* DebuggerModels.swift in Sources */,
 				D40000000000000000000070 /* CommodoreDiskImage.swift in Sources */,
@@ -1486,6 +1583,11 @@
 				AC0104000000000000000000 /* CPMDiskImage.swift in Sources */,
 				AC0204000000000000000000 /* GEOSPackageService.swift in Sources */,
 				AC0304000000000000000000 /* DiskImageManagerModel.swift in Sources */,
+				AC0E04000000000000000000 /* MediaLibraryStore.swift in Sources */,
+				AC0F04000000000000000000 /* MediaLibraryView.swift in Sources */,
+				AC1010040000000000000000 /* MetadataIngestionConfiguration.swift in Sources */,
+				AC1020040000000000000000 /* GameBase64MetadataImporter.swift in Sources */,
+				AC1011040000000000000000 /* MetadataSettingsPane.swift in Sources */,
 				AC0404000000000000000000 /* ContentView+DriveIndicators.swift in Sources */,
 				AC0504000000000000000000 /* KeyboardSettingsPane.swift in Sources */,
 				AC0D04000000000000000000 /* SettingsCommonUI.swift in Sources */,
@@ -1523,6 +1625,7 @@
 			files = (
 				E50000000000000000000010 /* ViceMacApp.swift in Sources */,
 				E50000000000000000000056 /* AIAssistantConfiguration.swift in Sources */,
+				AC1030050000000000000000 /* AIDocumentLibraryStore.swift in Sources */,
 				E50000000000000000000057 /* DebuggerView.swift in Sources */,
 				AC0C05000000000000000000 /* DebuggerModels.swift in Sources */,
 				E50000000000000000000070 /* CommodoreDiskImage.swift in Sources */,
@@ -1530,6 +1633,11 @@
 				AC0105000000000000000000 /* CPMDiskImage.swift in Sources */,
 				AC0205000000000000000000 /* GEOSPackageService.swift in Sources */,
 				AC0305000000000000000000 /* DiskImageManagerModel.swift in Sources */,
+				AC0E05000000000000000000 /* MediaLibraryStore.swift in Sources */,
+				AC0F05000000000000000000 /* MediaLibraryView.swift in Sources */,
+				AC1010050000000000000000 /* MetadataIngestionConfiguration.swift in Sources */,
+				AC1020050000000000000000 /* GameBase64MetadataImporter.swift in Sources */,
+				AC1011050000000000000000 /* MetadataSettingsPane.swift in Sources */,
 				AC0405000000000000000000 /* ContentView+DriveIndicators.swift in Sources */,
 				AC0505000000000000000000 /* KeyboardSettingsPane.swift in Sources */,
 				AC0D05000000000000000000 /* SettingsCommonUI.swift in Sources */,
@@ -1567,6 +1675,7 @@
 			files = (
 				170000000000000000000010 /* ViceMacApp.swift in Sources */,
 				170000000000000000000056 /* AIAssistantConfiguration.swift in Sources */,
+				AC1030060000000000000000 /* AIDocumentLibraryStore.swift in Sources */,
 				170000000000000000000057 /* DebuggerView.swift in Sources */,
 				AC0C06000000000000000000 /* DebuggerModels.swift in Sources */,
 				170000000000000000000070 /* CommodoreDiskImage.swift in Sources */,
@@ -1574,6 +1683,11 @@
 				AC0106000000000000000000 /* CPMDiskImage.swift in Sources */,
 				AC0206000000000000000000 /* GEOSPackageService.swift in Sources */,
 				AC0306000000000000000000 /* DiskImageManagerModel.swift in Sources */,
+				AC0E06000000000000000000 /* MediaLibraryStore.swift in Sources */,
+				AC0F06000000000000000000 /* MediaLibraryView.swift in Sources */,
+				AC1010060000000000000000 /* MetadataIngestionConfiguration.swift in Sources */,
+				AC1020060000000000000000 /* GameBase64MetadataImporter.swift in Sources */,
+				AC1011060000000000000000 /* MetadataSettingsPane.swift in Sources */,
 				AC0406000000000000000000 /* ContentView+DriveIndicators.swift in Sources */,
 				AC0506000000000000000000 /* KeyboardSettingsPane.swift in Sources */,
 				AC0D06000000000000000000 /* SettingsCommonUI.swift in Sources */,
@@ -1611,6 +1725,7 @@
 			files = (
 				180000000000000000000010 /* ViceMacApp.swift in Sources */,
 				180000000000000000000056 /* AIAssistantConfiguration.swift in Sources */,
+				AC1030070000000000000000 /* AIDocumentLibraryStore.swift in Sources */,
 				180000000000000000000057 /* DebuggerView.swift in Sources */,
 				AC0C07000000000000000000 /* DebuggerModels.swift in Sources */,
 				180000000000000000000070 /* CommodoreDiskImage.swift in Sources */,
@@ -1618,6 +1733,11 @@
 				AC0107000000000000000000 /* CPMDiskImage.swift in Sources */,
 				AC0207000000000000000000 /* GEOSPackageService.swift in Sources */,
 				AC0307000000000000000000 /* DiskImageManagerModel.swift in Sources */,
+				AC0E07000000000000000000 /* MediaLibraryStore.swift in Sources */,
+				AC0F07000000000000000000 /* MediaLibraryView.swift in Sources */,
+				AC1010070000000000000000 /* MetadataIngestionConfiguration.swift in Sources */,
+				AC1020070000000000000000 /* GameBase64MetadataImporter.swift in Sources */,
+				AC1011070000000000000000 /* MetadataSettingsPane.swift in Sources */,
 				AC0407000000000000000000 /* ContentView+DriveIndicators.swift in Sources */,
 				AC0507000000000000000000 /* KeyboardSettingsPane.swift in Sources */,
 				AC0D07000000000000000000 /* SettingsCommonUI.swift in Sources */,
@@ -1655,6 +1775,7 @@
 			files = (
 				190000000000000000000010 /* ViceMacApp.swift in Sources */,
 				190000000000000000000056 /* AIAssistantConfiguration.swift in Sources */,
+				AC1030080000000000000000 /* AIDocumentLibraryStore.swift in Sources */,
 				190000000000000000000057 /* DebuggerView.swift in Sources */,
 				AC0C08000000000000000000 /* DebuggerModels.swift in Sources */,
 				190000000000000000000070 /* CommodoreDiskImage.swift in Sources */,
@@ -1662,6 +1783,11 @@
 				AC0108000000000000000000 /* CPMDiskImage.swift in Sources */,
 				AC0208000000000000000000 /* GEOSPackageService.swift in Sources */,
 				AC0308000000000000000000 /* DiskImageManagerModel.swift in Sources */,
+				AC0E08000000000000000000 /* MediaLibraryStore.swift in Sources */,
+				AC0F08000000000000000000 /* MediaLibraryView.swift in Sources */,
+				AC1010080000000000000000 /* MetadataIngestionConfiguration.swift in Sources */,
+				AC1020080000000000000000 /* GameBase64MetadataImporter.swift in Sources */,
+				AC1011080000000000000000 /* MetadataSettingsPane.swift in Sources */,
 				AC0408000000000000000000 /* ContentView+DriveIndicators.swift in Sources */,
 				AC0508000000000000000000 /* KeyboardSettingsPane.swift in Sources */,
 				AC0D08000000000000000000 /* SettingsCommonUI.swift in Sources */,
@@ -1699,6 +1825,7 @@
 			files = (
 				1A0000000000000000000010 /* ViceMacApp.swift in Sources */,
 				1A0000000000000000000056 /* AIAssistantConfiguration.swift in Sources */,
+				AC1030090000000000000000 /* AIDocumentLibraryStore.swift in Sources */,
 				1A0000000000000000000057 /* DebuggerView.swift in Sources */,
 				AC0C09000000000000000000 /* DebuggerModels.swift in Sources */,
 				1A0000000000000000000070 /* CommodoreDiskImage.swift in Sources */,
@@ -1706,6 +1833,11 @@
 				AC0109000000000000000000 /* CPMDiskImage.swift in Sources */,
 				AC0209000000000000000000 /* GEOSPackageService.swift in Sources */,
 				AC0309000000000000000000 /* DiskImageManagerModel.swift in Sources */,
+				AC0E09000000000000000000 /* MediaLibraryStore.swift in Sources */,
+				AC0F09000000000000000000 /* MediaLibraryView.swift in Sources */,
+				AC1010090000000000000000 /* MetadataIngestionConfiguration.swift in Sources */,
+				AC1020090000000000000000 /* GameBase64MetadataImporter.swift in Sources */,
+				AC1011090000000000000000 /* MetadataSettingsPane.swift in Sources */,
 				AC0409000000000000000000 /* ContentView+DriveIndicators.swift in Sources */,
 				AC0509000000000000000000 /* KeyboardSettingsPane.swift in Sources */,
 				AC0D09000000000000000000 /* SettingsCommonUI.swift in Sources */,
@@ -1745,12 +1877,16 @@
 			files = (
 				F60000000000000000000010 /* ModelConfigurationTests.swift in Sources */,
 				F60000000000000000000056 /* AIAssistantConfiguration.swift in Sources */,
+				AC10300A0000000000000000 /* AIDocumentLibraryStore.swift in Sources */,
 				AC0C0A000000000000000000 /* DebuggerModels.swift in Sources */,
 				F60000000000000000000070 /* CommodoreDiskImage.swift in Sources */,
 				F60000000000000000000071 /* DiskImageService.swift in Sources */,
 				AC010A000000000000000000 /* CPMDiskImage.swift in Sources */,
 				AC020A000000000000000000 /* GEOSPackageService.swift in Sources */,
 				AC030A000000000000000000 /* DiskImageManagerModel.swift in Sources */,
+				AC0E0A000000000000000000 /* MediaLibraryStore.swift in Sources */,
+				AC10100A0000000000000000 /* MetadataIngestionConfiguration.swift in Sources */,
+				AC10200A0000000000000000 /* GameBase64MetadataImporter.swift in Sources */,
 				AC040A000000000000000000 /* ContentView+DriveIndicators.swift in Sources */,
 				AC050A000000000000000000 /* KeyboardSettingsPane.swift in Sources */,
 				AC0D0A000000000000000000 /* SettingsCommonUI.swift in Sources */,

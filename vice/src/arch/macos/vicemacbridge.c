@@ -114,6 +114,11 @@ typedef enum vicemac_snapshot_request_type_e {
     VICEMAC_SNAPSHOT_REQUEST_LOAD
 } vicemac_snapshot_request_type_t;
 
+typedef enum vicemac_resource_request_type_e {
+    VICEMAC_RESOURCE_REQUEST_INT,
+    VICEMAC_RESOURCE_REQUEST_STRING
+} vicemac_resource_request_type_t;
+
 typedef enum vicemac_debugger_request_type_e {
     VICEMAC_DEBUGGER_REQUEST_SNAPSHOT,
     VICEMAC_DEBUGGER_REQUEST_DISASSEMBLE,
@@ -224,6 +229,18 @@ typedef struct vicemac_snapshot_request_s {
     pthread_cond_t condition;
 } vicemac_snapshot_request_t;
 
+typedef struct vicemac_resource_request_s {
+    vicemac_resource_request_type_t type;
+    char name[VICEMAC_RESOURCE_NAME_CAPACITY];
+    int int_value;
+    char *string_buffer;
+    uint32_t string_buffer_capacity;
+    int completed;
+    int success;
+    pthread_mutex_t mutex;
+    pthread_cond_t condition;
+} vicemac_resource_request_t;
+
 typedef struct vicemac_debugger_request_s {
     vicemac_debugger_request_type_t type;
     uint32_t memspace;
@@ -288,6 +305,10 @@ static pthread_mutex_t resource_string_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 static vicemac_resource_string_event_t resource_string_queue[VICEMAC_RESOURCE_QUEUE_CAPACITY];
 static unsigned int resource_string_queue_read = 0;
 static unsigned int resource_string_queue_write = 0;
+static pthread_mutex_t resource_request_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
+static vicemac_resource_request_t *resource_request_queue[VICEMAC_RESOURCE_QUEUE_CAPACITY];
+static unsigned int resource_request_queue_read = 0;
+static unsigned int resource_request_queue_write = 0;
 static pthread_mutex_t joystick_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 static vicemac_joystick_event_t joystick_queue[VICEMAC_JOYSTICK_QUEUE_CAPACITY];
 static unsigned int joystick_queue_read = 0;
@@ -486,6 +507,44 @@ static int vicemac_snapshot_queue_pop(vicemac_snapshot_request_t **request)
     return has_request;
 }
 
+static int vicemac_resource_request_queue_push(vicemac_resource_request_t *request)
+{
+    unsigned int next_write;
+
+    pthread_mutex_lock(&resource_request_queue_mutex);
+
+    next_write = vicemac_queue_next(resource_request_queue_write,
+                                    VICEMAC_RESOURCE_QUEUE_CAPACITY);
+    if (next_write == resource_request_queue_read) {
+        pthread_mutex_unlock(&resource_request_queue_mutex);
+        return 0;
+    }
+
+    resource_request_queue[resource_request_queue_write] = request;
+    resource_request_queue_write = next_write;
+
+    pthread_mutex_unlock(&resource_request_queue_mutex);
+    return 1;
+}
+
+static int vicemac_resource_request_queue_pop(vicemac_resource_request_t **request)
+{
+    int has_request = 0;
+
+    pthread_mutex_lock(&resource_request_queue_mutex);
+
+    if (resource_request_queue_read != resource_request_queue_write) {
+        *request = resource_request_queue[resource_request_queue_read];
+        resource_request_queue[resource_request_queue_read] = 0;
+        resource_request_queue_read = vicemac_queue_next(resource_request_queue_read,
+                                                         VICEMAC_RESOURCE_QUEUE_CAPACITY);
+        has_request = 1;
+    }
+
+    pthread_mutex_unlock(&resource_request_queue_mutex);
+    return has_request;
+}
+
 static int vicemac_debugger_queue_push(vicemac_debugger_request_t *request)
 {
     unsigned int next_write;
@@ -534,6 +593,15 @@ static void vicemac_complete_memory_request(vicemac_memory_request_t *request, i
 }
 
 static void vicemac_complete_snapshot_request(vicemac_snapshot_request_t *request, int success)
+{
+    pthread_mutex_lock(&request->mutex);
+    request->success = success;
+    request->completed = 1;
+    pthread_cond_signal(&request->condition);
+    pthread_mutex_unlock(&request->mutex);
+}
+
+static void vicemac_complete_resource_request(vicemac_resource_request_t *request, int success)
 {
     pthread_mutex_lock(&request->mutex);
     request->success = success;
@@ -1022,6 +1090,79 @@ int vicemac_queue_resource_string(const char *name, const char *value)
                               &resource_string_queue_read,
                               &resource_string_queue_write,
                               &event);
+}
+
+static int vicemac_perform_resource_request(vicemac_resource_request_type_t type,
+                                            const char *name,
+                                            int *int_value,
+                                            char *string_buffer,
+                                            uint32_t string_buffer_capacity)
+{
+    vicemac_resource_request_t request;
+    int success;
+
+    if (name == 0 || name[0] == '\0'
+        || strlen(name) >= VICEMAC_RESOURCE_NAME_CAPACITY) {
+        return 0;
+    }
+
+    if ((type == VICEMAC_RESOURCE_REQUEST_INT && int_value == 0)
+        || (type == VICEMAC_RESOURCE_REQUEST_STRING
+            && (string_buffer == 0 || string_buffer_capacity == 0))) {
+        return 0;
+    }
+
+    memset(&request, 0, sizeof(request));
+    request.type = type;
+    vicemac_copy_cstring(request.name, sizeof(request.name), name);
+    request.string_buffer = string_buffer;
+    request.string_buffer_capacity = string_buffer_capacity;
+
+    if (pthread_mutex_init(&request.mutex, 0) != 0) {
+        return 0;
+    }
+    if (pthread_cond_init(&request.condition, 0) != 0) {
+        pthread_mutex_destroy(&request.mutex);
+        return 0;
+    }
+
+    if (!vicemac_resource_request_queue_push(&request)) {
+        pthread_cond_destroy(&request.condition);
+        pthread_mutex_destroy(&request.mutex);
+        return 0;
+    }
+
+    pthread_mutex_lock(&request.mutex);
+    while (!request.completed) {
+        pthread_cond_wait(&request.condition, &request.mutex);
+    }
+    success = request.success;
+    if (success && type == VICEMAC_RESOURCE_REQUEST_INT) {
+        *int_value = request.int_value;
+    }
+    pthread_mutex_unlock(&request.mutex);
+
+    pthread_cond_destroy(&request.condition);
+    pthread_mutex_destroy(&request.mutex);
+    return success;
+}
+
+int vicemac_get_resource_int(const char *name, int *value)
+{
+    return vicemac_perform_resource_request(VICEMAC_RESOURCE_REQUEST_INT,
+                                            name,
+                                            value,
+                                            0,
+                                            0);
+}
+
+int vicemac_get_resource_string(const char *name, char *buffer, uint32_t buffer_capacity)
+{
+    return vicemac_perform_resource_request(VICEMAC_RESOURCE_REQUEST_STRING,
+                                            name,
+                                            0,
+                                            buffer,
+                                            buffer_capacity);
 }
 
 int vicemac_queue_joystick_value(uint32_t port, uint32_t value)
@@ -2491,6 +2632,41 @@ static void vicemac_dispatch_queued_resources(void)
     }
 }
 
+static int vicemac_dispatch_resource_request(vicemac_resource_request_t *request)
+{
+    const char *string_value = 0;
+
+    if (request == 0 || request->name[0] == '\0') {
+        return 0;
+    }
+
+    switch (request->type) {
+        case VICEMAC_RESOURCE_REQUEST_INT:
+            return resources_get_int(request->name, &request->int_value) == 0;
+        case VICEMAC_RESOURCE_REQUEST_STRING:
+            if (request->string_buffer == 0 || request->string_buffer_capacity == 0
+                || resources_get_string(request->name, &string_value) < 0) {
+                return 0;
+            }
+            vicemac_copy_cstring(request->string_buffer,
+                                 request->string_buffer_capacity,
+                                 string_value != 0 ? string_value : "");
+            return 1;
+    }
+
+    return 0;
+}
+
+static void vicemac_dispatch_queued_resource_requests(void)
+{
+    vicemac_resource_request_t *request;
+
+    while (vicemac_resource_request_queue_pop(&request)) {
+        vicemac_complete_resource_request(request,
+                                          vicemac_dispatch_resource_request(request));
+    }
+}
+
 static void vicemac_dispatch_queued_input(void)
 {
     vicemac_input_event_t event;
@@ -2749,6 +2925,7 @@ void vicemac_dispatch_queued_events(void)
     vicemac_dispatch_queued_memory_requests();
     vicemac_dispatch_queued_debugger_requests();
     vicemac_dispatch_queued_resources();
+    vicemac_dispatch_queued_resource_requests();
     vicemac_dispatch_queued_machine_commands();
     vicemac_dispatch_queued_snapshot_requests();
     vicemac_dispatch_queued_cartridge_commands();

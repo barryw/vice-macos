@@ -8,7 +8,10 @@ guard CommandLine.arguments.count >= 2 else {
 
 let ownerName = CommandLine.arguments[1]
 let titleNeedle = CommandLine.arguments.count >= 3 ? CommandLine.arguments[2] : ""
-let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
+let includesAllWindows = ProcessInfo.processInfo.environment["VICE_MAC_WINDOW_LIST_ALL"] == "1"
+let options: CGWindowListOption = includesAllWindows
+    ? [.optionAll, .excludeDesktopElements]
+    : [.optionOnScreenOnly, .excludeDesktopElements]
 let windows = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] ?? []
 
 for window in windows {

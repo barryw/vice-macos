@@ -732,6 +732,10 @@ private struct MachineKeyboardVisualLayout {
         ])
     }
 
+    private static let c128KeypadAfterRestoreSpacing: CGFloat = 1.25
+    private static let c128KeypadAfterReturnSpacing: CGFloat = 1.0
+    private static let c128KeypadAfterCursorKeysSpacing: CGFloat = 0.85
+
     private static func c128(document: VICEKeymapDocument) -> MachineKeyboardVisualLayout {
         MachineKeyboardVisualLayout(rows: [
             row([
@@ -758,7 +762,7 @@ private struct MachineKeyboardVisualLayout {
                 key("Y", 3, 1, document), key("U", 3, 6, document), key("I", 4, 1, document),
                 key("O", 4, 6, document), key("P", 5, 1, document), key("@", 5, 6, document),
                 key("*", 6, 1, document), key("^", 6, 6, document), special("RESTORE", -3, 0, unit: 1.3),
-                spacer(0.55), key("KP4", 8, 5, document), key("KP5", 8, 2, document),
+                spacer(Self.c128KeypadAfterRestoreSpacing), key("KP4", 8, 5, document), key("KP5", 8, 2, document),
                 key("KP6", 9, 5, document), key("KP-", 9, 2, document)
             ]),
             row([
@@ -767,7 +771,7 @@ private struct MachineKeyboardVisualLayout {
                 key("G", 3, 2, document), key("H", 3, 5, document), key("J", 4, 2, document),
                 key("K", 4, 5, document), key("L", 5, 2, document), key(": [", 5, 5, document),
                 key("; ]", 6, 2, document), key("=", 6, 5, document), key("RETURN", 0, 1, document, unit: 1.55),
-                spacer(0.55), key("KP1", 8, 7, document), key("KP2", 8, 4, document),
+                spacer(Self.c128KeypadAfterReturnSpacing), key("KP1", 8, 7, document), key("KP2", 8, 4, document),
                 key("KP3", 9, 7, document), key("ENTER", 9, 4, document)
             ]),
             row([
@@ -776,7 +780,7 @@ private struct MachineKeyboardVisualLayout {
                 key("V", 3, 7, document), key("B", 3, 4, document), key("N", 4, 7, document),
                 key("M", 4, 4, document), key(", <", 5, 7, document), key(". >", 5, 4, document),
                 key("/ ?", 6, 7, document), key("SHIFT", 6, 4, document, unit: 1.35),
-                key("U/D", 0, 7, document), key("L/R", 0, 2, document), spacer(0.55),
+                key("U/D", 0, 7, document), key("L/R", 0, 2, document), spacer(Self.c128KeypadAfterCursorKeysSpacing),
                 key("KP0", 10, 1, document, unit: 2.05), key("KP.", 10, 2, document)
             ]),
             row([spacer(5.2), key("SPACE", 7, 4, document, unit: 6.8)])

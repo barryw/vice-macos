@@ -344,7 +344,7 @@ final class EmulatorSession: ObservableObject {
     @Published var driveActivities: [Int: DriveActivity] = [:]
     @Published var cartridgeStatus = CartridgeStatus.detached
     @Published var tapeImagePath: String?
-    @Published var gameControllerNames: [String] = []
+    @Published var gameControllers: [ConnectedGameController] = []
     @Published var controlPortValues: [ControlPort: UInt16] = [:]
     @Published var filterSettings: VideoFilterSettings {
         didSet {

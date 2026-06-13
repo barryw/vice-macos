@@ -3,14 +3,70 @@ import Foundation
 import GameController
 import MacVICEKit
 
+enum EmulatorSpecialKey {
+    case returnKey
+    case cursorUp
+    case cursorDown
+    case f1
+
+    var symbol: Int64 {
+        switch self {
+        case .returnKey:
+            return 0xff0d
+        case .cursorUp:
+            return 0xff52
+        case .cursorDown:
+            return 0xff54
+        case .f1:
+            return 0xffbe
+        }
+    }
+}
+
 extension EmulatorSession {
     var hasGameControllers: Bool {
-        !gameControllerNames.isEmpty
+        !gameControllers.isEmpty
     }
 
-    var sortedGameControllerNames: [String] {
-        gameControllerNames.sorted { lhs, rhs in
-            lhs.localizedStandardCompare(rhs) == .orderedAscending
+    var sortedGameControllers: [ConnectedGameController] {
+        gameControllers.sorted { lhs, rhs in
+            let titleOrder = lhs.title.localizedStandardCompare(rhs.title)
+            if titleOrder != .orderedSame {
+                return titleOrder == .orderedAscending
+            }
+
+            return lhs.id < rhs.id
+        }
+    }
+
+    func connectedGameController(id: String?) -> ConnectedGameController? {
+        guard let id else {
+            return nil
+        }
+
+        return gameControllers.first { $0.id == id }
+    }
+
+    func gameControllerSelectionTitle(for mapping: GameControllerJoystickMapping) -> String {
+        if let controller = preferredGameController(for: mapping) {
+            return controller.title
+        }
+
+        if let preferredControllerName = mapping.preferredControllerName {
+            return "\(preferredControllerName) (missing)"
+        }
+
+        return "Any connected controller"
+    }
+
+    func hardwareTitle(for device: ControlDeviceConfiguration) -> String {
+        switch device.kind {
+        case .keyboard:
+            return "Mac keyboard"
+        case .joystick:
+            return gameControllerSelectionTitle(for: device.joystick)
+        case .mouse1351:
+            return "Mac pointer"
         }
     }
 
@@ -80,16 +136,35 @@ extension EmulatorSession {
         case .keyboard:
             return .connected
         case .joystick:
-            if let preferredControllerName = device.joystick.preferredControllerName {
-                return gameControllerNames.contains(preferredControllerName)
-                    ? .connected
-                    : .unavailable("Missing \(preferredControllerName)")
-            }
-
-            return hasGameControllers ? .connected : .unavailable("No controller connected")
+            return connectionState(for: device.joystick)
         case .mouse1351:
             return .connected
         }
+    }
+
+    func connectionState(for mapping: GameControllerJoystickMapping) -> ControlDeviceConnectionState {
+        if mapping.preferredControllerIdentifier != nil || mapping.preferredControllerName != nil {
+            if preferredGameController(for: mapping) != nil {
+                return .connected
+            }
+
+            let controllerTitle = mapping.preferredControllerName ?? "controller"
+            return .unavailable("Missing \(controllerTitle)")
+        }
+
+        return hasGameControllers ? .connected : .unavailable("No controller connected")
+    }
+
+    func preferredGameController(for mapping: GameControllerJoystickMapping) -> ConnectedGameController? {
+        if let preferredControllerIdentifier = mapping.preferredControllerIdentifier {
+            return gameControllers.first { $0.id == preferredControllerIdentifier }
+        }
+
+        if let preferredControllerName = mapping.preferredControllerName {
+            return gameControllers.first { $0.vendorName == preferredControllerName }
+        }
+
+        return nil
     }
 
     func setControlPortDeviceID(_ deviceID: UUID?, for port: ControlPort) {
@@ -377,6 +452,17 @@ extension EmulatorSession {
     }
 
     @discardableResult
+    func pressSpecialKey(_ key: EmulatorSpecialKey) -> Bool {
+        guard canReceiveKeyboardText else {
+            return false
+        }
+
+        engine.sendKeyEvent(keyCode: key.symbol, modifiers: 0, pressed: true)
+        engine.sendKeyEvent(keyCode: key.symbol, modifiers: 0, pressed: false)
+        return true
+    }
+
+    @discardableResult
     func pasteFromPasteboard(_ pasteboard: NSPasteboard = .general) -> Bool {
         guard let text = pasteboard.string(forType: .string),
               !text.isEmpty else {
@@ -527,7 +613,7 @@ extension EmulatorSession {
 
     private func refreshGameControllers() {
         let controllers = GCController.controllers()
-        gameControllerNames = Array(Set(controllers.map(Self.displayName(for:))))
+        gameControllers = Self.connectedGameControllers(for: controllers).map(\.descriptor)
 
         for controller in controllers {
             installGameControllerHandlers(controller)
@@ -592,9 +678,14 @@ extension EmulatorSession {
 
     private func gameController(for device: ControlDeviceConfiguration) -> GCController? {
         let controllers = GCController.controllers()
+        let connectedControllers = Self.connectedGameControllers(for: controllers)
+
+        if let preferredControllerIdentifier = device.joystick.preferredControllerIdentifier {
+            return connectedControllers.first { $0.descriptor.id == preferredControllerIdentifier }?.controller
+        }
 
         if let preferredControllerName = device.joystick.preferredControllerName {
-            return controllers.first { Self.displayName(for: $0) == preferredControllerName }
+            return connectedControllers.first { $0.descriptor.vendorName == preferredControllerName }?.controller
         }
 
         return controllers.first
@@ -757,6 +848,35 @@ extension EmulatorSession {
         }
 
         return "\(baseName) \(controlPorts.devices.count + 1)"
+    }
+
+    static func connectedGameControllers(for controllers: [GCController]) -> [(controller: GCController, descriptor: ConnectedGameController)] {
+        let vendorNames = controllers.map { displayName(for: $0) }
+        let duplicateCounts = Dictionary(grouping: vendorNames, by: { $0 }).mapValues(\.count)
+        var duplicateIndexes: [String: Int] = [:]
+        var identifierIndexes: [String: Int] = [:]
+
+        return controllers.map { controller in
+            let vendorName = displayName(for: controller)
+            let productCategory = controller.productCategory
+            let identifierKey = "\(vendorName)\u{1F}\(productCategory)"
+            let duplicateIndex = duplicateIndexes[vendorName, default: 0]
+            let identifierIndex = identifierIndexes[identifierKey, default: 0]
+            duplicateIndexes[vendorName] = duplicateIndex + 1
+            identifierIndexes[identifierKey] = identifierIndex + 1
+
+            let descriptor = ConnectedGameController(
+                id: ConnectedGameController.identifier(vendorName: vendorName,
+                                                       productCategory: productCategory,
+                                                       duplicateIndex: identifierIndex),
+                vendorName: vendorName,
+                productCategory: productCategory,
+                duplicateIndex: duplicateIndex,
+                duplicateCount: duplicateCounts[vendorName, default: 1]
+            )
+
+            return (controller, descriptor)
+        }
     }
 
     private static func displayName(for controller: GCController) -> String {

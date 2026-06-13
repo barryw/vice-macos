@@ -215,6 +215,51 @@ enum ControlDeviceConnectionState: Equatable {
     }
 }
 
+struct ConnectedGameController: Identifiable, Hashable {
+    let id: String
+    let vendorName: String
+    let productCategory: String
+    let duplicateIndex: Int
+    let duplicateCount: Int
+
+    var title: String {
+        guard duplicateCount > 1 else {
+            return vendorName
+        }
+
+        return "\(vendorName) #\(duplicateIndex + 1)"
+    }
+
+    var detailTitle: String {
+        switch productCategory {
+        case GCProductCategoryArcadeStick:
+            return "Arcade stick"
+        case GCProductCategoryDualSense:
+            return "DualSense"
+        case GCProductCategoryDualShock4:
+            return "DualShock 4"
+        case GCProductCategoryHID:
+            return "USB/HID controller"
+        case GCProductCategoryMFi:
+            return "MFi controller"
+        case GCProductCategoryXboxOne:
+            return "Xbox controller"
+        default:
+            return productCategory.isEmpty ? "Game controller" : productCategory
+        }
+    }
+
+    static func identifier(vendorName: String,
+                           productCategory: String,
+                           duplicateIndex: Int) -> String {
+        [
+            "name=\(vendorName)",
+            "category=\(productCategory)",
+            "index=\(duplicateIndex)"
+        ].joined(separator: "|")
+    }
+}
+
 enum PointerControlAssignment: String, CaseIterable, Identifiable {
     case off
     case port1
@@ -326,6 +371,7 @@ struct KeyboardJoystickMapping: Codable, Equatable {
 
 struct GameControllerJoystickMapping: Codable, Equatable {
     var preferredControllerName: String?
+    var preferredControllerIdentifier: String?
     var deadZone: Double
     var up: GameControllerControl
     var down: GameControllerControl
@@ -334,6 +380,7 @@ struct GameControllerJoystickMapping: Codable, Equatable {
     var fire: GameControllerControl
 
     static let standard = GameControllerJoystickMapping(preferredControllerName: nil,
+                                                        preferredControllerIdentifier: nil,
                                                         deadZone: 0.28,
                                                         up: .dpadUp,
                                                         down: .dpadDown,
@@ -371,12 +418,23 @@ struct GameControllerJoystickMapping: Codable, Equatable {
         }
     }
 
+    mutating func setPreferredController(_ controller: ConnectedGameController?) {
+        preferredControllerIdentifier = controller?.id
+        preferredControllerName = controller?.vendorName
+    }
+
     func normalized() -> GameControllerJoystickMapping {
         var mapping = self
         mapping.deadZone = min(max(deadZone, 0.05), 0.95)
 
-        if preferredControllerName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == true {
+        mapping.preferredControllerName = preferredControllerName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        mapping.preferredControllerIdentifier = preferredControllerIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if mapping.preferredControllerName?.isEmpty == true {
             mapping.preferredControllerName = nil
+        }
+        if mapping.preferredControllerIdentifier?.isEmpty == true {
+            mapping.preferredControllerIdentifier = nil
         }
 
         return mapping

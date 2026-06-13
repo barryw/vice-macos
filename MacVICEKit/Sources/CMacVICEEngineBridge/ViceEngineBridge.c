@@ -30,6 +30,8 @@ typedef int (*ViceQueueKeyboardClearFunction)(void);
 typedef int (*ViceQueueKeyboardTextFunction)(const char *text);
 typedef int (*ViceQueueResourceIntFunction)(const char *name, int value);
 typedef int (*ViceQueueResourceStringFunction)(const char *name, const char *value);
+typedef int (*ViceGetResourceIntFunction)(const char *name, int *value);
+typedef int (*ViceGetResourceStringFunction)(const char *name, char *buffer, uint32_t buffer_capacity);
 typedef int (*ViceQueueJoystickValueFunction)(uint32_t port, uint32_t value);
 typedef int (*ViceQueueMouseMoveFunction)(float delta_x, float delta_y);
 typedef int (*ViceQueueMouseButtonFunction)(uint32_t button, int pressed);
@@ -110,6 +112,8 @@ typedef struct ViceEngineSymbols {
     ViceQueueKeyboardTextFunction queueKeyboardText;
     ViceQueueResourceIntFunction queueResourceInt;
     ViceQueueResourceStringFunction queueResourceString;
+    ViceGetResourceIntFunction getResourceInt;
+    ViceGetResourceStringFunction getResourceString;
     ViceQueueJoystickValueFunction queueJoystickValue;
     ViceQueueMouseMoveFunction queueMouseMove;
     ViceQueueMouseButtonFunction queueMouseButton;
@@ -374,6 +378,8 @@ static int loadRuntimeSymbols(void *handle, ViceEngineSymbols *symbols)
     LOAD_RUNTIME_SYMBOL(queueKeyboardText, "vicemac_queue_keyboard_text");
     LOAD_RUNTIME_SYMBOL(queueResourceInt, "vicemac_queue_resource_int");
     LOAD_RUNTIME_SYMBOL(queueResourceString, "vicemac_queue_resource_string");
+    LOAD_RUNTIME_SYMBOL(getResourceInt, "vicemac_get_resource_int");
+    LOAD_RUNTIME_SYMBOL(getResourceString, "vicemac_get_resource_string");
     LOAD_RUNTIME_SYMBOL(queueJoystickValue, "vicemac_queue_joystick_value");
     LOAD_RUNTIME_SYMBOL(queueMouseMove, "vicemac_queue_mouse_move");
     LOAD_RUNTIME_SYMBOL(queueMouseButton, "vicemac_queue_mouse_button");
@@ -671,6 +677,33 @@ bool ViceEngineSetStringResource(const char *name, const char *value)
     }
 
     return runtimeSymbols.queueResourceString(name, value) != 0;
+}
+
+bool ViceEngineGetIntResource(const char *name, int32_t *value)
+{
+    int rawValue = 0;
+
+    if (!atomic_load(&engineRunning) || runtimeSymbols.getResourceInt == NULL || value == NULL) {
+        return false;
+    }
+
+    if (runtimeSymbols.getResourceInt(name, &rawValue) == 0) {
+        return false;
+    }
+
+    *value = (int32_t)rawValue;
+    return true;
+}
+
+bool ViceEngineGetStringResource(const char *name, char *buffer, uint32_t bufferCapacity)
+{
+    if (!atomic_load(&engineRunning) || runtimeSymbols.getResourceString == NULL
+        || buffer == NULL || bufferCapacity == 0) {
+        return false;
+    }
+
+    buffer[0] = '\0';
+    return runtimeSymbols.getResourceString(name, buffer, bufferCapacity) != 0;
 }
 
 bool ViceEngineSetJoystickValue(uint32_t port, uint32_t value)

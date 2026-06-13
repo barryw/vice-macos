@@ -55,6 +55,15 @@ private enum HayesModemResult {
             return "ERROR"
         }
     }
+
+    func text(connectResultIncludesBaudRate: Bool) -> String {
+        switch self {
+        case let .connect(baudRate):
+            return connectResultIncludesBaudRate ? "CONNECT \(baudRate)" : "CONNECT"
+        default:
+            return text
+        }
+    }
 }
 
 private enum HayesDialTarget {
@@ -900,6 +909,11 @@ final class HayesModemService: @unchecked Sendable {
             return nil
         }
 
+        if let host = defaultHostForTelephoneDialTarget(target),
+           let port = NWEndpoint.Port(rawValue: UInt16(configuration.defaultDialPort)) {
+            return .tcp(host: host, port: port)
+        }
+
         let host: String
         let portNumber: Int
         if let separator = target.lastIndex(of: ":"),
@@ -918,6 +932,27 @@ final class HayesModemService: @unchecked Sendable {
         }
 
         return .tcp(host: host, port: port)
+    }
+
+    private func defaultHostForTelephoneDialTarget(_ target: String) -> String? {
+        let host = configuration.defaultDialHost.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !host.isEmpty else {
+            return nil
+        }
+
+        var hasDigit = false
+        for scalar in target.unicodeScalars {
+            if CharacterSet.decimalDigits.contains(scalar) {
+                hasDigit = true
+                continue
+            }
+
+            guard CharacterSet(charactersIn: "+-(). /").contains(scalar) else {
+                return nil
+            }
+        }
+
+        return hasDigit ? host : nil
     }
 
     private func isTestLineTarget(_ target: String) -> Bool {
@@ -998,7 +1033,11 @@ final class HayesModemService: @unchecked Sendable {
             return
         }
 
-        sendLine(verboseMode ? result.text : result.numericCode)
+        if verboseMode {
+            sendLine(result.text(connectResultIncludesBaudRate: configuration.connectResultIncludesBaudRate))
+        } else {
+            sendLine(result.numericCode)
+        }
     }
 
     private func sendLine(_ line: String) {
