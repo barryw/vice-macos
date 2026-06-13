@@ -1,13 +1,13 @@
 when:
   - event: push
-    evaluate: 'CI_COMMIT_BRANCH == "macos/native-metal"'
+    evaluate: 'CI_COMMIT_BRANCH == "macos/native-metal" || CI_COMMIT_BRANCH == "main"'
     path:
       include:
         - website/**
         - k8s/**
         - .woodpecker/website.yaml
   - event: manual
-    evaluate: 'CI_COMMIT_BRANCH == "macos/native-metal"'
+    evaluate: 'CI_COMMIT_BRANCH == "macos/native-metal" || CI_COMMIT_BRANCH == "main"'
 
 labels:
   platform: linux/amd64
