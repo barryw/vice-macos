@@ -1235,10 +1235,13 @@ private final class AIAssistantVMToolExecutor {
         var operations: [[String: Any]] = []
 
         func appendOperation(_ kind: String, result: [String: Any]) {
+            let operationOK = (result["ok"] as? Bool) == true
             var operation = result
             operation["operation"] = kind
             operations.append(operation)
-            allOK = allOK && ((result["ok"] as? Bool) == true)
+            if !operationOK {
+                allOK = false
+            }
         }
 
         if let displayStyle,
