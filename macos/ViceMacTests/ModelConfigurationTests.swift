@@ -1837,6 +1837,54 @@ final class ModelConfigurationTests: XCTestCase {
         XCTAssertFalse(secondPatchChangedDisk)
     }
 
+    func testQLinkReloadedDiskPatcherExtractsRegistrationProfileByUsername() throws {
+        let data = makeQLinkD64ProfileFixture(username: "BARRY")
+
+        let registration = try XCTUnwrap(QLinkReloadedDiskPatcher.registrationProfile(from: data))
+
+        XCTAssertEqual(registration.username, "BARRY")
+        XCTAssertEqual(registration.decryptedProfile.count, 256)
+    }
+
+    func testQLinkReloadedDiskPatcherIgnoresPlaceholderRegistrationProfile() throws {
+        let data = makeQLinkD64ProfileFixture(username: "1")
+
+        XCTAssertNil(try QLinkReloadedDiskPatcher.registrationProfile(from: data))
+    }
+
+    func testQLinkReloadedDiskPatcherRestoresSavedRegistrationAndForcesConnectionSettings() throws {
+        let savedData = makeQLinkD64ProfileFixture(username: "BARRY")
+        let savedRegistration = try XCTUnwrap(QLinkReloadedDiskPatcher.registrationProfile(from: savedData))
+        var blankData = makeQLinkD64ProfileFixture(username: "1")
+
+        let changed = try QLinkReloadedDiskPatcher.configureReloadedProfile(in: &blankData,
+                                                                            restoring: savedRegistration)
+        let patchedProfile = try QLinkReloadedDiskPatcher.decryptedProfileSector(from: blankData)
+
+        XCTAssertTrue(changed)
+        XCTAssertEqual(Array(patchedProfile[0..<6]), [5, 1, 2, 0, 0x44, 1])
+        XCTAssertEqual(Array(patchedProfile[30..<50]),
+                       [5, 5, 5, 1, 2, 1, 2] + Array(repeating: 0x80, count: 13))
+        XCTAssertEqual(Array(patchedProfile[9..<30]), Array(savedRegistration.decryptedProfile[9..<30]))
+        XCTAssertEqual(Array(patchedProfile[50..<96]), Array(savedRegistration.decryptedProfile[50..<96]))
+        XCTAssertEqual(try QLinkReloadedDiskPatcher.registrationProfile(from: blankData)?.username, "BARRY")
+    }
+
+    func testQLinkReloadedRegistrationStoreKeepsOneProfilePerUsername() throws {
+        let store = QLinkReloadedRegistrationMemoryStore()
+        let firstData = makeQLinkD64ProfileFixture(username: "BARRY")
+        var secondData = makeQLinkD64ProfileFixture(username: "barry")
+        var secondProfile = try QLinkReloadedDiskPatcher.decryptedProfileSector(from: secondData)
+        secondProfile[50] = 0x7f
+        secondData.replaceSubrange(qLinkProfileSectorRange(), with: encryptedQLinkProfile(secondProfile))
+
+        store.saveRegistration(try XCTUnwrap(QLinkReloadedDiskPatcher.registrationProfile(from: firstData)))
+        store.saveRegistration(try XCTUnwrap(QLinkReloadedDiskPatcher.registrationProfile(from: secondData)))
+
+        XCTAssertEqual(store.registrations().count, 1)
+        XCTAssertEqual(store.loadRegistration(username: "BARRY")?.decryptedProfile[50], 0x7f)
+    }
+
     func testQLinkReloadedDiskPatcherWritesOnlyRequestedManagedCopy() throws {
         let rootURL = temporaryDirectoryURL("QLinkReloadedPatchCopy")
         let sourceURL = rootURL.appendingPathComponent("QuantumLink.d64")
@@ -2606,7 +2654,7 @@ final class ModelConfigurationTests: XCTestCase {
         return defaults
     }
 
-    private func makeQLinkD64ProfileFixture() -> Data {
+    private func makeQLinkD64ProfileFixture(username: String = "BARRY") -> Data {
         var data = Data(repeating: 0, count: QLinkReloadedDiskPatcher.d64ByteCount)
         var profile = [UInt8](repeating: 0, count: 256)
         profile[0] = 0
@@ -2615,9 +2663,13 @@ final class ModelConfigurationTests: XCTestCase {
         profile[3] = 1
         profile[4] = 0x44
         profile[5] = 0
-        profile.replaceSubrange(9..<13, with: Array("1234".utf8))
-        for index in 13..<30 {
-            profile[index] = UInt8(index + 0x20)
+        let usernameBytes = Array(username.prefix(21).utf8)
+        for index in 9..<30 {
+            profile[index] = 0
+        }
+        profile.replaceSubrange(9..<(9 + usernameBytes.count), with: usernameBytes)
+        for index in (9 + usernameBytes.count)..<30 {
+            profile[index] = 0x20
         }
         profile[30] = 9
         profile[31] = 9

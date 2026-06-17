@@ -1,6 +1,7 @@
 import CryptoKit
 import Foundation
 import MacVICEKit
+import Security
 
 enum QLinkReloadedServiceError: LocalizedError {
     case unsupportedDisk
@@ -47,6 +48,138 @@ struct QLinkReloadedDiskVersion: Equatable {
     var displayTitle: String
 }
 
+struct QLinkReloadedRegistrationProfile: Codable, Equatable {
+    var username: String
+    var decryptedProfileData: Data
+
+    var key: String {
+        Self.key(for: username)
+    }
+
+    var decryptedProfile: [UInt8] {
+        Array(decryptedProfileData)
+    }
+
+    init(username: String, decryptedProfile: [UInt8]) {
+        self.username = username
+        self.decryptedProfileData = Data(decryptedProfile)
+    }
+
+    static func key(for username: String) -> String {
+        username
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+    }
+}
+
+protocol QLinkReloadedRegistrationStoring: AnyObject {
+    func loadRegistration(username: String) -> QLinkReloadedRegistrationProfile?
+    func saveRegistration(_ registration: QLinkReloadedRegistrationProfile)
+    func registrations() -> [QLinkReloadedRegistrationProfile]
+    func deleteRegistration(username: String)
+}
+
+final class QLinkReloadedRegistrationMemoryStore: QLinkReloadedRegistrationStoring {
+    private var registrationsByKey: [String: QLinkReloadedRegistrationProfile] = [:]
+
+    func loadRegistration(username: String) -> QLinkReloadedRegistrationProfile? {
+        registrationsByKey[QLinkReloadedRegistrationProfile.key(for: username)]
+    }
+
+    func saveRegistration(_ registration: QLinkReloadedRegistrationProfile) {
+        guard !registration.key.isEmpty else {
+            return
+        }
+
+        registrationsByKey[registration.key] = registration
+    }
+
+    func registrations() -> [QLinkReloadedRegistrationProfile] {
+        registrationsByKey.values.sorted { $0.username.localizedStandardCompare($1.username) == .orderedAscending }
+    }
+
+    func deleteRegistration(username: String) {
+        registrationsByKey[QLinkReloadedRegistrationProfile.key(for: username)] = nil
+    }
+}
+
+final class QLinkReloadedRegistrationKeychain: QLinkReloadedRegistrationStoring {
+    private static let service = "com.barrywalker.vicemac.qlink.registration"
+    private let encoder = JSONEncoder()
+    private let decoder = JSONDecoder()
+
+    func loadRegistration(username: String) -> QLinkReloadedRegistrationProfile? {
+        var query = baseQuery(username: username)
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+
+        var result: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        guard status == errSecSuccess,
+              let data = result as? Data else {
+            return nil
+        }
+
+        return try? decoder.decode(QLinkReloadedRegistrationProfile.self, from: data)
+    }
+
+    func saveRegistration(_ registration: QLinkReloadedRegistrationProfile) {
+        guard !registration.key.isEmpty,
+              let data = try? encoder.encode(registration) else {
+            return
+        }
+
+        let attributes = [kSecValueData as String: data]
+        let status = SecItemUpdate(baseQuery(username: registration.username) as CFDictionary,
+                                   attributes as CFDictionary)
+        if status != errSecSuccess {
+            var query = baseQuery(username: registration.username)
+            query[kSecValueData as String] = data
+            SecItemAdd(query as CFDictionary, nil)
+        }
+    }
+
+    func registrations() -> [QLinkReloadedRegistrationProfile] {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: Self.service,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitAll
+        ]
+
+        var result: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        guard status == errSecSuccess else {
+            return []
+        }
+
+        let resultData: [Data]
+        if let values = result as? [Data] {
+            resultData = values
+        } else if let value = result as? Data {
+            resultData = [value]
+        } else {
+            resultData = []
+        }
+
+        return resultData
+            .compactMap { try? decoder.decode(QLinkReloadedRegistrationProfile.self, from: $0) }
+            .sorted { $0.username.localizedStandardCompare($1.username) == .orderedAscending }
+    }
+
+    func deleteRegistration(username: String) {
+        SecItemDelete(baseQuery(username: username) as CFDictionary)
+    }
+
+    private func baseQuery(username: String) -> [String: Any] {
+        [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: Self.service,
+            kSecAttrAccount as String: QLinkReloadedRegistrationProfile.key(for: username)
+        ]
+    }
+}
+
 enum QLinkReloadedDiskPatcher {
     static let d64ByteCount = 174_848
     static let profileSectorTrack = 18
@@ -60,6 +193,11 @@ enum QLinkReloadedDiskPatcher {
     private static let automaticDialProfileValue: UInt8 = 1
     private static let qLinkReloadedPhoneDigits: [UInt8] = [5, 5, 5, 1, 2, 1, 2]
     private static let encodedPhoneTerminator: UInt8 = 0x80
+    private static let usernameProfileRange = 9..<30
+    private static let registrationProfileRanges = [
+        9..<30,
+        50..<96
+    ]
 
     private static let knownVersions: [QLinkReloadedDiskVersion] = [
         QLinkReloadedDiskVersion(profileAgnosticSHA256: "0a82272d2bee8d91c891090cfca8f1dc63d116678cfabf6c084900886f45348b",
@@ -93,9 +231,11 @@ enum QLinkReloadedDiskPatcher {
     }
 
     static func configureReloadedProfile(at url: URL,
-                                         version: QLinkReloadedDiskVersion) throws -> QLinkReloadedDiskPatchResult {
+                                         version: QLinkReloadedDiskVersion,
+                                         restoring registration: QLinkReloadedRegistrationProfile? = nil) throws -> QLinkReloadedDiskPatchResult {
         var data = try Data(contentsOf: url)
-        let changedDisk = try configureReloadedProfile(in: &data)
+        let changedDisk = try configureReloadedProfile(in: &data,
+                                                       restoring: registration)
         if changedDisk {
             try data.write(to: url, options: .atomic)
         }
@@ -105,7 +245,8 @@ enum QLinkReloadedDiskPatcher {
     }
 
     @discardableResult
-    static func configureReloadedProfile(in data: inout Data) throws -> Bool {
+    static func configureReloadedProfile(in data: inout Data,
+                                         restoring registration: QLinkReloadedRegistrationProfile? = nil) throws -> Bool {
         guard data.count == d64ByteCount else {
             throw QLinkReloadedServiceError.unsupportedDiskLayout
         }
@@ -114,6 +255,10 @@ enum QLinkReloadedDiskPatcher {
         var profile = Array(data[profileRange])
         xorProfileSector(&profile)
         let originalProfile = profile
+
+        if let registration {
+            restoreRegistrationFields(from: registration.decryptedProfile, into: &profile)
+        }
 
         profile[0] = hayesCommandModemType
         profile[1] = baud1200ProfileValue
@@ -146,11 +291,66 @@ enum QLinkReloadedDiskPatcher {
         return profile
     }
 
+    static func registrationProfile(from data: Data) throws -> QLinkReloadedRegistrationProfile? {
+        let profile = try decryptedProfileSector(from: data)
+        guard let username = registrationUsername(in: profile) else {
+            return nil
+        }
+
+        return QLinkReloadedRegistrationProfile(username: username,
+                                                decryptedProfile: profile)
+    }
+
     private static func profileAgnosticSHA256Hex(for data: Data) throws -> String {
         var fingerprintData = data
         let profileRange = try sectorRange(track: profileSectorTrack, sector: profileSector)
         fingerprintData.replaceSubrange(profileRange, with: Data(repeating: 0, count: profileRange.count))
         return sha256Hex(for: fingerprintData)
+    }
+
+    private static func registrationUsername(in profile: [UInt8]) -> String? {
+        guard profile.count >= usernameProfileRange.upperBound else {
+            return nil
+        }
+
+        var bytes: [UInt8] = []
+        for byte in profile[usernameProfileRange] {
+            if byte == 0 || byte == encodedPhoneTerminator {
+                break
+            }
+
+            if (32...126).contains(byte) {
+                bytes.append(byte)
+            }
+        }
+
+        guard let rawUsername = String(bytes: bytes, encoding: .ascii) else {
+            return nil
+        }
+
+        let username = rawUsername.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard username.count > 1 else {
+            return nil
+        }
+        return username
+    }
+
+    private static func restoreRegistrationFields(from storedProfile: [UInt8],
+                                                  into profile: inout [UInt8]) {
+        guard storedProfile.count == profile.count else {
+            return
+        }
+
+        for range in registrationProfileRanges {
+            guard profile.indices.contains(range.lowerBound),
+                  profile.indices.contains(range.upperBound - 1),
+                  storedProfile.indices.contains(range.lowerBound),
+                  storedProfile.indices.contains(range.upperBound - 1) else {
+                continue
+            }
+
+            profile.replaceSubrange(range, with: storedProfile[range])
+        }
     }
 
     private static func xorProfileSector(_ sector: inout [UInt8]) {

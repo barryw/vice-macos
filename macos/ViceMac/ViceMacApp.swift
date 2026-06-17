@@ -1005,9 +1005,12 @@ final class QLinkReloadedService: ObservableObject {
 
     private static let defaultsKey = "vice.qlinkReloaded.mediaItemID"
     private static let versionDefaultsKey = "vice.qlinkReloaded.diskVersion"
+    private static let lastRegistrationUsernameDefaultsKey = "vice.qlinkReloaded.lastRegistrationUsername"
     private static let defaults = UserDefaults.standard
+    private let registrationStore: QLinkReloadedRegistrationStoring
 
-    init() {
+    init(registrationStore: QLinkReloadedRegistrationStoring = QLinkReloadedRegistrationKeychain()) {
+        self.registrationStore = registrationStore
         refreshConfiguredDiskTitle()
     }
 
@@ -1183,8 +1186,8 @@ final class QLinkReloadedService: ObservableObject {
 
     private func refreshManagedDiskPatch(at url: URL) throws {
         let version = try QLinkReloadedDiskPatcher.knownVersion(for: url)
-        let patchResult = try QLinkReloadedDiskPatcher.configureReloadedProfile(at: url,
-                                                                                version: version)
+        let patchResult = try configureManagedDisk(at: url,
+                                                   version: version)
         Self.defaults.set(patchResult.version.displayTitle, forKey: Self.versionDefaultsKey)
         configuredDiskVersionTitle = patchResult.version.displayTitle
     }
@@ -1214,14 +1217,62 @@ final class QLinkReloadedService: ObservableObject {
             throw QLinkReloadedServiceError.unsupportedDisk
         }
         let managedURL = store.primaryFileURL(for: item)
-        let patchResult = try QLinkReloadedDiskPatcher.configureReloadedProfile(at: managedURL,
-                                                                                version: diskVersion)
+        let patchResult = try configureManagedDisk(at: managedURL,
+                                                   version: diskVersion)
 
         Self.defaults.set(item.id.uuidString, forKey: Self.defaultsKey)
         Self.defaults.set(patchResult.version.displayTitle, forKey: Self.versionDefaultsKey)
         configuredDiskTitle = item.title
         configuredDiskVersionTitle = patchResult.version.displayTitle
         return managedURL
+    }
+
+    private func configureManagedDisk(at url: URL,
+                                      version: QLinkReloadedDiskVersion) throws -> QLinkReloadedDiskPatchResult {
+        var data = try Data(contentsOf: url)
+        let diskRegistration = try saveRegistrationIfPresent(in: data)
+        let registration = preferredRegistration(for: diskRegistration)
+        let changedDisk = try QLinkReloadedDiskPatcher.configureReloadedProfile(in: &data,
+                                                                                restoring: registration)
+        if changedDisk {
+            try data.write(to: url, options: .atomic)
+        }
+
+        if let registration {
+            Self.defaults.set(registration.username, forKey: Self.lastRegistrationUsernameDefaultsKey)
+        }
+
+        return QLinkReloadedDiskPatchResult(version: version,
+                                            changedDisk: changedDisk)
+    }
+
+    @discardableResult
+    private func saveRegistrationIfPresent(in data: Data) throws -> QLinkReloadedRegistrationProfile? {
+        guard let registration = try QLinkReloadedDiskPatcher.registrationProfile(from: data) else {
+            return nil
+        }
+
+        registrationStore.saveRegistration(registration)
+        Self.defaults.set(registration.username, forKey: Self.lastRegistrationUsernameDefaultsKey)
+        return registration
+    }
+
+    private func preferredRegistration(for diskRegistration: QLinkReloadedRegistrationProfile?) -> QLinkReloadedRegistrationProfile? {
+        if let diskRegistration {
+            return registrationStore.loadRegistration(username: diskRegistration.username) ?? diskRegistration
+        }
+
+        if let lastUsername = Self.defaults.string(forKey: Self.lastRegistrationUsernameDefaultsKey),
+           let lastRegistration = registrationStore.loadRegistration(username: lastUsername) {
+            return lastRegistration
+        }
+
+        let registrations = registrationStore.registrations()
+        guard registrations.count == 1 else {
+            return nil
+        }
+
+        return registrations[0]
     }
 
     private func configuredDiskItem() throws -> MediaLibraryItem? {
