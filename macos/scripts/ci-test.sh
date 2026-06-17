@@ -4,7 +4,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MACOS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 PROJECT="$MACOS_DIR/ViceMac.xcodeproj"
-DERIVED_DATA="${VICE_MAC_CI_DERIVED_DATA:-/private/tmp/vice-macos-ci-derived-data}"
+DEFAULT_DERIVED_DATA="/private/tmp/vice-macos-ci-derived-data"
+if [[ -n "${CI_PIPELINE_NUMBER:-}" ]]; then
+    DEFAULT_DERIVED_DATA="$DEFAULT_DERIVED_DATA-$CI_PIPELINE_NUMBER"
+fi
+DERIVED_DATA="${VICE_MAC_CI_DERIVED_DATA:-$DEFAULT_DERIVED_DATA}"
 CONFIGURATION="${VICE_MAC_CI_CONFIGURATION:-Debug}"
 DESTINATION="${VICE_MAC_CI_DESTINATION:-platform=macOS,arch=arm64}"
 
