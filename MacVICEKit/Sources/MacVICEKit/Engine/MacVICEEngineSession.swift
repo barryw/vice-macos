@@ -644,16 +644,9 @@ public final class MacVICEEngineSession {
     public func attachDisk(unit: UInt32 = 8,
                            drive: UInt32 = 0,
                            url: URL,
-                           programName: String? = nil,
                            runMode: MacVICEMediaRunMode = .attach) -> Bool {
         url.path.withCString { path in
-            guard let programName else {
-                return ViceEngineAttachDisk(unit, drive, path, nil, runMode.rawValue)
-            }
-
-            return programName.withCString { programName in
-                ViceEngineAttachDisk(unit, drive, path, programName, runMode.rawValue)
-            }
+            ViceEngineAttachDisk(unit, drive, path, runMode.rawValue)
         }
     }
 

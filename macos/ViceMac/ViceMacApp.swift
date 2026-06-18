@@ -1154,15 +1154,30 @@ final class QLinkReloadedService: ObservableObject {
 
             if emulator.isMachineRunning {
                 emulator.reset(kind: .hard)
+                try await Task.sleep(nanoseconds: 500_000_000)
             }
 
             guard emulator.attachDisk(to: 8,
                                       driveNumber: 0,
                                       url: diskURL,
-                                      behavior: .run,
-                                      programName: qLinkBootProgram(for: emulator.machine)) else {
+                                      behavior: .attach) else {
                 presentError(title: "Q-Link Reloaded",
                              message: "VICE Mac configured the modem, but the selected Q-Link disk could not be started.")
+                return
+            }
+
+            try await Task.sleep(nanoseconds: 500_000_000)
+            let bootProgram = qLinkBootProgram(for: emulator.machine)
+            guard emulator.submitLine("LOAD\"\(bootProgram)\",8") else {
+                presentError(title: "Q-Link Reloaded",
+                             message: "VICE Mac attached the selected Q-Link disk, but could not load \(bootProgram).")
+                return
+            }
+
+            try await Task.sleep(nanoseconds: 1_000_000_000)
+            guard emulator.submitLine("RUN") else {
+                presentError(title: "Q-Link Reloaded",
+                             message: "VICE Mac loaded \(bootProgram), but could not start it.")
                 return
             }
 
@@ -1327,7 +1342,7 @@ final class QLinkReloadedService: ObservableObject {
     }
 
     private func qLinkBootProgram(for machine: EmulatedMachine) -> String {
-        machine.family == .c128 ? "boot128" : "boot64"
+        machine.family == .c128 ? "BOOT128" : "BOOT64"
     }
 
     private func refreshManagedDiskPatch(at url: URL) throws {

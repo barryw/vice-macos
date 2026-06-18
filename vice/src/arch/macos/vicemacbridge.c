@@ -63,7 +63,6 @@
 #define VICEMAC_SNAPSHOT_REQUEST_QUEUE_CAPACITY 8
 #define VICEMAC_DEBUGGER_REQUEST_QUEUE_CAPACITY 64
 #define VICEMAC_PATH_CAPACITY 4096
-#define VICEMAC_PROGRAM_NAME_CAPACITY 256
 #define VICEMAC_CURRENT_MEMORY_BANK -1
 #define VICEMAC_PLUS4MODEL_C16_PAL 0
 #define VICEMAC_PLUS4MODEL_C16_NTSC 1
@@ -185,7 +184,6 @@ typedef struct vicemac_drive_command_s {
     uint32_t drive;
     int run_mode;
     char path[VICEMAC_PATH_CAPACITY];
-    char program_name[VICEMAC_PROGRAM_NAME_CAPACITY];
 } vicemac_drive_command_t;
 
 typedef struct vicemac_media_command_s {
@@ -1322,7 +1320,6 @@ int vicemac_queue_drive_reset(uint32_t unit)
 int vicemac_queue_drive_attach_disk(uint32_t unit,
                                     uint32_t drive,
                                     const char *path,
-                                    const char *program_name,
                                     int run_mode)
 {
     vicemac_drive_command_t command;
@@ -1337,11 +1334,6 @@ int vicemac_queue_drive_attach_disk(uint32_t unit,
     command.drive = drive;
     command.run_mode = run_mode;
     vicemac_copy_cstring(command.path, sizeof(command.path), path);
-    if (program_name != 0 && program_name[0] != '\0') {
-        vicemac_copy_cstring(command.program_name,
-                             sizeof(command.program_name),
-                             program_name);
-    }
 
     return vicemac_queue_push(&drive_command_queue_mutex,
                               drive_command_queue,
@@ -2813,7 +2805,7 @@ static void vicemac_dispatch_drive_command(vicemac_drive_command_t *command)
                 (void)autostart_disk((int)command->unit,
                                      (int)command->drive,
                                      command->path,
-                                     command->program_name[0] == '\0' ? 0 : command->program_name,
+                                     0,
                                      0,
                                      command->run_mode);
             } else {

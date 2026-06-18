@@ -46,7 +46,6 @@ typedef int (*ViceQueueDriveResetFunction)(uint32_t unit);
 typedef int (*ViceQueueDriveAttachDiskFunction)(uint32_t unit,
                                                 uint32_t drive,
                                                 const char *path,
-                                                const char *program_name,
                                                 int run_mode);
 typedef int (*ViceQueueDriveDetachDiskFunction)(uint32_t unit, uint32_t drive);
 typedef int (*ViceQueueDriveSoundPreviewFunction)(uint32_t unit);
@@ -797,17 +796,13 @@ bool ViceEngineResetDrive(uint32_t unit)
     return runtimeSymbols.queueDriveReset(unit) != 0;
 }
 
-bool ViceEngineAttachDisk(uint32_t unit,
-                          uint32_t drive,
-                          const char *path,
-                          const char *programName,
-                          int32_t runMode)
+bool ViceEngineAttachDisk(uint32_t unit, uint32_t drive, const char *path, int32_t runMode)
 {
     if (!atomic_load(&engineRunning) || runtimeSymbols.queueDriveAttachDisk == NULL) {
         return false;
     }
 
-    return runtimeSymbols.queueDriveAttachDisk(unit, drive, path, programName, runMode) != 0;
+    return runtimeSymbols.queueDriveAttachDisk(unit, drive, path, runMode) != 0;
 }
 
 bool ViceEngineDetachDisk(uint32_t unit, uint32_t drive)
