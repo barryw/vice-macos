@@ -43,6 +43,7 @@
 #ifdef HAVE_RS232NET
 
 #include <errno.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -213,6 +214,54 @@ void rs232net_close(int fd)
 }
 
 /* sends a byte to the RS232 line */
+/* ------------------------------------------------------------------------- */
+/* Q-Link protocol capture.
+ *
+ * Taps the raw bytes exchanged with the server on the RS-232 socket so the
+ * Q-Link wire protocol can be recorded for analysis (see the QuantumLink
+ * disassembly project's testbench/decode.py). Enabled by setting the
+ * QLINK_CAPTURE environment variable to a path base; bytes are appended to
+ * <base>.c2s (client->server) and <base>.s2c (server->client) as raw streams.
+ * Off (no allocation, no overhead) when the variable is unset.
+ */
+static FILE *qlc_c2s = NULL;
+static FILE *qlc_s2c = NULL;
+static int qlc_inited = 0;
+
+static void qlc_init(void)
+{
+    const char *base;
+
+    qlc_inited = 1;
+    base = getenv("QLINK_CAPTURE");
+    if (base != NULL && *base != '\0') {
+        char *p_c2s = util_concat(base, ".c2s", NULL);
+        char *p_s2c = util_concat(base, ".s2c", NULL);
+        qlc_c2s = fopen(p_c2s, "ab");
+        qlc_s2c = fopen(p_s2c, "ab");
+        log_message(rs232net_log, "QLink capture enabled -> %s.{c2s,s2c}", base);
+        lib_free(p_c2s);
+        lib_free(p_s2c);
+    }
+}
+
+/* dir: 0 = client->server, 1 = server->client */
+static void qlc_capture(int dir, uint8_t b)
+{
+    FILE *f;
+
+    if (!qlc_inited) {
+        qlc_init();
+    }
+    f = dir ? qlc_s2c : qlc_c2s;
+    if (f != NULL) {
+        fputc(b, f);
+        fflush(f);
+    }
+}
+
+/* ------------------------------------------------------------------------- */
+
 static int _rs232net_putc(int fd, uint8_t b)
 {
     ssize_t n;
@@ -240,6 +289,8 @@ static int _rs232net_putc(int fd, uint8_t b)
         rs232net_closesocket(fd);
         return -1;
     }
+
+    qlc_capture(0, b);          /* client -> server */
 
     return 0;
 }
@@ -286,6 +337,8 @@ static int _rs232net_getc(int fd, uint8_t * b)
                 }
                 rs232net_closesocket(fd);
                 no_of_read_byte = -1;
+            } else {
+                qlc_capture(1, *b);     /* server -> client */
             }
         }
     } while (0);
