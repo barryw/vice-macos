@@ -32,6 +32,39 @@ latest_macos_runtime_target() {
 ENGINE_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-$(latest_macos_runtime_target)}"
 export MACOSX_DEPLOYMENT_TARGET="$ENGINE_DEPLOYMENT_TARGET"
 
+clean_in_place_config() {
+    if [[ ! -f "$VICE_SRC/config.status" && ! -f "$VICE_SRC/Makefile" ]]; then
+        return
+    fi
+
+    cat >&2 <<EOF
+The VICE source tree has generated in-place configure state:
+  $VICE_SRC
+
+VICE Mac builds the emulator runtime out-of-tree in:
+  $BUILD_DIR
+
+Cleaning the generated in-place state before continuing.
+EOF
+
+    if [[ -f "$VICE_SRC/Makefile" ]]; then
+        make -C "$VICE_SRC" distclean
+    else
+        rm -f "$VICE_SRC/config.status" "$VICE_SRC/config.log"
+    fi
+
+    if [[ -f "$VICE_SRC/config.status" || -f "$VICE_SRC/Makefile" ]]; then
+        cat >&2 <<EOF
+VICE Mac could not remove the in-place VICE configure state.
+Run this once, then build again:
+  make -C "$VICE_SRC" distclean
+EOF
+        exit 1
+    fi
+}
+
+clean_in_place_config
+
 needs_autogen=0
 if [[ ! -x "$VICE_SRC/configure" || "$VICE_SRC/configure.ac" -nt "$VICE_SRC/configure" ]]; then
     needs_autogen=1
@@ -51,22 +84,6 @@ done
 
 if [[ "$needs_autogen" == 1 ]]; then
     (cd "$VICE_SRC" && ./autogen.sh)
-fi
-
-if [[ -f "$VICE_SRC/config.status" || -f "$VICE_SRC/Makefile" ]]; then
-    cat >&2 <<EOF
-The VICE source tree has been configured in-place:
-  $VICE_SRC
-
-VICE Mac builds the emulator runtime out-of-tree in:
-  $BUILD_DIR
-
-Autoconf will not configure that out-of-tree build while the source tree still
-contains an in-place configuration. Run this once to remove the generated
-in-place build state:
-  make -C "$VICE_SRC" distclean
-EOF
-    exit 1
 fi
 
 require_build_tool() {
@@ -458,13 +475,14 @@ sign_runtime_framework_payload() {
 }
 
 embed_runtime_framework_in_app() {
-    local framework_dir="$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH/$FRAMEWORK_NAME"
+    local framework_dir
     local version
 
     if [[ -z "${TARGET_BUILD_DIR:-}" || -z "${FRAMEWORKS_FOLDER_PATH:-}" ]]; then
         return
     fi
 
+    framework_dir="$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH/$FRAMEWORK_NAME"
     version="$(runtime_version)"
     create_runtime_framework_skeleton "$framework_dir" "$version"
     copy_runtime_framework_payload "$framework_dir"

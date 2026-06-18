@@ -1812,6 +1812,14 @@ final class ModelConfigurationTests: XCTestCase {
         XCTAssertEqual(duplicateImport.first?.id, item.id)
         XCTAssertEqual(try store.items().count, 1)
 
+        try FileManager.default.removeItem(at: managedURL)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: managedURL.path))
+
+        let restoredDuplicateImport = try store.importURLs([sourceURL])
+        XCTAssertEqual(restoredDuplicateImport.first?.id, item.id)
+        XCTAssertEqual(try store.items().count, 1)
+        XCTAssertEqual(try Data(contentsOf: managedURL), try Data(contentsOf: sourceURL))
+
         try store.removeItem(id: item.id)
 
         XCTAssertFalse(FileManager.default.fileExists(atPath: managedURL.path))

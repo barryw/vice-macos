@@ -353,7 +353,7 @@ struct ViceMacApp: App {
                     qLinkReloaded.connect(emulator: emulator)
                 }
                 .keyboardShortcut("q", modifiers: [.command, .shift])
-                .disabled(!qLinkReloaded.supports(machine: emulator.machine) || qLinkReloaded.isConnecting)
+                .disabled(!qLinkReloaded.canConnect(machine: emulator.machine))
 
                 Button("Choose Q-Link Disk...") {
                     qLinkReloaded.chooseDisk(for: emulator.machine)
@@ -1024,6 +1024,10 @@ final class QLinkReloadedService: ObservableObject {
         configuredDiskTitle != nil
     }
 
+    func canConnect(machine: EmulatedMachine) -> Bool {
+        supports(machine: machine) && hasConfiguredDisk && !isConnecting
+    }
+
     func supports(machine: EmulatedMachine) -> Bool {
         switch machine.family {
         case .c64, .c128:
@@ -1041,6 +1045,12 @@ final class QLinkReloadedService: ObservableObject {
         guard supports(machine: emulator.machine) else {
             presentError(title: "Q-Link Reloaded",
                          message: "Q-Link Reloaded can only be connected from a C64 or C128 machine with networking support.")
+            return
+        }
+
+        guard hasConfiguredDisk else {
+            presentError(title: "Q-Link Reloaded",
+                         message: "Choose a Q-Link disk before connecting.")
             return
         }
 
@@ -1063,6 +1073,12 @@ final class QLinkReloadedService: ObservableObject {
         guard supports(machine: emulator.machine) else {
             presentError(title: "Q-Link Reloaded",
                          message: "Q-Link Reloaded can only be connected from a C64 or C128 machine with networking support.")
+            return
+        }
+
+        guard hasConfiguredDisk else {
+            presentError(title: "Q-Link Reloaded",
+                         message: "Choose a Q-Link disk before connecting.")
             return
         }
 
@@ -1119,8 +1135,10 @@ final class QLinkReloadedService: ObservableObject {
                 return
             }
 
-            let diskURL = try preparedDiskURL(for: emulator.machine, promptIfNeeded: true)
+            let diskURL = try preparedDiskURL()
             guard let diskURL else {
+                presentError(title: "Q-Link Reloaded",
+                             message: "Choose a Q-Link disk before connecting.")
                 return
             }
 
@@ -1294,19 +1312,14 @@ final class QLinkReloadedService: ObservableObject {
         refreshRegistrationProfiles()
     }
 
-    private func preparedDiskURL(for machine: EmulatedMachine,
-                                 promptIfNeeded: Bool) throws -> URL? {
+    private func preparedDiskURL() throws -> URL? {
         if let item = try configuredDiskItem(),
            let url = try diskURL(for: item) {
             try refreshManagedDiskPatch(at: url)
             return url
         }
 
-        guard promptIfNeeded else {
-            return nil
-        }
-
-        return try importDisk(for: machine)
+        return nil
     }
 
     private func refreshManagedDiskPatch(at url: URL) throws {
