@@ -53,6 +53,7 @@
 
 #include "lib.h"
 #include "log.h"
+#include "resources.h"
 #include "rs232.h"
 #include "rs232net.h"
 #include "vicesocket.h"
@@ -72,13 +73,25 @@
 
 /* ------------------------------------------------------------------------- */
 
+/* Q-Link protocol capture state + callback (defined further down). */
+static char *qlc_path;
+static int set_qlc_path(const char *val, void *param);
+
+static const resource_string_t resources_string[] = {
+    { "QLinkCaptureFile", "", RES_EVENT_NO, NULL,
+      &qlc_path, set_qlc_path, NULL },
+    RESOURCE_STRING_LIST_END
+};
+
 int rs232net_resources_init(void)
 {
-    return 0;
+    return resources_register_string(resources_string);
 }
 
 void rs232net_resources_shutdown(void)
 {
+    lib_free(qlc_path);
+    qlc_path = NULL;
 }
 
 int rs232net_cmdline_options_init(void)
@@ -218,46 +231,60 @@ void rs232net_close(int fd)
 /* Q-Link protocol capture.
  *
  * Taps the raw bytes exchanged with the server on the RS-232 socket so the
- * Q-Link wire protocol can be recorded for analysis (see the QuantumLink
- * disassembly project's testbench/decode.py). Enabled by setting the
- * QLINK_CAPTURE environment variable to a path base; bytes are appended to
- * <base>.c2s (client->server) and <base>.s2c (server->client) as raw streams.
- * Off (no allocation, no overhead) when the variable is unset.
+ * Q-Link wire protocol can be recorded and inspected live (see the QuantumLink
+ * disassembly project's testbench/decode.py and the QLink capture viewer in the
+ * Mac UI). Controlled by the "QLinkCaptureFile" resource: set it to a path to
+ * start capturing, set it to "" to stop. Off (no overhead) when empty.
+ *
+ * Single interleaved capture file; one record per byte:
+ *     u8  dir   (0 = client->server, 1 = server->client)
+ *     u16 len   (little-endian; always 1 here)
+ *     len bytes payload
+ * Direction is explicit and byte order is preserved, so a viewer can render the
+ * two directions in the order they happened.
  */
-static FILE *qlc_c2s = NULL;
-static FILE *qlc_s2c = NULL;
-static int qlc_inited = 0;
+/* qlc_path declared above (referenced by the resource table). */
+static FILE *qlc_fp = NULL;
 
-static void qlc_init(void)
+static void qlc_reopen(void)
 {
-    const char *base;
-
-    qlc_inited = 1;
-    base = getenv("QLINK_CAPTURE");
-    if (base != NULL && *base != '\0') {
-        char *p_c2s = util_concat(base, ".c2s", NULL);
-        char *p_s2c = util_concat(base, ".s2c", NULL);
-        qlc_c2s = fopen(p_c2s, "ab");
-        qlc_s2c = fopen(p_s2c, "ab");
-        log_message(rs232net_log, "QLink capture enabled -> %s.{c2s,s2c}", base);
-        lib_free(p_c2s);
-        lib_free(p_s2c);
+    if (qlc_fp != NULL) {
+        fclose(qlc_fp);
+        qlc_fp = NULL;
+    }
+    if (qlc_path != NULL && *qlc_path != '\0') {
+        qlc_fp = fopen(qlc_path, "wb");
+        if (qlc_fp != NULL) {
+            log_message(rs232net_log, "QLink capture -> %s", qlc_path);
+        } else {
+            log_error(rs232net_log, "QLink capture: cannot open %s", qlc_path);
+        }
     }
 }
 
 /* dir: 0 = client->server, 1 = server->client */
 static void qlc_capture(int dir, uint8_t b)
 {
-    FILE *f;
+    uint8_t hdr[3];
 
-    if (!qlc_inited) {
-        qlc_init();
+    if (qlc_fp == NULL) {
+        return;
     }
-    f = dir ? qlc_s2c : qlc_c2s;
-    if (f != NULL) {
-        fputc(b, f);
-        fflush(f);
+    hdr[0] = (uint8_t)dir;
+    hdr[1] = 0x01;      /* len low  */
+    hdr[2] = 0x00;      /* len high */
+    fwrite(hdr, 1, 3, qlc_fp);
+    fputc(b, qlc_fp);
+    fflush(qlc_fp);
+}
+
+static int set_qlc_path(const char *val, void *param)
+{
+    if (util_string_set(&qlc_path, val) < 0) {
+        return -1;
     }
+    qlc_reopen();
+    return 0;
 }
 
 /* ------------------------------------------------------------------------- */

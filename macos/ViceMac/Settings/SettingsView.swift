@@ -1230,6 +1230,7 @@ private struct NetworkSettingsPane: View {
     @EnvironmentObject private var qLinkReloaded: QLinkReloadedService
     @State private var hardRestartRequest: MachineHardRestartRequest?
     @State private var showsQLinkProfileManager = false
+    @AppStorage("vice.qlink.captureProtocol") private var qlinkCaptureProtocol = false
 
     var body: some View {
         SettingsPane {
@@ -1417,6 +1418,16 @@ private struct NetworkSettingsPane: View {
                         }
                     }
                 }
+
+                Toggle(isOn: $qlinkCaptureProtocol) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Capture protocol")
+                        Text("Record every byte to/from the server and open a live packet viewer when you connect.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .disabled(qLinkReloaded.isConnecting)
             }
         }
     }
