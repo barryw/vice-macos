@@ -26,6 +26,7 @@
 #include "kbdbuf.h"
 #include "keyboard.h"
 #include "lib.h"
+#include "log.h"
 #include "machine.h"
 #include "monitor.h"
 #include "monitor/mon_breakpoint.h"
@@ -56,6 +57,7 @@
 #define VICEMAC_MOUSE_QUEUE_CAPACITY 1024
 #define VICEMAC_MACHINE_COMMAND_QUEUE_CAPACITY 64
 #define VICEMAC_DRIVE_COMMAND_QUEUE_CAPACITY 64
+#define VICEMAC_DRIVE_REQUEST_QUEUE_CAPACITY 64
 #define VICEMAC_MEDIA_COMMAND_QUEUE_CAPACITY 32
 #define VICEMAC_TAPE_COMMAND_QUEUE_CAPACITY 32
 #define VICEMAC_CARTRIDGE_COMMAND_QUEUE_CAPACITY 16
@@ -63,6 +65,7 @@
 #define VICEMAC_SNAPSHOT_REQUEST_QUEUE_CAPACITY 8
 #define VICEMAC_DEBUGGER_REQUEST_QUEUE_CAPACITY 64
 #define VICEMAC_PATH_CAPACITY 4096
+#define VICEMAC_PROGRAM_NAME_CAPACITY 256
 #define VICEMAC_CURRENT_MEMORY_BANK -1
 #define VICEMAC_PLUS4MODEL_C16_PAL 0
 #define VICEMAC_PLUS4MODEL_C16_NTSC 1
@@ -184,7 +187,20 @@ typedef struct vicemac_drive_command_s {
     uint32_t drive;
     int run_mode;
     char path[VICEMAC_PATH_CAPACITY];
+    char program_name[VICEMAC_PROGRAM_NAME_CAPACITY];
 } vicemac_drive_command_t;
+
+typedef struct vicemac_drive_attach_request_s {
+    uint32_t unit;
+    uint32_t drive;
+    int run_mode;
+    char path[VICEMAC_PATH_CAPACITY];
+    char program_name[VICEMAC_PROGRAM_NAME_CAPACITY];
+    int completed;
+    int success;
+    pthread_mutex_t mutex;
+    pthread_cond_t condition;
+} vicemac_drive_attach_request_t;
 
 typedef struct vicemac_media_command_s {
     vicemac_media_command_type_t type;
@@ -325,6 +341,10 @@ static pthread_mutex_t drive_command_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 static vicemac_drive_command_t drive_command_queue[VICEMAC_DRIVE_COMMAND_QUEUE_CAPACITY];
 static unsigned int drive_command_queue_read = 0;
 static unsigned int drive_command_queue_write = 0;
+static pthread_mutex_t drive_attach_request_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
+static vicemac_drive_attach_request_t *drive_attach_request_queue[VICEMAC_DRIVE_REQUEST_QUEUE_CAPACITY];
+static unsigned int drive_attach_request_queue_read = 0;
+static unsigned int drive_attach_request_queue_write = 0;
 static pthread_mutex_t media_command_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 static vicemac_media_command_t media_command_queue[VICEMAC_MEDIA_COMMAND_QUEUE_CAPACITY];
 static unsigned int media_command_queue_read = 0;
@@ -365,6 +385,11 @@ const char *vicemac_get_vice_version(void)
 #else
     return VERSION;
 #endif
+}
+
+int vicemac_bridge_abi_version(void)
+{
+    return VICEMAC_BRIDGE_ABI_VERSION;
 }
 
 static void vicemac_copy_cstring(char *destination, size_t destination_size, const char *source)
@@ -542,6 +567,44 @@ static int vicemac_resource_request_queue_pop(vicemac_resource_request_t **reque
     }
 
     pthread_mutex_unlock(&resource_request_queue_mutex);
+    return has_request;
+}
+
+static int vicemac_drive_attach_request_queue_push(vicemac_drive_attach_request_t *request)
+{
+    unsigned int next_write;
+
+    pthread_mutex_lock(&drive_attach_request_queue_mutex);
+
+    next_write = vicemac_queue_next(drive_attach_request_queue_write,
+                                    VICEMAC_DRIVE_REQUEST_QUEUE_CAPACITY);
+    if (next_write == drive_attach_request_queue_read) {
+        pthread_mutex_unlock(&drive_attach_request_queue_mutex);
+        return 0;
+    }
+
+    drive_attach_request_queue[drive_attach_request_queue_write] = request;
+    drive_attach_request_queue_write = next_write;
+
+    pthread_mutex_unlock(&drive_attach_request_queue_mutex);
+    return 1;
+}
+
+static int vicemac_drive_attach_request_queue_pop(vicemac_drive_attach_request_t **request)
+{
+    int has_request = 0;
+
+    pthread_mutex_lock(&drive_attach_request_queue_mutex);
+
+    if (drive_attach_request_queue_read != drive_attach_request_queue_write) {
+        *request = drive_attach_request_queue[drive_attach_request_queue_read];
+        drive_attach_request_queue[drive_attach_request_queue_read] = 0;
+        drive_attach_request_queue_read = vicemac_queue_next(drive_attach_request_queue_read,
+                                                             VICEMAC_DRIVE_REQUEST_QUEUE_CAPACITY);
+        has_request = 1;
+    }
+
+    pthread_mutex_unlock(&drive_attach_request_queue_mutex);
     return has_request;
 }
 
@@ -1165,6 +1228,64 @@ int vicemac_get_resource_string(const char *name, char *buffer, uint32_t buffer_
                                             buffer_capacity);
 }
 
+static void vicemac_complete_drive_attach_request(vicemac_drive_attach_request_t *request,
+                                                  int success)
+{
+    pthread_mutex_lock(&request->mutex);
+    request->success = success ? 1 : 0;
+    request->completed = 1;
+    pthread_cond_signal(&request->condition);
+    pthread_mutex_unlock(&request->mutex);
+}
+
+static int vicemac_perform_drive_attach_request(uint32_t unit,
+                                                uint32_t drive,
+                                                const char *path,
+                                                const char *program_name,
+                                                int run_mode)
+{
+    vicemac_drive_attach_request_t request;
+    int success;
+
+    if (path == 0 || path[0] == '\0' || strlen(path) >= VICEMAC_PATH_CAPACITY) {
+        return 0;
+    }
+
+    memset(&request, 0, sizeof(request));
+    request.unit = unit;
+    request.drive = drive;
+    request.run_mode = run_mode;
+    vicemac_copy_cstring(request.path, sizeof(request.path), path);
+    vicemac_copy_cstring(request.program_name,
+                         sizeof(request.program_name),
+                         program_name);
+
+    if (pthread_mutex_init(&request.mutex, 0) != 0) {
+        return 0;
+    }
+    if (pthread_cond_init(&request.condition, 0) != 0) {
+        pthread_mutex_destroy(&request.mutex);
+        return 0;
+    }
+
+    if (!vicemac_drive_attach_request_queue_push(&request)) {
+        pthread_cond_destroy(&request.condition);
+        pthread_mutex_destroy(&request.mutex);
+        return 0;
+    }
+
+    pthread_mutex_lock(&request.mutex);
+    while (!request.completed) {
+        pthread_cond_wait(&request.condition, &request.mutex);
+    }
+    success = request.success;
+    pthread_mutex_unlock(&request.mutex);
+
+    pthread_cond_destroy(&request.condition);
+    pthread_mutex_destroy(&request.mutex);
+    return success;
+}
+
 int vicemac_queue_joystick_value(uint32_t port, uint32_t value)
 {
     vicemac_joystick_event_t event;
@@ -1317,31 +1438,29 @@ int vicemac_queue_drive_reset(uint32_t unit)
                               &command);
 }
 
+int vicemac_queue_drive_attach_disk_v2(uint32_t unit,
+                                       uint32_t drive,
+                                       const char *path,
+                                       const char *program_name,
+                                       int run_mode)
+{
+    return vicemac_perform_drive_attach_request(unit,
+                                                drive,
+                                                path,
+                                                program_name,
+                                                run_mode);
+}
+
 int vicemac_queue_drive_attach_disk(uint32_t unit,
                                     uint32_t drive,
                                     const char *path,
                                     int run_mode)
 {
-    vicemac_drive_command_t command;
-
-    if (path == 0 || path[0] == '\0') {
-        return 0;
-    }
-
-    memset(&command, 0, sizeof(command));
-    command.type = VICEMAC_DRIVE_COMMAND_ATTACH_DISK;
-    command.unit = unit;
-    command.drive = drive;
-    command.run_mode = run_mode;
-    vicemac_copy_cstring(command.path, sizeof(command.path), path);
-
-    return vicemac_queue_push(&drive_command_queue_mutex,
-                              drive_command_queue,
-                              sizeof(drive_command_queue[0]),
-                              VICEMAC_DRIVE_COMMAND_QUEUE_CAPACITY,
-                              &drive_command_queue_read,
-                              &drive_command_queue_write,
-                              &command);
+    return vicemac_queue_drive_attach_disk_v2(unit,
+                                             drive,
+                                             path,
+                                             0,
+                                             run_mode);
 }
 
 int vicemac_queue_drive_detach_disk(uint32_t unit, uint32_t drive)
@@ -1961,6 +2080,11 @@ static int vicemac_pop_drive_command(vicemac_drive_command_t *command)
                              &drive_command_queue_read,
                              &drive_command_queue_write,
                              command);
+}
+
+static int vicemac_pop_drive_attach_request(vicemac_drive_attach_request_t **request)
+{
+    return vicemac_drive_attach_request_queue_pop(request);
 }
 
 static int vicemac_pop_media_command(vicemac_media_command_t *command)
@@ -2787,6 +2911,53 @@ static int vicemac_drive_unit_is_valid(uint32_t unit)
     return unit >= DRIVE_UNIT_MIN && unit <= DRIVE_UNIT_MAX;
 }
 
+static int vicemac_dispatch_drive_attach_disk(uint32_t unit,
+                                              uint32_t drive,
+                                              const char *path,
+                                              const char *program_name,
+                                              int run_mode)
+{
+    int result;
+    const char *current_image;
+
+    if (!vicemac_drive_unit_is_valid(unit) || drive >= NUM_DRIVES) {
+        return -1;
+    }
+
+    if (run_mode != AUTOSTART_MODE_NONE) {
+        result = autostart_disk((int)unit,
+                                (int)drive,
+                                path,
+                                program_name != 0 && program_name[0] != '\0'
+                                ? program_name
+                                : 0,
+                                0,
+                                run_mode);
+    } else {
+        result = file_system_attach_disk(unit, drive, path);
+    }
+
+    current_image = file_system_get_disk_name(unit, drive);
+    if (result < 0) {
+        log_error(LOG_DEFAULT,
+                  "VICE Mac: failed to attach disk unit %u:%u path `%s' run mode %d.",
+                  unit,
+                  drive,
+                  path,
+                  run_mode);
+    } else {
+        log_message(LOG_DEFAULT,
+                    "VICE Mac: attached disk unit %u:%u path `%s' run mode %d current `%s'.",
+                    unit,
+                    drive,
+                    path,
+                    run_mode,
+                    current_image != 0 ? current_image : "");
+    }
+
+    return result;
+}
+
 static void vicemac_dispatch_drive_command(vicemac_drive_command_t *command)
 {
     if (!vicemac_drive_unit_is_valid(command->unit)) {
@@ -2798,21 +2969,11 @@ static void vicemac_dispatch_drive_command(vicemac_drive_command_t *command)
             drive_cpu_trigger_reset(command->unit - DRIVE_UNIT_MIN);
             break;
         case VICEMAC_DRIVE_COMMAND_ATTACH_DISK:
-            if (command->drive >= NUM_DRIVES) {
-                return;
-            }
-            if (command->run_mode != AUTOSTART_MODE_NONE) {
-                (void)autostart_disk((int)command->unit,
-                                     (int)command->drive,
-                                     command->path,
-                                     0,
-                                     0,
-                                     command->run_mode);
-            } else {
-                (void)file_system_attach_disk(command->unit,
-                                              command->drive,
-                                              command->path);
-            }
+            (void)vicemac_dispatch_drive_attach_disk(command->unit,
+                                                     command->drive,
+                                                     command->path,
+                                                     command->program_name,
+                                                     command->run_mode);
             break;
         case VICEMAC_DRIVE_COMMAND_DETACH_DISK:
             if (command->drive >= NUM_DRIVES) {
@@ -2832,6 +2993,31 @@ static void vicemac_dispatch_queued_drive_commands(void)
 
     while (vicemac_pop_drive_command(&command)) {
         vicemac_dispatch_drive_command(&command);
+    }
+}
+
+static void vicemac_dispatch_drive_attach_request(vicemac_drive_attach_request_t *request)
+{
+    int result;
+
+    if (request == 0) {
+        return;
+    }
+
+    result = vicemac_dispatch_drive_attach_disk(request->unit,
+                                               request->drive,
+                                               request->path,
+                                               request->program_name,
+                                               request->run_mode);
+    vicemac_complete_drive_attach_request(request, result == 0);
+}
+
+static void vicemac_dispatch_queued_drive_attach_requests(void)
+{
+    vicemac_drive_attach_request_t *request;
+
+    while (vicemac_pop_drive_attach_request(&request)) {
+        vicemac_dispatch_drive_attach_request(request);
     }
 }
 
@@ -2930,6 +3116,7 @@ void vicemac_dispatch_queued_events(void)
     vicemac_dispatch_queued_snapshot_requests();
     vicemac_dispatch_queued_cartridge_commands();
     vicemac_dispatch_queued_drive_commands();
+    vicemac_dispatch_queued_drive_attach_requests();
     vicemac_dispatch_queued_media_commands();
     vicemac_dispatch_queued_tape_commands();
     vicemac_dispatch_queued_joystick_events();

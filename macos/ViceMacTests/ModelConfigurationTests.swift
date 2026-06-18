@@ -534,6 +534,7 @@ final class ModelConfigurationTests: XCTestCase {
         let drive8 = drives.first { $0.unit == 8 }
         XCTAssertEqual(drive8?.storageKind, .diskImage)
         XCTAssertEqual(drive8?.driveType, .c1541)
+        XCTAssertEqual(drive8?.accessMode, .native)
         XCTAssertFalse(drive8?.protectsInsertedDisks ?? true)
     }
 
@@ -550,6 +551,15 @@ final class ModelConfigurationTests: XCTestCase {
         XCTAssertEqual(patchedDrives[1], drives[1])
     }
 
+    func testQLinkReloadedDrivePresetForcesNativeDrive8() {
+        var drives = EmulatedMachine.x64sc.defaultDriveConfigurations()
+        drives[0].accessMode = .fast
+
+        let patchedDrives = QLinkReloadedDriveRequirements.preset(preservingValuesFrom: drives, for: .x64sc)
+
+        XCTAssertEqual(patchedDrives.first { $0.unit == 8 }?.accessMode, .native)
+    }
+
     func testQLinkReloadedDriveRequirementsRejectProtectedDrive8() {
         let drives = EmulatedMachine.x64sc.defaultDriveConfigurations()
 
@@ -557,6 +567,33 @@ final class ModelConfigurationTests: XCTestCase {
 
         XCTAssertTrue(issues.contains("Drive 8 protects inserted disks"))
         XCTAssertFalse(QLinkReloadedDriveRequirements.isCompatible(drives, for: .x64sc))
+    }
+
+    func testQLinkReloadedDriveRequirementsRejectFastDrive8() {
+        var drives = QLinkReloadedDriveRequirements.preset(preservingValuesFrom: EmulatedMachine.x64sc.defaultDriveConfigurations(),
+                                                           for: .x64sc)
+        drives[0].accessMode = .fast
+
+        let issues = QLinkReloadedDriveRequirements.incompatibilities(in: drives, for: .x64sc)
+
+        XCTAssertTrue(issues.contains("Drive 8 is Fast, not Native"))
+        XCTAssertFalse(QLinkReloadedDriveRequirements.isCompatible(drives, for: .x64sc))
+    }
+
+    func testQLinkReloadedStartupUsesRuntimeAutostartDiskCommand() throws {
+        let appSource = try sourceText(at: "macos/ViceMac/ViceMacApp.swift")
+
+        XCTAssertTrue(appSource.contains("programName: bootProgram"))
+        XCTAssertFalse(appSource.contains("submitLine(\"LOAD\\\"\\(bootProgram)\\\",8\")"))
+        XCTAssertFalse(appSource.contains("submitLine(\"RUN\")"))
+    }
+
+    func testDiskAttachReappliesDriveConfigurationBeforeRuntimeAttach() throws {
+        let mediaSource = try sourceText(at: "macos/ViceMac/EmulatorSession+Media.swift")
+        let applyRange = try XCTUnwrap(mediaSource.range(of: "applyDriveConfigurations(updateStatus: false)"))
+        let attachRange = try XCTUnwrap(mediaSource.range(of: "let didAttach = engine.attachDisk"))
+
+        XCTAssertLessThan(applyRange.lowerBound, attachRange.lowerBound)
     }
 
     func testQLinkReloadedIncompatibleSettingsMessageGroupsIssues() {
@@ -1839,7 +1876,7 @@ final class ModelConfigurationTests: XCTestCase {
         XCTAssertEqual(Array(patchedProfile[30..<50]),
                        [5, 5, 5, 1, 2, 1, 2] + Array(repeating: 0x80, count: 13))
         XCTAssertEqual(Array(patchedProfile[9..<30]), Array(originalProfile[9..<30]))
-        XCTAssertEqual(Array(patchedProfile[50..<96]), Array(originalProfile[50..<96]))
+        XCTAssertEqual(Array(patchedProfile[50..<201]), Array(originalProfile[50..<201]))
 
         let secondPatchChangedDisk = try QLinkReloadedDiskPatcher.configureReloadedProfile(in: &data)
         XCTAssertFalse(secondPatchChangedDisk)
@@ -1852,6 +1889,9 @@ final class ModelConfigurationTests: XCTestCase {
         let registration = try XCTUnwrap(QLinkReloadedDiskPatcher.registrationProfile(from: data))
 
         XCTAssertEqual(registration.accessNumber, "5974")
+        XCTAssertEqual(registration.accessCode, "5974")
+        XCTAssertEqual(registration.accountID, "0000005974")
+        XCTAssertEqual(registration.accountDisplayTitle, "5974")
         XCTAssertEqual(registration.handle, "BARRYWALKR")
         XCTAssertEqual(registration.decryptedProfile.count, 256)
     }
@@ -1877,6 +1917,8 @@ final class ModelConfigurationTests: XCTestCase {
         let decoded = try JSONDecoder().decode(QLinkReloadedRegistrationProfile.self, from: legacyData)
 
         XCTAssertEqual(decoded.accessNumber, "5974")
+        XCTAssertEqual(decoded.accessCode, "5974")
+        XCTAssertEqual(decoded.accountID, "0000005974")
         XCTAssertEqual(decoded.handle, "BARRYWALKR")
     }
 
@@ -1895,10 +1937,25 @@ final class ModelConfigurationTests: XCTestCase {
         XCTAssertEqual(Array(patchedProfile[30..<50]),
                        [5, 5, 5, 1, 2, 1, 2] + Array(repeating: 0x80, count: 13))
         XCTAssertEqual(Array(patchedProfile[9..<30]), Array(savedRegistration.decryptedProfile[9..<30]))
-        XCTAssertEqual(Array(patchedProfile[50..<96]), Array(savedRegistration.decryptedProfile[50..<96]))
+        XCTAssertEqual(Array(patchedProfile[50..<201]), Array(savedRegistration.decryptedProfile[50..<201]))
         let restoredRegistration = try XCTUnwrap(QLinkReloadedDiskPatcher.registrationProfile(from: blankData))
         XCTAssertEqual(restoredRegistration.accessNumber, "5974")
         XCTAssertEqual(restoredRegistration.handle, "BARRYWALKR")
+    }
+
+    func testQLinkReloadedDiskPatcherRepairsClearedPlaceholderUserSlot() throws {
+        var data = makeQLinkD64ProfileFixture(accessNumber: "1")
+        var profile = try QLinkReloadedDiskPatcher.decryptedProfileSector(from: data)
+        profile.replaceSubrange(50..<201, with: Array(repeating: UInt8(0), count: 151))
+        data.replaceSubrange(qLinkProfileSectorRange(), with: encryptedQLinkProfile(profile))
+
+        let changed = try QLinkReloadedDiskPatcher.configureReloadedProfile(in: &data)
+        let patchedProfile = try QLinkReloadedDiskPatcher.decryptedProfileSector(from: data)
+
+        XCTAssertTrue(changed)
+        XCTAssertNil(try QLinkReloadedDiskPatcher.registrationProfile(from: data))
+        XCTAssertEqual(Array(patchedProfile[9..<30]), qLinkFactoryBlankAccessNumberProfile())
+        XCTAssertEqual(Array(patchedProfile[50..<201]), qLinkFactoryBlankUserRecordBlock())
     }
 
     func testQLinkReloadedDiskPatcherRemovesRegistrationProfileAndForcesConnectionSettings() throws {
@@ -1914,26 +1971,119 @@ final class ModelConfigurationTests: XCTestCase {
         XCTAssertEqual(Array(patchedProfile[0..<6]), [5, 1, 2, 0, 0x44, 1])
         XCTAssertEqual(Array(patchedProfile[30..<50]),
                        [5, 5, 5, 1, 2, 1, 2] + Array(repeating: 0x80, count: 13))
-        XCTAssertEqual(Array(patchedProfile[9..<30]), [0x31] + Array(repeating: 0x20, count: 20))
-        XCTAssertEqual(Array(patchedProfile[50..<96]), Array(repeating: 0, count: 46))
+        XCTAssertEqual(Array(patchedProfile[9..<30]), qLinkFactoryBlankAccessNumberProfile())
+        XCTAssertEqual(Array(patchedProfile[50..<201]), qLinkFactoryBlankUserRecordBlock())
 
         let secondPatchChangedDisk = try QLinkReloadedDiskPatcher.removeRegistrationProfile(in: &data)
         XCTAssertFalse(secondPatchChangedDisk)
     }
 
-    func testQLinkReloadedRegistrationStoreKeepsOneProfilePerAccessNumber() throws {
+    func testQLinkReloadedDiskPatcherExtractsAllDiskProfilesAndReportsCapacity() throws {
+        let data = makeQLinkD64ProfileFixture(accessNumber: "5974",
+                                              screenNames: ["BarryWalkr", "JASMAZ"])
+
+        let registrations = try QLinkReloadedDiskPatcher.registrationProfiles(from: data)
+
+        XCTAssertEqual(QLinkReloadedDiskPatcher.maximumRegistrationProfileCount, 10)
+        XCTAssertEqual(registrations.map(\.accessNumber), ["5974", "5974"])
+        XCTAssertEqual(registrations.map(\.handle), ["BARRYWALKR", "JASMAZ"])
+        XCTAssertEqual(registrations.map(\.id), ["barrywalkr", "jasmaz"])
+    }
+
+    func testQLinkReloadedDiskPatcherAddsRegistrationProfileToDisk() throws {
+        var data = makeQLinkD64ProfileFixture(accessNumber: "5974",
+                                              screenNames: ["BarryWalkr"])
+        let savedData = makeQLinkD64ProfileFixture(accessNumber: "5974",
+                                                   screenNames: ["JASMAZ"])
+        let savedRegistration = try XCTUnwrap(QLinkReloadedDiskPatcher.registrationProfile(from: savedData))
+
+        let changed = try QLinkReloadedDiskPatcher.addRegistrationProfile(savedRegistration,
+                                                                          in: &data)
+        let patchedProfile = try QLinkReloadedDiskPatcher.decryptedProfileSector(from: data)
+        let registrations = try QLinkReloadedDiskPatcher.registrationProfiles(from: data)
+
+        XCTAssertTrue(changed)
+        XCTAssertEqual(Array(patchedProfile[0..<6]), [5, 1, 2, 0, 0x44, 1])
+        XCTAssertEqual(registrations.map(\.handle), ["BARRYWALKR", "JASMAZ"])
+        XCTAssertEqual(patchedProfile[50], 2)
+    }
+
+    func testQLinkReloadedDiskPatcherReplacesMatchingRegistrationProfileOnDisk() throws {
+        var data = makeQLinkD64ProfileFixture(accessNumber: "5974",
+                                              screenNames: ["BarryWalkr", "JASMAZ"])
+        var savedData = makeQLinkD64ProfileFixture(accessNumber: "5974",
+                                                   screenNames: ["JASMAZ"])
+        var savedProfile = try QLinkReloadedDiskPatcher.decryptedProfileSector(from: savedData)
+        savedProfile[51] = 0x7f
+        savedData.replaceSubrange(qLinkProfileSectorRange(), with: encryptedQLinkProfile(savedProfile))
+        let savedRegistration = try XCTUnwrap(QLinkReloadedDiskPatcher.registrationProfile(from: savedData))
+
+        let changed = try QLinkReloadedDiskPatcher.addRegistrationProfile(savedRegistration,
+                                                                          in: &data)
+        let patchedRegistrations = try QLinkReloadedDiskPatcher.registrationProfiles(from: data)
+
+        XCTAssertTrue(changed)
+        XCTAssertEqual(patchedRegistrations.map(\.handle), ["BARRYWALKR", "JASMAZ"])
+        XCTAssertEqual(patchedRegistrations[1].userRecord.first, 0x7f)
+    }
+
+    func testQLinkReloadedDiskPatcherRemovesRegistrationProfileAndCompactsDiskSlots() throws {
+        var data = makeQLinkD64ProfileFixture(accessNumber: "5974",
+                                              screenNames: ["BarryWalkr", "JASMAZ", "NIGHTOWL"])
+
+        let changed = try QLinkReloadedDiskPatcher.removeRegistrationProfile(id: "jasmaz",
+                                                                             in: &data)
+        let patchedProfile = try QLinkReloadedDiskPatcher.decryptedProfileSector(from: data)
+        let registrations = try QLinkReloadedDiskPatcher.registrationProfiles(from: data)
+
+        XCTAssertTrue(changed)
+        XCTAssertEqual(patchedProfile[50], 2)
+        XCTAssertEqual(registrations.map(\.handle), ["BARRYWALKR", "NIGHTOWL"])
+        XCTAssertEqual(Array(patchedProfile[66..<81]), qLinkUserRecord(screenName: "NIGHTOWL", accountID: "0000005976"))
+        XCTAssertEqual(Array(patchedProfile[81..<96]), Array(repeating: UInt8(0), count: 15))
+    }
+
+    func testQLinkReloadedDiskPatcherRestoresFactoryBlankWhenLastRegistrationProfileRemoved() throws {
+        var data = makeQLinkD64ProfileFixture(accessNumber: "5974",
+                                              screenNames: ["BarryWalkr"])
+
+        let changed = try QLinkReloadedDiskPatcher.removeRegistrationProfile(id: "barrywalkr",
+                                                                             in: &data)
+        let patchedProfile = try QLinkReloadedDiskPatcher.decryptedProfileSector(from: data)
+
+        XCTAssertTrue(changed)
+        XCTAssertNil(try QLinkReloadedDiskPatcher.registrationProfile(from: data))
+        XCTAssertEqual(Array(patchedProfile[9..<30]), qLinkFactoryBlankAccessNumberProfile())
+        XCTAssertEqual(Array(patchedProfile[50..<201]), qLinkFactoryBlankUserRecordBlock())
+    }
+
+    func testQLinkReloadedDiskPatcherRejectsAddingRegistrationProfileToFullDisk() throws {
+        var data = makeQLinkD64ProfileFixture(accessNumber: "5974",
+                                              screenNames: (0..<10).map { "USER\($0)" })
+        let savedData = makeQLinkD64ProfileFixture(accessNumber: "5974",
+                                                   screenNames: ["EXTRA"])
+        let savedRegistration = try XCTUnwrap(QLinkReloadedDiskPatcher.registrationProfile(from: savedData))
+
+        XCTAssertThrowsError(try QLinkReloadedDiskPatcher.addRegistrationProfile(savedRegistration,
+                                                                                 in: &data)) { error in
+            XCTAssertEqual(error as? QLinkReloadedServiceError, .diskProfileLimitReached)
+        }
+
+    }
+
+    func testQLinkReloadedRegistrationStoreKeepsOneProfilePerUsername() throws {
         let store = QLinkReloadedRegistrationMemoryStore()
         let firstData = makeQLinkD64ProfileFixture(accessNumber: "5974")
         var secondData = makeQLinkD64ProfileFixture(accessNumber: "5974")
         var secondProfile = try QLinkReloadedDiskPatcher.decryptedProfileSector(from: secondData)
-        secondProfile[50] = 0x7f
+        secondProfile[51] = 0x7f
         secondData.replaceSubrange(qLinkProfileSectorRange(), with: encryptedQLinkProfile(secondProfile))
 
         store.saveRegistration(try XCTUnwrap(QLinkReloadedDiskPatcher.registrationProfile(from: firstData)))
         store.saveRegistration(try XCTUnwrap(QLinkReloadedDiskPatcher.registrationProfile(from: secondData)))
 
         XCTAssertEqual(store.registrations().count, 1)
-        XCTAssertEqual(store.loadRegistration(accessNumber: "5974")?.decryptedProfile[50], 0x7f)
+        XCTAssertEqual(store.loadRegistration(id: "barrywalkr")?.userRecord.first, 0x7f)
     }
 
     func testQLinkReloadedDiskPatcherWritesOnlyRequestedManagedCopy() throws {
@@ -2705,8 +2855,26 @@ final class ModelConfigurationTests: XCTestCase {
         return defaults
     }
 
+    private func sourceText(at relativePath: String) throws -> String {
+        try String(contentsOf: repositoryRootURL.appendingPathComponent(relativePath),
+                   encoding: .utf8)
+    }
+
+    private var repositoryRootURL: URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+    }
+
     private func makeQLinkD64ProfileFixture(accessNumber: String = "5974",
                                             screenName: String = "BarryWalkr") -> Data {
+        makeQLinkD64ProfileFixture(accessNumber: accessNumber,
+                                    screenNames: [screenName])
+    }
+
+    private func makeQLinkD64ProfileFixture(accessNumber: String = "5974",
+                                            screenNames: [String]) -> Data {
         var data = Data(repeating: 0, count: QLinkReloadedDiskPatcher.d64ByteCount)
         var profile = [UInt8](repeating: 0, count: 256)
         profile[0] = 0
@@ -2727,17 +2895,36 @@ final class ModelConfigurationTests: XCTestCase {
         profile[31] = 9
         profile[32] = 9
         profile[33] = 0x80
-        for index in 50..<96 {
+        for index in 50..<201 {
             profile[index] = 0
         }
-        let screenNameBytes = qLinkScreenNameBytes(screenName)
-        profile.replaceSubrange(56..<(56 + screenNameBytes.count), with: screenNameBytes)
-        for index in (56 + screenNameBytes.count)..<66 {
-            profile[index] = 0x20
+        profile[50] = UInt8(min(screenNames.count, QLinkReloadedDiskPatcher.maximumRegistrationProfileCount))
+        for (index, screenName) in screenNames.prefix(QLinkReloadedDiskPatcher.maximumRegistrationProfileCount).enumerated() {
+            let slotRange = (51 + index * 15)..<(66 + index * 15)
+            let accountID = String(format: "%010d", 5_974 + index)
+            profile.replaceSubrange(slotRange,
+                                    with: qLinkUserRecord(screenName: screenName, accountID: accountID))
         }
 
         data.replaceSubrange(qLinkProfileSectorRange(), with: encryptedQLinkProfile(profile))
         return data
+    }
+
+    private func qLinkUserRecord(screenName: String, accountID: String = "0000005974") -> [UInt8] {
+        var record = qLinkPackedAccountID(accountID)
+        let screenNameBytes = qLinkScreenNameBytes(screenName)
+        record.append(contentsOf: screenNameBytes)
+        record.append(contentsOf: Array(repeating: UInt8(0x20), count: max(0, 10 - screenNameBytes.count)))
+        return Array(record.prefix(15))
+    }
+
+    private func qLinkPackedAccountID(_ accountID: String) -> [UInt8] {
+        let digits = Array(accountID.prefix(10).utf8)
+        let paddedDigits = Array(repeating: UInt8(ascii: "0"), count: max(0, 10 - digits.count)) + digits
+        return stride(from: 0, to: 10, by: 2).map { index in
+            ((paddedDigits[index] - UInt8(ascii: "0")) << 4)
+                | (paddedDigits[index + 1] - UInt8(ascii: "0"))
+        }
     }
 
     private func qLinkScreenNameBytes(_ screenName: String) -> [UInt8] {
@@ -2758,6 +2945,17 @@ final class ModelConfigurationTests: XCTestCase {
                     return nil
                 }
             }
+    }
+
+    private func qLinkFactoryBlankAccessNumberProfile() -> [UInt8] {
+        [0x31, 0x20, 0x20, 0x20] + Array(repeating: UInt8(0), count: 17)
+    }
+
+    private func qLinkFactoryBlankUserRecordBlock() -> [UInt8] {
+        [0x01]
+            + [0x58, 0x89, 0x34, 0x95, 0x67]
+            + Array("QLINK     ".utf8)
+            + Array(repeating: UInt8(0), count: 135)
     }
 
     private func qLinkProfileSectorRange() -> Range<Data.Index> {

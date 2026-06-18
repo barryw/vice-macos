@@ -24,6 +24,7 @@ typedef void (*ViceSetAudioSamplesCallbackFunction)(vicemac_audio_samples_callba
                                                     void *context);
 typedef void (*ViceSetSIDVoiceSamplesCallbackFunction)(vicemac_sid_voice_samples_callback_t callback,
                                                        void *context);
+typedef int (*ViceBridgeABIVersionFunction)(void);
 typedef const char *(*ViceGetVersionFunction)(void);
 typedef int (*ViceQueueKeyEventFunction)(signed long key, int mod, int pressed);
 typedef int (*ViceQueueKeyboardClearFunction)(void);
@@ -46,6 +47,7 @@ typedef int (*ViceQueueDriveResetFunction)(uint32_t unit);
 typedef int (*ViceQueueDriveAttachDiskFunction)(uint32_t unit,
                                                 uint32_t drive,
                                                 const char *path,
+                                                const char *program_name,
                                                 int run_mode);
 typedef int (*ViceQueueDriveDetachDiskFunction)(uint32_t unit, uint32_t drive);
 typedef int (*ViceQueueDriveSoundPreviewFunction)(uint32_t unit);
@@ -106,6 +108,7 @@ typedef struct ViceEngineSymbols {
     ViceSetVSIDStateCallbackFunction setVSIDStateCallback;
     ViceSetAudioSamplesCallbackFunction setAudioSamplesCallback;
     ViceSetSIDVoiceSamplesCallbackFunction setSIDVoiceSamplesCallback;
+    ViceBridgeABIVersionFunction bridgeABIVersion;
     ViceGetVersionFunction getVersion;
     ViceQueueKeyEventFunction queueKeyEvent;
     ViceQueueKeyboardClearFunction queueKeyboardClear;
@@ -372,6 +375,7 @@ static int loadRuntimeSymbols(void *handle, ViceEngineSymbols *symbols)
     LOAD_RUNTIME_SYMBOL(setVSIDStateCallback, "vicemac_set_vsid_state_callback");
     LOAD_RUNTIME_SYMBOL(setAudioSamplesCallback, "vicemac_set_audio_samples_callback");
     LOAD_RUNTIME_SYMBOL(setSIDVoiceSamplesCallback, "vicemac_set_sid_voice_samples_callback");
+    LOAD_RUNTIME_SYMBOL(bridgeABIVersion, "vicemac_bridge_abi_version");
     LOAD_RUNTIME_SYMBOL(getVersion, "vicemac_get_vice_version");
     LOAD_RUNTIME_SYMBOL(queueKeyEvent, "vicemac_queue_key_event");
     LOAD_RUNTIME_SYMBOL(queueKeyboardClear, "vicemac_queue_keyboard_clear");
@@ -391,7 +395,7 @@ static int loadRuntimeSymbols(void *handle, ViceEngineSymbols *symbols)
     LOAD_RUNTIME_SYMBOL(queueWarpMode, "vicemac_queue_warp_mode");
     LOAD_RUNTIME_SYMBOL(queueQuit, "vicemac_queue_quit");
     LOAD_RUNTIME_SYMBOL(queueDriveReset, "vicemac_queue_drive_reset");
-    LOAD_RUNTIME_SYMBOL(queueDriveAttachDisk, "vicemac_queue_drive_attach_disk");
+    LOAD_RUNTIME_SYMBOL(queueDriveAttachDisk, "vicemac_queue_drive_attach_disk_v2");
     LOAD_RUNTIME_SYMBOL(queueDriveDetachDisk, "vicemac_queue_drive_detach_disk");
     LOAD_RUNTIME_SYMBOL(queueDriveSoundPreview, "vicemac_queue_drive_sound_preview");
     LOAD_RUNTIME_SYMBOL(queueMediaAutostart, "vicemac_queue_media_autostart");
@@ -417,6 +421,13 @@ static int loadRuntimeSymbols(void *handle, ViceEngineSymbols *symbols)
     LOAD_RUNTIME_SYMBOL(debuggerContinue, "vicemac_debugger_continue");
 
 #undef LOAD_RUNTIME_SYMBOL
+    if (symbols->bridgeABIVersion() != VICEMAC_BRIDGE_ABI_VERSION) {
+        setAndPrintLastErrorLocked("VICE Mac: runtime ABI %d is not compatible with required ABI %d",
+                                   symbols->bridgeABIVersion(),
+                                   VICEMAC_BRIDGE_ABI_VERSION);
+        return 0;
+    }
+
     return 1;
 }
 
@@ -796,13 +807,17 @@ bool ViceEngineResetDrive(uint32_t unit)
     return runtimeSymbols.queueDriveReset(unit) != 0;
 }
 
-bool ViceEngineAttachDisk(uint32_t unit, uint32_t drive, const char *path, int32_t runMode)
+bool ViceEngineAttachDisk(uint32_t unit,
+                          uint32_t drive,
+                          const char *path,
+                          const char *programName,
+                          int32_t runMode)
 {
     if (!atomic_load(&engineRunning) || runtimeSymbols.queueDriveAttachDisk == NULL) {
         return false;
     }
 
-    return runtimeSymbols.queueDriveAttachDisk(unit, drive, path, runMode) != 0;
+    return runtimeSymbols.queueDriveAttachDisk(unit, drive, path, programName, runMode) != 0;
 }
 
 bool ViceEngineDetachDisk(uint32_t unit, uint32_t drive)

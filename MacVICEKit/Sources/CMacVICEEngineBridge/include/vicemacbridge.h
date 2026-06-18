@@ -11,6 +11,8 @@
 
 #include <stdint.h>
 
+#define VICEMAC_BRIDGE_ABI_VERSION 2
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -161,6 +163,7 @@ typedef void (*vicemac_sid_voice_samples_callback_t)(const vicemac_sid_voice_sam
 
 #define VICEMAC_PIXEL_FORMAT_RGBA8 1U
 
+int vicemac_bridge_abi_version(void);
 void vicemac_set_video_frame_callback(vicemac_video_frame_callback_t callback,
                                       void *context);
 void vicemac_set_drive_status_callback(vicemac_drive_status_callback_t callback,
@@ -231,6 +234,11 @@ int vicemac_queue_machine_reset(uint32_t reset_mode);
 int vicemac_queue_warp_mode(int enabled);
 int vicemac_queue_quit(void);
 int vicemac_queue_drive_reset(uint32_t unit);
+int vicemac_queue_drive_attach_disk_v2(uint32_t unit,
+                                       uint32_t drive,
+                                       const char *path,
+                                       const char *program_name,
+                                       int run_mode);
 int vicemac_queue_drive_attach_disk(uint32_t unit,
                                     uint32_t drive,
                                     const char *path,

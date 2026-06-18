@@ -130,7 +130,8 @@ extension EmulatorSession {
     func attachDisk(to unit: Int,
                     driveNumber: Int,
                     url: URL,
-                    behavior: MediaOpenBehavior) -> Bool {
+                    behavior: MediaOpenBehavior,
+                    programName: String? = nil) -> Bool {
         guard unit >= 8 && unit <= 11 else {
             return false
         }
@@ -158,12 +159,13 @@ extension EmulatorSession {
             return false
         }
 
-        applyDiskWriteProtection(configuration)
+        applyDriveConfigurations(updateStatus: false)
         applyMediaBehavior(updateStatus: false)
 
         let didAttach = engine.attachDisk(unit: UInt32(unit),
                                           drive: UInt32(driveNumber),
                                           url: url,
+                                          programName: programName,
                                           runMode: behavior.macVICERunMode)
 
         if didAttach {

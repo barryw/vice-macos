@@ -597,6 +597,147 @@ final class MacVICEKitTests: XCTestCase {
         XCTAssertEqual(MacVICERuntime.manifestFileName, "MacVICERuntimeManifest.json")
     }
 
+    func testNativeBridgeRejectsStaleDiskAttachABI() throws {
+        let bridgeSource = try sourceText(at: "MacVICEKit/Sources/CMacVICEEngineBridge/ViceEngineBridge.c")
+        let bridgeHeader = try sourceText(at: "MacVICEKit/Sources/CMacVICEEngineBridge/include/vicemacbridge.h")
+        let runtimeHeader = try sourceText(at: "vice/src/arch/macos/vicemacbridge.h")
+        let runtimeSource = try sourceText(at: "vice/src/arch/macos/vicemacbridge.c")
+
+        XCTAssertTrue(bridgeSource.contains("vicemac_bridge_abi_version"))
+        XCTAssertTrue(bridgeSource.contains("VICEMAC_BRIDGE_ABI_VERSION"))
+        XCTAssertTrue(bridgeSource.contains("LOAD_RUNTIME_SYMBOL(queueDriveAttachDisk, \"vicemac_queue_drive_attach_disk_v2\")"))
+        XCTAssertFalse(bridgeSource.contains("LOAD_RUNTIME_SYMBOL(queueDriveAttachDisk, \"vicemac_queue_drive_attach_disk\")"))
+        XCTAssertTrue(bridgeHeader.contains("int vicemac_queue_drive_attach_disk_v2(uint32_t unit,"))
+        XCTAssertTrue(runtimeHeader.contains("int vicemac_queue_drive_attach_disk_v2(uint32_t unit,"))
+        XCTAssertTrue(runtimeSource.contains("int vicemac_bridge_abi_version(void)"))
+        XCTAssertTrue(runtimeSource.contains("int vicemac_queue_drive_attach_disk_v2(uint32_t unit,"))
+    }
+
+    func testRuntimeDiskAttachPublishesAttachedImagePath() throws {
+        guard !MacVICEEngineSession.isRunning else {
+            throw XCTSkip("A VICE engine is already running in this process.")
+        }
+
+        let runtime = try builtRuntime()
+        let diskURL = try temporaryBlankD64(named: "macvice-attach-\(UUID().uuidString).d64")
+        let attached = expectation(description: "Drive 8 reports attached disk image")
+        var observedStatuses: [MacVICEDriveStatus] = []
+        let configuration = MacVICEMachineConfiguration(machine: .c64sc,
+                                                        soundEnabled: false,
+                                                        warpEnabled: true,
+                                                        extraArguments: [
+                                                            "-devicebackend8", "0",
+                                                            "-drive8type", "1542",
+                                                            "-drive8truedrive",
+                                                            "+trapdevice8",
+                                                            "-attach8rw"
+                                                        ])
+
+        let session = MacVICEEngineSession(
+            configuration: configuration
+        )
+        session.callbacks.driveStatus = { status in
+            guard status.unit == 8 else { return }
+            observedStatuses.append(status)
+            if status.drive0ImagePath == diskURL.path || status.imagePath == diskURL.path {
+                attached.fulfill()
+            }
+        }
+
+        try session.start(machineID: MacVICEMachine.c64sc.viceTarget,
+                          dynamicLibraryURL: runtime.dynamicLibraryURL(for: .c64sc),
+                          arguments: configuration.launchArguments(runtime: runtime))
+        addTeardownBlock {
+            _ = session.requestQuit()
+            let deadline = Date().addingTimeInterval(2)
+            while MacVICEEngineSession.isRunning && Date() < deadline {
+                RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05))
+            }
+        }
+
+        XCTAssertTrue(session.attachDisk(unit: 8, drive: 0, url: diskURL))
+        wait(for: [attached], timeout: 5)
+
+        XCTAssertTrue(observedStatuses.contains { $0.enabled && $0.drive0ImagePath == diskURL.path },
+                      "Drive 8 never reported \(diskURL.path). Observed: \(observedStatuses)")
+    }
+
+    func testRuntimeDiskAttachReturnsFalseWhenVICERejectsImage() throws {
+        guard !MacVICEEngineSession.isRunning else {
+            throw XCTSkip("A VICE engine is already running in this process.")
+        }
+
+        let runtime = try builtRuntime()
+        let missingDiskURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macvice-missing-\(UUID().uuidString).d64")
+        let configuration = MacVICEMachineConfiguration(machine: .c64sc,
+                                                        soundEnabled: false,
+                                                        warpEnabled: true,
+                                                        extraArguments: [
+                                                            "-devicebackend8", "0",
+                                                            "-drive8type", "1542",
+                                                            "-drive8truedrive",
+                                                            "+trapdevice8",
+                                                            "-attach8rw"
+                                                        ])
+        let session = MacVICEEngineSession(configuration: configuration)
+
+        try session.start(machineID: MacVICEMachine.c64sc.viceTarget,
+                          dynamicLibraryURL: runtime.dynamicLibraryURL(for: .c64sc),
+                          arguments: configuration.launchArguments(runtime: runtime))
+        addTeardownBlock {
+            _ = session.requestQuit()
+            let deadline = Date().addingTimeInterval(2)
+            while MacVICEEngineSession.isRunning && Date() < deadline {
+                RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05))
+            }
+        }
+
+        XCTAssertFalse(session.attachDisk(unit: 8, drive: 0, url: missingDiskURL))
+    }
+
+    func testRuntimeAttachedDiskCanLoadDirectoryFromBasic() throws {
+        guard !MacVICEEngineSession.isRunning else {
+            throw XCTSkip("A VICE engine is already running in this process.")
+        }
+
+        let runtime = try builtRuntime()
+        let diskTitle = "MACVICE TEST"
+        let diskURL = try temporaryFormattedD64(named: "macvice-directory-\(UUID().uuidString).d64",
+                                                diskName: diskTitle)
+        let configuration = MacVICEMachineConfiguration(machine: .c64sc,
+                                                        soundEnabled: false,
+                                                        warpEnabled: true,
+                                                        extraArguments: [
+                                                            "-devicebackend8", "0",
+                                                            "-drive8type", "1542",
+                                                            "-drive8truedrive",
+                                                            "+trapdevice8",
+                                                            "-attach8rw"
+                                                        ])
+        let session = MacVICEEngineSession(configuration: configuration)
+
+        try session.start(machineID: MacVICEMachine.c64sc.viceTarget,
+                          dynamicLibraryURL: runtime.dynamicLibraryURL(for: .c64sc),
+                          arguments: configuration.launchArguments(runtime: runtime))
+        addTeardownBlock {
+            _ = session.requestQuit()
+            let deadline = Date().addingTimeInterval(2)
+            while MacVICEEngineSession.isRunning && Date() < deadline {
+                RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05))
+            }
+        }
+
+        XCTAssertTrue(session.attachDisk(unit: 8, drive: 0, url: diskURL))
+        RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.25))
+        XCTAssertTrue(session.typeText("LOAD\"$\",8\r"))
+
+        let loadedDirectory = waitForBasicDirectoryLoad(session: session,
+                                                        diskTitle: diskTitle,
+                                                        timeout: 8)
+        XCTAssertTrue(loadedDirectory, "BASIC memory never showed a loaded disk directory from \(diskURL.path).")
+    }
+
     func testCStringArrayBridgesSwiftArgumentsToNullTerminatedArgv() {
         let arguments = ["x64sc", "-default", "-directory", "/tmp/runtime/VICEData"]
 
@@ -638,6 +779,136 @@ final class MacVICEKitTests: XCTestCase {
         let runtimeURL = URL(fileURLWithPath: "/tmp/macvice-runtime", isDirectory: true)
         return MacVICERuntime(directoryURL: runtimeURL,
                               dataDirectoryURL: runtimeURL.appendingPathComponent("VICEData", isDirectory: true))
+    }
+
+    private func sourceText(at relativePath: String) throws -> String {
+        let rootURL = try repositoryRoot()
+        return try String(contentsOf: rootURL.appendingPathComponent(relativePath),
+                          encoding: .utf8)
+    }
+
+    private func builtRuntime() throws -> MacVICERuntime {
+        guard let runtime = MacVICERuntime.runtimeFromSourceCheckout(startingAt: URL(fileURLWithPath: #filePath)) else {
+            throw XCTSkip("Build the VICE Mac C64 scheme first; source checkout runtime was not found.")
+        }
+
+        guard FileManager.default.fileExists(atPath: runtime.dynamicLibraryURL(for: .c64sc).path) else {
+            throw XCTSkip("Build the VICE Mac C64 scheme first; missing \(runtime.dynamicLibraryURL(for: .c64sc).path).")
+        }
+
+        return runtime
+    }
+
+    private func temporaryBlankD64(named name: String) throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
+        try Data(repeating: 0, count: 174_848).write(to: url)
+        addTeardownBlock { try? FileManager.default.removeItem(at: url) }
+        return url
+    }
+
+    private func temporaryFormattedD64(named name: String, diskName: String) throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
+        try formattedD64Data(diskName: diskName, diskID: "42").write(to: url)
+        addTeardownBlock { try? FileManager.default.removeItem(at: url) }
+        return url
+    }
+
+    private func formattedD64Data(diskName: String, diskID: String) -> Data {
+        let sectorsPerTrack = [21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21,
+                               19, 19, 19, 19, 19, 19, 19,
+                               18, 18, 18, 18, 18, 18,
+                               17, 17, 17, 17, 17]
+        var data = Data(repeating: 0, count: sectorsPerTrack.reduce(0, +) * 256)
+
+        func offset(track: Int, sector: Int) -> Int {
+            (sectorsPerTrack.prefix(track - 1).reduce(0, +) + sector) * 256
+        }
+
+        func petsciiName(_ value: String, length: Int) -> [UInt8] {
+            let bytes = Array(value.uppercased().utf8.prefix(length))
+            return bytes + Array(repeating: 0xa0, count: max(0, length - bytes.count))
+        }
+
+        let bamOffset = offset(track: 18, sector: 0)
+        data[bamOffset] = 18
+        data[bamOffset + 1] = 1
+        data[bamOffset + 2] = 0x41
+
+        for track in 1...35 {
+            let entryOffset = bamOffset + 4 + ((track - 1) * 4)
+            let sectorCount = sectorsPerTrack[track - 1]
+            var bitmap = UInt32((1 << sectorCount) - 1)
+            var freeCount = UInt8(sectorCount)
+
+            if track == 18 {
+                bitmap &= ~UInt32(1 << 0)
+                bitmap &= ~UInt32(1 << 1)
+                freeCount -= 2
+            }
+
+            data[entryOffset] = freeCount
+            data[entryOffset + 1] = UInt8(bitmap & 0xff)
+            data[entryOffset + 2] = UInt8((bitmap >> 8) & 0xff)
+            data[entryOffset + 3] = UInt8((bitmap >> 16) & 0xff)
+        }
+
+        data.replaceSubrange((bamOffset + 0x90)..<(bamOffset + 0xa0),
+                             with: petsciiName(diskName, length: 16))
+        data.replaceSubrange((bamOffset + 0xa2)..<(bamOffset + 0xa4),
+                             with: petsciiName(diskID, length: 2))
+        data[bamOffset + 0xa5] = UInt8(ascii: "2")
+        data[bamOffset + 0xa6] = UInt8(ascii: "A")
+
+        let directoryOffset = offset(track: 18, sector: 1)
+        data[directoryOffset] = 0
+        data[directoryOffset + 1] = 0xff
+
+        return data
+    }
+
+    private func waitForBasicDirectoryLoad(session: MacVICEEngineSession,
+                                           diskTitle: String,
+                                           timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        let titleBytes = Array(diskTitle.uppercased().utf8)
+
+        while Date() < deadline {
+            if let bytes = try? session.debugger.peek(address: 0x0801, length: 512),
+               containsBytes(titleBytes, in: Array(bytes)) {
+                return true
+            }
+            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.1))
+        }
+
+        return false
+    }
+
+    private func containsBytes(_ needle: [UInt8], in haystack: [UInt8]) -> Bool {
+        guard !needle.isEmpty,
+              haystack.count >= needle.count else {
+            return false
+        }
+
+        for index in 0...(haystack.count - needle.count) {
+            if Array(haystack[index..<(index + needle.count)]) == needle {
+                return true
+            }
+        }
+
+        return false
+    }
+
+    private func repositoryRoot() throws -> URL {
+        var url = URL(fileURLWithPath: #filePath)
+        while url.path != "/" {
+            let fileManager = FileManager.default
+            if fileManager.fileExists(atPath: url.appendingPathComponent("vice", isDirectory: true).path),
+               fileManager.fileExists(atPath: url.appendingPathComponent("MacVICEKit", isDirectory: true).path) {
+                return url
+            }
+            url.deleteLastPathComponent()
+        }
+        throw MacVICEError.runtimeNotFound("Unable to locate repository root from \(#filePath)")
     }
 
     private func createRuntimeDirectory(for machines: MacVICEMachine...) throws -> URL {
