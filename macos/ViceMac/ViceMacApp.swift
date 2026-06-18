@@ -458,6 +458,7 @@ struct ViceMacApp: App {
                 .environmentObject(aiSettings)
                 .environmentObject(aiDocumentLibrary)
                 .environmentObject(metadataSettings)
+                .environmentObject(qLinkReloaded)
         }
         #endif
     }
@@ -1001,17 +1002,22 @@ final class QLinkReloadedService: ObservableObject {
     @Published var alert: QLinkReloadedAlert?
     @Published private(set) var configuredDiskTitle: String?
     @Published private(set) var configuredDiskVersionTitle: String?
+    @Published private(set) var configuredDiskRegistrationProfile: QLinkReloadedRegistrationProfile?
     @Published private(set) var isConnecting = false
+    @Published private(set) var registrationProfiles: [QLinkReloadedRegistrationProfile] = []
 
     private static let defaultsKey = "vice.qlinkReloaded.mediaItemID"
     private static let versionDefaultsKey = "vice.qlinkReloaded.diskVersion"
-    private static let lastRegistrationUsernameDefaultsKey = "vice.qlinkReloaded.lastRegistrationUsername"
+    private static let lastRegistrationAccessNumberDefaultsKey = "vice.qlinkReloaded.lastRegistrationAccessNumber"
+    private static let legacyLastRegistrationUsernameDefaultsKey = "vice.qlinkReloaded.lastRegistrationUsername"
     private static let defaults = UserDefaults.standard
     private let registrationStore: QLinkReloadedRegistrationStoring
 
     init(registrationStore: QLinkReloadedRegistrationStoring = QLinkReloadedRegistrationKeychain()) {
         self.registrationStore = registrationStore
+        refreshRegistrationProfiles()
         refreshConfiguredDiskTitle()
+        refreshConfiguredDiskRegistrationProfile()
     }
 
     var hasConfiguredDisk: Bool {
@@ -1167,6 +1173,125 @@ final class QLinkReloadedService: ObservableObject {
         Self.defaults.removeObject(forKey: Self.versionDefaultsKey)
         configuredDiskTitle = nil
         configuredDiskVersionTitle = nil
+        configuredDiskRegistrationProfile = nil
+    }
+
+    func refreshRegistrationProfiles() {
+        registrationProfiles = registrationStore.registrations()
+    }
+
+    func refreshConfiguredDiskRegistrationProfile() {
+        do {
+            guard let item = try configuredDiskItem(),
+                  let url = try diskURL(for: item) else {
+                configuredDiskRegistrationProfile = nil
+                return
+            }
+
+            let data = try Data(contentsOf: url)
+            configuredDiskRegistrationProfile = try QLinkReloadedDiskPatcher.registrationProfile(from: data)
+        } catch {
+            configuredDiskRegistrationProfile = nil
+        }
+    }
+
+    func restoreRegistration(accessNumber: String) {
+        do {
+            guard let registration = registrationStore.loadRegistration(accessNumber: accessNumber) else {
+                presentError(title: "Q-Link Reloaded",
+                             message: "That saved Q-Link profile is no longer available.")
+                refreshRegistrationProfiles()
+                return
+            }
+
+            guard let item = try configuredDiskItem(),
+                  let url = try diskURL(for: item) else {
+                presentError(title: "Q-Link Reloaded",
+                             message: "Choose a Q-Link disk before restoring a saved profile.")
+                return
+            }
+
+            let version = try QLinkReloadedDiskPatcher.knownVersion(for: url)
+            let patchResult = try QLinkReloadedDiskPatcher.configureReloadedProfile(at: url,
+                                                                                    version: version,
+                                                                                    restoring: registration)
+            Self.defaults.set(registration.accessNumber, forKey: Self.lastRegistrationAccessNumberDefaultsKey)
+            Self.defaults.set(patchResult.version.displayTitle, forKey: Self.versionDefaultsKey)
+            configuredDiskVersionTitle = patchResult.version.displayTitle
+            configuredDiskRegistrationProfile = registration
+            refreshRegistrationProfiles()
+
+            let state = patchResult.changedDisk ? "restored" : "already matches"
+            presentNotice(title: "Q-Link Reloaded",
+                          message: "\(registration.displayTitle) \(state) on the managed Q-Link disk.")
+        } catch {
+            presentError(title: "Q-Link Reloaded", message: error.localizedDescription)
+        }
+    }
+
+    func copyRegistrationFromConfiguredDisk() {
+        do {
+            guard let item = try configuredDiskItem(),
+                  let url = try diskURL(for: item) else {
+                presentError(title: "Q-Link Reloaded",
+                             message: "Choose a Q-Link disk before copying a profile from disk.")
+                return
+            }
+
+            let data = try Data(contentsOf: url)
+            guard let registration = try QLinkReloadedDiskPatcher.registrationProfile(from: data) else {
+                configuredDiskRegistrationProfile = nil
+                presentNotice(title: "Q-Link Reloaded",
+                              message: "The configured Q-Link disk does not contain a saved profile.")
+                return
+            }
+
+            registrationStore.saveRegistration(registration)
+            Self.defaults.set(registration.accessNumber, forKey: Self.lastRegistrationAccessNumberDefaultsKey)
+            configuredDiskRegistrationProfile = registration
+            refreshRegistrationProfiles()
+            presentNotice(title: "Q-Link Reloaded",
+                          message: "Copied \(registration.displayTitle) from disk to Keychain.")
+        } catch {
+            configuredDiskRegistrationProfile = nil
+            presentError(title: "Q-Link Reloaded", message: error.localizedDescription)
+        }
+    }
+
+    func removeRegistrationFromConfiguredDisk() {
+        do {
+            guard let item = try configuredDiskItem(),
+                  let url = try diskURL(for: item) else {
+                presentError(title: "Q-Link Reloaded",
+                             message: "Choose a Q-Link disk before removing a profile from disk.")
+                return
+            }
+
+            let version = try QLinkReloadedDiskPatcher.knownVersion(for: url)
+            let patchResult = try QLinkReloadedDiskPatcher.removeRegistrationProfile(at: url,
+                                                                                     version: version)
+            Self.defaults.set(patchResult.version.displayTitle, forKey: Self.versionDefaultsKey)
+            configuredDiskVersionTitle = patchResult.version.displayTitle
+            configuredDiskRegistrationProfile = nil
+            refreshRegistrationProfiles()
+
+            let state = patchResult.changedDisk ? "removed" : "already empty"
+            presentNotice(title: "Q-Link Reloaded",
+                          message: "The profile on the managed Q-Link disk is \(state). Saved Keychain profiles were not changed.")
+        } catch {
+            presentError(title: "Q-Link Reloaded", message: error.localizedDescription)
+        }
+    }
+
+    func deleteRegistration(accessNumber: String) {
+        registrationStore.deleteRegistration(accessNumber: accessNumber)
+        if Self.defaults.string(forKey: Self.lastRegistrationAccessNumberDefaultsKey) == accessNumber {
+            Self.defaults.removeObject(forKey: Self.lastRegistrationAccessNumberDefaultsKey)
+        }
+        if Self.defaults.string(forKey: Self.legacyLastRegistrationUsernameDefaultsKey) == accessNumber {
+            Self.defaults.removeObject(forKey: Self.legacyLastRegistrationUsernameDefaultsKey)
+        }
+        refreshRegistrationProfiles()
     }
 
     private func preparedDiskURL(for machine: EmulatedMachine,
@@ -1224,6 +1349,7 @@ final class QLinkReloadedService: ObservableObject {
         Self.defaults.set(patchResult.version.displayTitle, forKey: Self.versionDefaultsKey)
         configuredDiskTitle = item.title
         configuredDiskVersionTitle = patchResult.version.displayTitle
+        refreshConfiguredDiskRegistrationProfile()
         return managedURL
     }
 
@@ -1231,17 +1357,17 @@ final class QLinkReloadedService: ObservableObject {
                                       version: QLinkReloadedDiskVersion) throws -> QLinkReloadedDiskPatchResult {
         var data = try Data(contentsOf: url)
         let diskRegistration = try saveRegistrationIfPresent(in: data)
-        let registration = preferredRegistration(for: diskRegistration)
         let changedDisk = try QLinkReloadedDiskPatcher.configureReloadedProfile(in: &data,
-                                                                                restoring: registration)
+                                                                                restoring: nil)
         if changedDisk {
             try data.write(to: url, options: .atomic)
         }
 
-        if let registration {
-            Self.defaults.set(registration.username, forKey: Self.lastRegistrationUsernameDefaultsKey)
+        if let diskRegistration {
+            Self.defaults.set(diskRegistration.accessNumber, forKey: Self.lastRegistrationAccessNumberDefaultsKey)
         }
 
+        configuredDiskRegistrationProfile = try QLinkReloadedDiskPatcher.registrationProfile(from: data)
         return QLinkReloadedDiskPatchResult(version: version,
                                             changedDisk: changedDisk)
     }
@@ -1253,26 +1379,9 @@ final class QLinkReloadedService: ObservableObject {
         }
 
         registrationStore.saveRegistration(registration)
-        Self.defaults.set(registration.username, forKey: Self.lastRegistrationUsernameDefaultsKey)
+        Self.defaults.set(registration.accessNumber, forKey: Self.lastRegistrationAccessNumberDefaultsKey)
+        refreshRegistrationProfiles()
         return registration
-    }
-
-    private func preferredRegistration(for diskRegistration: QLinkReloadedRegistrationProfile?) -> QLinkReloadedRegistrationProfile? {
-        if let diskRegistration {
-            return registrationStore.loadRegistration(username: diskRegistration.username) ?? diskRegistration
-        }
-
-        if let lastUsername = Self.defaults.string(forKey: Self.lastRegistrationUsernameDefaultsKey),
-           let lastRegistration = registrationStore.loadRegistration(username: lastUsername) {
-            return lastRegistration
-        }
-
-        let registrations = registrationStore.registrations()
-        guard registrations.count == 1 else {
-            return nil
-        }
-
-        return registrations[0]
     }
 
     private func configuredDiskItem() throws -> MediaLibraryItem? {
@@ -1280,6 +1389,7 @@ final class QLinkReloadedService: ObservableObject {
               let id = UUID(uuidString: rawID) else {
             configuredDiskTitle = nil
             configuredDiskVersionTitle = nil
+            configuredDiskRegistrationProfile = nil
             return nil
         }
 
@@ -1289,6 +1399,7 @@ final class QLinkReloadedService: ObservableObject {
             Self.defaults.removeObject(forKey: Self.versionDefaultsKey)
             configuredDiskTitle = nil
             configuredDiskVersionTitle = nil
+            configuredDiskRegistrationProfile = nil
             return nil
         }
 
@@ -1305,6 +1416,7 @@ final class QLinkReloadedService: ObservableObject {
             Self.defaults.removeObject(forKey: Self.versionDefaultsKey)
             configuredDiskTitle = nil
             configuredDiskVersionTitle = nil
+            configuredDiskRegistrationProfile = nil
             return nil
         }
 

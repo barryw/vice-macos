@@ -48,42 +48,110 @@ struct QLinkReloadedDiskVersion: Equatable {
     var displayTitle: String
 }
 
-struct QLinkReloadedRegistrationProfile: Codable, Equatable {
-    var username: String
+struct QLinkReloadedRegistrationProfile: Codable, Equatable, Identifiable {
+    var accessNumber: String
+    var handle: String?
     var decryptedProfileData: Data
 
+    var id: String {
+        key
+    }
+
     var key: String {
-        Self.key(for: username)
+        Self.key(for: accessNumber)
     }
 
     var decryptedProfile: [UInt8] {
         Array(decryptedProfileData)
     }
 
-    init(username: String, decryptedProfile: [UInt8]) {
-        self.username = username
+    var displayTitle: String {
+        if let handle, !handle.isEmpty {
+            return handle
+        }
+
+        return "Access #\(accessNumber)"
+    }
+
+    init(accessNumber: String, handle: String? = nil, decryptedProfile: [UInt8]) {
+        self.accessNumber = accessNumber
+        self.handle = handle ?? Self.screenName(in: decryptedProfile)
         self.decryptedProfileData = Data(decryptedProfile)
     }
 
-    static func key(for username: String) -> String {
-        username
+    static func key(for accessNumber: String) -> String {
+        accessNumber
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case accessNumber
+        case username
+        case handle
+        case decryptedProfileData
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let decodedAccessNumber = try container.decodeIfPresent(String.self, forKey: .accessNumber)
+            ?? container.decode(String.self, forKey: .username)
+        let decodedProfileData = try container.decode(Data.self, forKey: .decryptedProfileData)
+        let decodedProfile = Array(decodedProfileData)
+
+        accessNumber = decodedAccessNumber
+        handle = try container.decodeIfPresent(String.self, forKey: .handle)
+            ?? Self.screenName(in: decodedProfile)
+        decryptedProfileData = decodedProfileData
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(accessNumber, forKey: .accessNumber)
+        try container.encode(accessNumber, forKey: .username)
+        try container.encodeIfPresent(handle, forKey: .handle)
+        try container.encode(decryptedProfileData, forKey: .decryptedProfileData)
+    }
+
+    private static func screenName(in profile: [UInt8]) -> String? {
+        let range = 56..<66
+        guard profile.count >= range.upperBound else {
+            return nil
+        }
+
+        let characters = profile[range].compactMap(screenCodeCharacter(for:))
+        let screenName = String(characters)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return screenName.isEmpty ? nil : screenName
+    }
+
+    private static func screenCodeCharacter(for byte: UInt8) -> Character? {
+        let screenCode = byte & 0x3f
+        switch screenCode {
+        case 1...26:
+            return Character(UnicodeScalar(UInt8(64 + screenCode)))
+        case 48...57:
+            return Character(UnicodeScalar(screenCode))
+        case 32:
+            return " "
+        default:
+            return nil
+        }
     }
 }
 
 protocol QLinkReloadedRegistrationStoring: AnyObject {
-    func loadRegistration(username: String) -> QLinkReloadedRegistrationProfile?
+    func loadRegistration(accessNumber: String) -> QLinkReloadedRegistrationProfile?
     func saveRegistration(_ registration: QLinkReloadedRegistrationProfile)
     func registrations() -> [QLinkReloadedRegistrationProfile]
-    func deleteRegistration(username: String)
+    func deleteRegistration(accessNumber: String)
 }
 
 final class QLinkReloadedRegistrationMemoryStore: QLinkReloadedRegistrationStoring {
     private var registrationsByKey: [String: QLinkReloadedRegistrationProfile] = [:]
 
-    func loadRegistration(username: String) -> QLinkReloadedRegistrationProfile? {
-        registrationsByKey[QLinkReloadedRegistrationProfile.key(for: username)]
+    func loadRegistration(accessNumber: String) -> QLinkReloadedRegistrationProfile? {
+        registrationsByKey[QLinkReloadedRegistrationProfile.key(for: accessNumber)]
     }
 
     func saveRegistration(_ registration: QLinkReloadedRegistrationProfile) {
@@ -95,11 +163,11 @@ final class QLinkReloadedRegistrationMemoryStore: QLinkReloadedRegistrationStori
     }
 
     func registrations() -> [QLinkReloadedRegistrationProfile] {
-        registrationsByKey.values.sorted { $0.username.localizedStandardCompare($1.username) == .orderedAscending }
+        registrationsByKey.values.sorted { $0.displayTitle.localizedStandardCompare($1.displayTitle) == .orderedAscending }
     }
 
-    func deleteRegistration(username: String) {
-        registrationsByKey[QLinkReloadedRegistrationProfile.key(for: username)] = nil
+    func deleteRegistration(accessNumber: String) {
+        registrationsByKey[QLinkReloadedRegistrationProfile.key(for: accessNumber)] = nil
     }
 }
 
@@ -108,8 +176,8 @@ final class QLinkReloadedRegistrationKeychain: QLinkReloadedRegistrationStoring 
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
-    func loadRegistration(username: String) -> QLinkReloadedRegistrationProfile? {
-        var query = baseQuery(username: username)
+    func loadRegistration(accessNumber: String) -> QLinkReloadedRegistrationProfile? {
+        var query = baseQuery(accessNumber: accessNumber)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
 
@@ -130,10 +198,10 @@ final class QLinkReloadedRegistrationKeychain: QLinkReloadedRegistrationStoring 
         }
 
         let attributes = [kSecValueData as String: data]
-        let status = SecItemUpdate(baseQuery(username: registration.username) as CFDictionary,
+        let status = SecItemUpdate(baseQuery(accessNumber: registration.accessNumber) as CFDictionary,
                                    attributes as CFDictionary)
         if status != errSecSuccess {
-            var query = baseQuery(username: registration.username)
+            var query = baseQuery(accessNumber: registration.accessNumber)
             query[kSecValueData as String] = data
             SecItemAdd(query as CFDictionary, nil)
         }
@@ -143,7 +211,7 @@ final class QLinkReloadedRegistrationKeychain: QLinkReloadedRegistrationStoring 
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: Self.service,
-            kSecReturnData as String: true,
+            kSecReturnAttributes as String: true,
             kSecMatchLimit as String: kSecMatchLimitAll
         ]
 
@@ -153,29 +221,30 @@ final class QLinkReloadedRegistrationKeychain: QLinkReloadedRegistrationStoring 
             return []
         }
 
-        let resultData: [Data]
-        if let values = result as? [Data] {
-            resultData = values
-        } else if let value = result as? Data {
-            resultData = [value]
+        let resultItems: [[String: Any]]
+        if let values = result as? [[String: Any]] {
+            resultItems = values
+        } else if let value = result as? [String: Any] {
+            resultItems = [value]
         } else {
-            resultData = []
+            resultItems = []
         }
 
-        return resultData
-            .compactMap { try? decoder.decode(QLinkReloadedRegistrationProfile.self, from: $0) }
-            .sorted { $0.username.localizedStandardCompare($1.username) == .orderedAscending }
+        return resultItems
+            .compactMap { $0[kSecAttrAccount as String] as? String }
+            .compactMap(loadRegistration(accessNumber:))
+            .sorted { $0.displayTitle.localizedStandardCompare($1.displayTitle) == .orderedAscending }
     }
 
-    func deleteRegistration(username: String) {
-        SecItemDelete(baseQuery(username: username) as CFDictionary)
+    func deleteRegistration(accessNumber: String) {
+        SecItemDelete(baseQuery(accessNumber: accessNumber) as CFDictionary)
     }
 
-    private func baseQuery(username: String) -> [String: Any] {
+    private func baseQuery(accessNumber: String) -> [String: Any] {
         [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: Self.service,
-            kSecAttrAccount as String: QLinkReloadedRegistrationProfile.key(for: username)
+            kSecAttrAccount as String: QLinkReloadedRegistrationProfile.key(for: accessNumber)
         ]
     }
 }
@@ -193,7 +262,7 @@ enum QLinkReloadedDiskPatcher {
     private static let automaticDialProfileValue: UInt8 = 1
     private static let qLinkReloadedPhoneDigits: [UInt8] = [5, 5, 5, 1, 2, 1, 2]
     private static let encodedPhoneTerminator: UInt8 = 0x80
-    private static let usernameProfileRange = 9..<30
+    private static let accessNumberProfileRange = 9..<30
     private static let registrationProfileRanges = [
         9..<30,
         50..<96
@@ -244,9 +313,40 @@ enum QLinkReloadedDiskPatcher {
                                             changedDisk: changedDisk)
     }
 
+    static func removeRegistrationProfile(at url: URL,
+                                          version: QLinkReloadedDiskVersion) throws -> QLinkReloadedDiskPatchResult {
+        var data = try Data(contentsOf: url)
+        let changedDisk = try removeRegistrationProfile(in: &data)
+        if changedDisk {
+            try data.write(to: url, options: .atomic)
+        }
+
+        return QLinkReloadedDiskPatchResult(version: version,
+                                            changedDisk: changedDisk)
+    }
+
     @discardableResult
     static func configureReloadedProfile(in data: inout Data,
                                          restoring registration: QLinkReloadedRegistrationProfile? = nil) throws -> Bool {
+        try updateDecryptedProfile(in: &data) { profile in
+            if let registration {
+                restoreRegistrationFields(from: registration.decryptedProfile, into: &profile)
+            }
+
+            configureReloadedConnectionFields(in: &profile)
+        }
+    }
+
+    @discardableResult
+    static func removeRegistrationProfile(in data: inout Data) throws -> Bool {
+        try updateDecryptedProfile(in: &data) { profile in
+            configureReloadedConnectionFields(in: &profile)
+            clearRegistrationFields(in: &profile)
+        }
+    }
+
+    private static func updateDecryptedProfile(in data: inout Data,
+                                               update: (inout [UInt8]) -> Void) throws -> Bool {
         guard data.count == d64ByteCount else {
             throw QLinkReloadedServiceError.unsupportedDiskLayout
         }
@@ -256,20 +356,7 @@ enum QLinkReloadedDiskPatcher {
         xorProfileSector(&profile)
         let originalProfile = profile
 
-        if let registration {
-            restoreRegistrationFields(from: registration.decryptedProfile, into: &profile)
-        }
-
-        profile[0] = hayesCommandModemType
-        profile[1] = baud1200ProfileValue
-        profile[2] = telenetNetworkProfileValue
-        profile[3] = toneDialProfileValue
-        profile[5] = automaticDialProfileValue
-        for index in 0..<20 {
-            profile[30 + index] = index < qLinkReloadedPhoneDigits.count
-                ? qLinkReloadedPhoneDigits[index]
-                : encodedPhoneTerminator
-        }
+        update(&profile)
 
         guard profile != originalProfile else {
             return false
@@ -293,11 +380,11 @@ enum QLinkReloadedDiskPatcher {
 
     static func registrationProfile(from data: Data) throws -> QLinkReloadedRegistrationProfile? {
         let profile = try decryptedProfileSector(from: data)
-        guard let username = registrationUsername(in: profile) else {
+        guard let accessNumber = registrationAccessNumber(in: profile) else {
             return nil
         }
 
-        return QLinkReloadedRegistrationProfile(username: username,
+        return QLinkReloadedRegistrationProfile(accessNumber: accessNumber,
                                                 decryptedProfile: profile)
     }
 
@@ -308,13 +395,13 @@ enum QLinkReloadedDiskPatcher {
         return sha256Hex(for: fingerprintData)
     }
 
-    private static func registrationUsername(in profile: [UInt8]) -> String? {
-        guard profile.count >= usernameProfileRange.upperBound else {
+    private static func registrationAccessNumber(in profile: [UInt8]) -> String? {
+        guard profile.count >= accessNumberProfileRange.upperBound else {
             return nil
         }
 
         var bytes: [UInt8] = []
-        for byte in profile[usernameProfileRange] {
+        for byte in profile[accessNumberProfileRange] {
             if byte == 0 || byte == encodedPhoneTerminator {
                 break
             }
@@ -324,15 +411,15 @@ enum QLinkReloadedDiskPatcher {
             }
         }
 
-        guard let rawUsername = String(bytes: bytes, encoding: .ascii) else {
+        guard let rawAccessNumber = String(bytes: bytes, encoding: .ascii) else {
             return nil
         }
 
-        let username = rawUsername.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard username.count > 1 else {
+        let accessNumber = rawAccessNumber.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard accessNumber.count > 1 else {
             return nil
         }
-        return username
+        return accessNumber
     }
 
     private static func restoreRegistrationFields(from storedProfile: [UInt8],
@@ -350,6 +437,39 @@ enum QLinkReloadedDiskPatcher {
             }
 
             profile.replaceSubrange(range, with: storedProfile[range])
+        }
+    }
+
+    private static func configureReloadedConnectionFields(in profile: inout [UInt8]) {
+        profile[0] = hayesCommandModemType
+        profile[1] = baud1200ProfileValue
+        profile[2] = telenetNetworkProfileValue
+        profile[3] = toneDialProfileValue
+        profile[5] = automaticDialProfileValue
+        for index in 0..<20 {
+            profile[30 + index] = index < qLinkReloadedPhoneDigits.count
+                ? qLinkReloadedPhoneDigits[index]
+                : encodedPhoneTerminator
+        }
+    }
+
+    private static func clearRegistrationFields(in profile: inout [UInt8]) {
+        for range in registrationProfileRanges {
+            guard profile.indices.contains(range.lowerBound),
+                  profile.indices.contains(range.upperBound - 1) else {
+                continue
+            }
+
+            profile.replaceSubrange(range, with: repeatElement(UInt8(0), count: range.count))
+        }
+
+        guard profile.indices.contains(accessNumberProfileRange.upperBound - 1) else {
+            return
+        }
+
+        profile[accessNumberProfileRange.lowerBound] = 0x31
+        for index in (accessNumberProfileRange.lowerBound + 1)..<accessNumberProfileRange.upperBound {
+            profile[index] = 0x20
         }
     }
 

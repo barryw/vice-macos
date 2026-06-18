@@ -1227,7 +1227,11 @@ private struct PrintingSettingsPane: View {
 
 private struct NetworkSettingsPane: View {
     @EnvironmentObject private var emulator: EmulatorSession
+    @EnvironmentObject private var qLinkReloaded: QLinkReloadedService
     @State private var hardRestartRequest: MachineHardRestartRequest?
+    @State private var selectedQLinkProfileID = ""
+    @State private var qLinkProfilePendingDeletion: QLinkReloadedRegistrationProfile?
+    @State private var confirmsQLinkDiskProfileRemoval = false
 
     var body: some View {
         SettingsPane {
@@ -1331,6 +1335,98 @@ private struct NetworkSettingsPane: View {
                 }
             }
 
+            if qLinkReloaded.supports(machine: emulator.machine) {
+                Section("Q-Link Reloaded") {
+                    LabeledContent("Disk") {
+                        HStack(spacing: 8) {
+                            SettingsValueText(qLinkDiskTitle,
+                                              lineLimit: 2,
+                                              truncationMode: .middle)
+                            Button {
+                                qLinkReloaded.chooseDisk(for: emulator.machine)
+                            } label: {
+                                Label("Choose Disk", systemImage: "externaldrive")
+                            }
+                            .disabled(qLinkReloaded.isConnecting)
+                        }
+                    }
+
+                    LabeledContent("Disk Profile") {
+                        if let diskProfile = qLinkReloaded.configuredDiskRegistrationProfile {
+                            VStack(alignment: .trailing, spacing: 2) {
+                                Text(diskProfile.displayTitle)
+                                SettingsValueText("Access \(diskProfile.accessNumber)")
+                            }
+                        } else {
+                            SettingsValueText("No profile on disk")
+                        }
+                    }
+
+                    if qLinkReloaded.registrationProfiles.isEmpty {
+                        LabeledContent("Saved Profile") {
+                            SettingsValueText("No saved profiles")
+                        }
+                    } else {
+                        Picker("Saved Profile", selection: qLinkProfileSelection) {
+                            ForEach(qLinkReloaded.registrationProfiles) { profile in
+                                Text(profile.displayTitle).tag(profile.id)
+                            }
+                        }
+
+                        if let selectedQLinkProfile {
+                            LabeledContent("Access") {
+                                SettingsValueText(selectedQLinkProfile.accessNumber)
+                            }
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 8) {
+                            Button {
+                                qLinkReloaded.copyRegistrationFromConfiguredDisk()
+                                syncSelectedQLinkProfile()
+                            } label: {
+                                Label("Copy from Disk", systemImage: "square.and.arrow.down")
+                            }
+                            .disabled(qLinkReloaded.configuredDiskRegistrationProfile == nil)
+
+                            Button {
+                                if let selectedQLinkProfile {
+                                    qLinkReloaded.restoreRegistration(accessNumber: selectedQLinkProfile.accessNumber)
+                                }
+                            } label: {
+                                Label("Restore to Disk", systemImage: "arrow.down.doc")
+                            }
+                            .disabled(selectedQLinkProfile == nil || !qLinkReloaded.hasConfiguredDisk)
+
+                            Button(role: .destructive) {
+                                confirmsQLinkDiskProfileRemoval = true
+                            } label: {
+                                Label("Remove from Disk", systemImage: "externaldrive.badge.minus")
+                            }
+                            .disabled(qLinkReloaded.configuredDiskRegistrationProfile == nil)
+                        }
+
+                        HStack(spacing: 8) {
+                            Button(role: .destructive) {
+                                qLinkProfilePendingDeletion = selectedQLinkProfile
+                            } label: {
+                                Label("Delete Saved", systemImage: "trash")
+                            }
+                            .disabled(selectedQLinkProfile == nil)
+
+                            Button {
+                                qLinkReloaded.refreshRegistrationProfiles()
+                                qLinkReloaded.refreshConfiguredDiskRegistrationProfile()
+                                syncSelectedQLinkProfile()
+                            } label: {
+                                Label("Refresh", systemImage: "arrow.clockwise")
+                            }
+                        }
+                    }
+                }
+            }
+
             Section("Test Line") {
                 LabeledContent("Dial") {
                     SettingsValueText(emulator.networkModem.testDialCommand)
@@ -1360,6 +1456,86 @@ private struct NetworkSettingsPane: View {
             }
         }
         .machineHardRestartConfirmation($hardRestartRequest)
+        .onAppear {
+            qLinkReloaded.refreshRegistrationProfiles()
+            qLinkReloaded.refreshConfiguredDiskRegistrationProfile()
+            syncSelectedQLinkProfile()
+        }
+        .onChange(of: qLinkReloaded.registrationProfiles) { _, _ in
+            syncSelectedQLinkProfile()
+        }
+        .confirmationDialog("Remove Q-Link profile?",
+                            isPresented: qLinkProfileRemovalConfirmationBinding,
+                            titleVisibility: .visible,
+                            presenting: qLinkProfilePendingDeletion) { profile in
+            Button("Remove \(profile.displayTitle)", role: .destructive) {
+                qLinkReloaded.deleteRegistration(accessNumber: profile.accessNumber)
+                syncSelectedQLinkProfile()
+            }
+            Button("Cancel", role: .cancel) {
+                qLinkProfilePendingDeletion = nil
+            }
+        } message: { profile in
+            Text("This removes the saved profile from Keychain. It does not change any disk image.")
+        }
+        .confirmationDialog("Remove Q-Link profile from disk?",
+                            isPresented: $confirmsQLinkDiskProfileRemoval,
+                            titleVisibility: .visible) {
+            Button("Remove from Disk", role: .destructive) {
+                qLinkReloaded.removeRegistrationFromConfiguredDisk()
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("This clears the profile from the managed Q-Link disk copy. It does not delete saved Keychain profiles.")
+        }
+    }
+
+    private var selectedQLinkProfile: QLinkReloadedRegistrationProfile? {
+        qLinkReloaded.registrationProfiles.first { $0.id == selectedQLinkProfileID }
+            ?? qLinkReloaded.registrationProfiles.first
+    }
+
+    private var qLinkProfileSelection: Binding<String> {
+        Binding {
+            if selectedQLinkProfileID.isEmpty {
+                qLinkReloaded.registrationProfiles.first?.id ?? ""
+            } else {
+                selectedQLinkProfileID
+            }
+        } set: { profileID in
+            selectedQLinkProfileID = profileID
+        }
+    }
+
+    private var qLinkProfileRemovalConfirmationBinding: Binding<Bool> {
+        Binding {
+            qLinkProfilePendingDeletion != nil
+        } set: { isPresented in
+            if !isPresented {
+                qLinkProfilePendingDeletion = nil
+            }
+        }
+    }
+
+    private var qLinkDiskTitle: String {
+        guard let configuredDiskTitle = qLinkReloaded.configuredDiskTitle else {
+            return "No disk selected"
+        }
+
+        if let configuredDiskVersionTitle = qLinkReloaded.configuredDiskVersionTitle {
+            return "\(configuredDiskTitle) (\(configuredDiskVersionTitle))"
+        }
+
+        return configuredDiskTitle
+    }
+
+    private func syncSelectedQLinkProfile() {
+        let profiles = qLinkReloaded.registrationProfiles
+        guard !profiles.contains(where: { $0.id == selectedQLinkProfileID }) else {
+            return
+        }
+
+        selectedQLinkProfileID = profiles.first?.id ?? ""
     }
 
     private var modemEnabledBinding: Binding<Bool> {
@@ -2598,4 +2774,5 @@ private struct SettingsPane<Content: View>: View {
         .environmentObject(AIAssistantSettings())
         .environmentObject(AIDocumentLibraryStore(rootURL: FileManager.default.temporaryDirectory.appendingPathComponent("ViceMacPreviewAIDocuments", isDirectory: true)))
         .environmentObject(MetadataIngestionSettings())
+        .environmentObject(QLinkReloadedService(registrationStore: QLinkReloadedRegistrationMemoryStore()))
 }

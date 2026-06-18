@@ -53,6 +53,22 @@ if [[ "$needs_autogen" == 1 ]]; then
     (cd "$VICE_SRC" && ./autogen.sh)
 fi
 
+if [[ -f "$VICE_SRC/config.status" || -f "$VICE_SRC/Makefile" ]]; then
+    cat >&2 <<EOF
+The VICE source tree has been configured in-place:
+  $VICE_SRC
+
+VICE Mac builds the emulator runtime out-of-tree in:
+  $BUILD_DIR
+
+Autoconf will not configure that out-of-tree build while the source tree still
+contains an in-place configuration. Run this once to remove the generated
+in-place build state:
+  make -C "$VICE_SRC" distclean
+EOF
+    exit 1
+fi
+
 require_build_tool() {
     local tool="$1"
     local install_hint="$2"

@@ -1837,25 +1837,46 @@ final class ModelConfigurationTests: XCTestCase {
         XCTAssertFalse(secondPatchChangedDisk)
     }
 
-    func testQLinkReloadedDiskPatcherExtractsRegistrationProfileByUsername() throws {
-        let data = makeQLinkD64ProfileFixture(username: "BARRY")
+    func testQLinkReloadedDiskPatcherExtractsRegistrationProfileByAccessNumberAndScreenName() throws {
+        let data = makeQLinkD64ProfileFixture(accessNumber: "5974",
+                                              screenName: "BarryWalkr")
 
         let registration = try XCTUnwrap(QLinkReloadedDiskPatcher.registrationProfile(from: data))
 
-        XCTAssertEqual(registration.username, "BARRY")
+        XCTAssertEqual(registration.accessNumber, "5974")
+        XCTAssertEqual(registration.handle, "BARRYWALKR")
         XCTAssertEqual(registration.decryptedProfile.count, 256)
     }
 
     func testQLinkReloadedDiskPatcherIgnoresPlaceholderRegistrationProfile() throws {
-        let data = makeQLinkD64ProfileFixture(username: "1")
+        let data = makeQLinkD64ProfileFixture(accessNumber: "1")
 
         XCTAssertNil(try QLinkReloadedDiskPatcher.registrationProfile(from: data))
     }
 
+    func testQLinkReloadedRegistrationProfileDecodesLegacyUsernamePayload() throws {
+        struct LegacyProfile: Encodable {
+            var username: String
+            var decryptedProfileData: Data
+        }
+
+        let data = makeQLinkD64ProfileFixture(accessNumber: "5974",
+                                              screenName: "BarryWalkr")
+        let registration = try XCTUnwrap(QLinkReloadedDiskPatcher.registrationProfile(from: data))
+        let legacyData = try JSONEncoder().encode(LegacyProfile(username: registration.accessNumber,
+                                                                decryptedProfileData: registration.decryptedProfileData))
+
+        let decoded = try JSONDecoder().decode(QLinkReloadedRegistrationProfile.self, from: legacyData)
+
+        XCTAssertEqual(decoded.accessNumber, "5974")
+        XCTAssertEqual(decoded.handle, "BARRYWALKR")
+    }
+
     func testQLinkReloadedDiskPatcherRestoresSavedRegistrationAndForcesConnectionSettings() throws {
-        let savedData = makeQLinkD64ProfileFixture(username: "BARRY")
+        let savedData = makeQLinkD64ProfileFixture(accessNumber: "5974",
+                                                   screenName: "BarryWalkr")
         let savedRegistration = try XCTUnwrap(QLinkReloadedDiskPatcher.registrationProfile(from: savedData))
-        var blankData = makeQLinkD64ProfileFixture(username: "1")
+        var blankData = makeQLinkD64ProfileFixture(accessNumber: "1")
 
         let changed = try QLinkReloadedDiskPatcher.configureReloadedProfile(in: &blankData,
                                                                             restoring: savedRegistration)
@@ -1867,13 +1888,35 @@ final class ModelConfigurationTests: XCTestCase {
                        [5, 5, 5, 1, 2, 1, 2] + Array(repeating: 0x80, count: 13))
         XCTAssertEqual(Array(patchedProfile[9..<30]), Array(savedRegistration.decryptedProfile[9..<30]))
         XCTAssertEqual(Array(patchedProfile[50..<96]), Array(savedRegistration.decryptedProfile[50..<96]))
-        XCTAssertEqual(try QLinkReloadedDiskPatcher.registrationProfile(from: blankData)?.username, "BARRY")
+        let restoredRegistration = try XCTUnwrap(QLinkReloadedDiskPatcher.registrationProfile(from: blankData))
+        XCTAssertEqual(restoredRegistration.accessNumber, "5974")
+        XCTAssertEqual(restoredRegistration.handle, "BARRYWALKR")
     }
 
-    func testQLinkReloadedRegistrationStoreKeepsOneProfilePerUsername() throws {
+    func testQLinkReloadedDiskPatcherRemovesRegistrationProfileAndForcesConnectionSettings() throws {
+        var data = makeQLinkD64ProfileFixture(accessNumber: "5974",
+                                              screenName: "BarryWalkr")
+        XCTAssertNotNil(try QLinkReloadedDiskPatcher.registrationProfile(from: data))
+
+        let changed = try QLinkReloadedDiskPatcher.removeRegistrationProfile(in: &data)
+        let patchedProfile = try QLinkReloadedDiskPatcher.decryptedProfileSector(from: data)
+
+        XCTAssertTrue(changed)
+        XCTAssertNil(try QLinkReloadedDiskPatcher.registrationProfile(from: data))
+        XCTAssertEqual(Array(patchedProfile[0..<6]), [5, 1, 2, 0, 0x44, 1])
+        XCTAssertEqual(Array(patchedProfile[30..<50]),
+                       [5, 5, 5, 1, 2, 1, 2] + Array(repeating: 0x80, count: 13))
+        XCTAssertEqual(Array(patchedProfile[9..<30]), [0x31] + Array(repeating: 0x20, count: 20))
+        XCTAssertEqual(Array(patchedProfile[50..<96]), Array(repeating: 0, count: 46))
+
+        let secondPatchChangedDisk = try QLinkReloadedDiskPatcher.removeRegistrationProfile(in: &data)
+        XCTAssertFalse(secondPatchChangedDisk)
+    }
+
+    func testQLinkReloadedRegistrationStoreKeepsOneProfilePerAccessNumber() throws {
         let store = QLinkReloadedRegistrationMemoryStore()
-        let firstData = makeQLinkD64ProfileFixture(username: "BARRY")
-        var secondData = makeQLinkD64ProfileFixture(username: "barry")
+        let firstData = makeQLinkD64ProfileFixture(accessNumber: "5974")
+        var secondData = makeQLinkD64ProfileFixture(accessNumber: "5974")
         var secondProfile = try QLinkReloadedDiskPatcher.decryptedProfileSector(from: secondData)
         secondProfile[50] = 0x7f
         secondData.replaceSubrange(qLinkProfileSectorRange(), with: encryptedQLinkProfile(secondProfile))
@@ -1882,7 +1925,7 @@ final class ModelConfigurationTests: XCTestCase {
         store.saveRegistration(try XCTUnwrap(QLinkReloadedDiskPatcher.registrationProfile(from: secondData)))
 
         XCTAssertEqual(store.registrations().count, 1)
-        XCTAssertEqual(store.loadRegistration(username: "BARRY")?.decryptedProfile[50], 0x7f)
+        XCTAssertEqual(store.loadRegistration(accessNumber: "5974")?.decryptedProfile[50], 0x7f)
     }
 
     func testQLinkReloadedDiskPatcherWritesOnlyRequestedManagedCopy() throws {
@@ -2654,7 +2697,8 @@ final class ModelConfigurationTests: XCTestCase {
         return defaults
     }
 
-    private func makeQLinkD64ProfileFixture(username: String = "BARRY") -> Data {
+    private func makeQLinkD64ProfileFixture(accessNumber: String = "5974",
+                                            screenName: String = "BarryWalkr") -> Data {
         var data = Data(repeating: 0, count: QLinkReloadedDiskPatcher.d64ByteCount)
         var profile = [UInt8](repeating: 0, count: 256)
         profile[0] = 0
@@ -2663,12 +2707,12 @@ final class ModelConfigurationTests: XCTestCase {
         profile[3] = 1
         profile[4] = 0x44
         profile[5] = 0
-        let usernameBytes = Array(username.prefix(21).utf8)
+        let accessNumberBytes = Array(accessNumber.prefix(21).utf8)
         for index in 9..<30 {
             profile[index] = 0
         }
-        profile.replaceSubrange(9..<(9 + usernameBytes.count), with: usernameBytes)
-        for index in (9 + usernameBytes.count)..<30 {
+        profile.replaceSubrange(9..<(9 + accessNumberBytes.count), with: accessNumberBytes)
+        for index in (9 + accessNumberBytes.count)..<30 {
             profile[index] = 0x20
         }
         profile[30] = 9
@@ -2676,11 +2720,36 @@ final class ModelConfigurationTests: XCTestCase {
         profile[32] = 9
         profile[33] = 0x80
         for index in 50..<96 {
-            profile[index] = UInt8(index)
+            profile[index] = 0
+        }
+        let screenNameBytes = qLinkScreenNameBytes(screenName)
+        profile.replaceSubrange(56..<(56 + screenNameBytes.count), with: screenNameBytes)
+        for index in (56 + screenNameBytes.count)..<66 {
+            profile[index] = 0x20
         }
 
         data.replaceSubrange(qLinkProfileSectorRange(), with: encryptedQLinkProfile(profile))
         return data
+    }
+
+    private func qLinkScreenNameBytes(_ screenName: String) -> [UInt8] {
+        screenName
+            .uppercased()
+            .prefix(10)
+            .compactMap { character -> UInt8? in
+                guard let ascii = character.asciiValue else {
+                    return nil
+                }
+
+                switch ascii {
+                case 65...90:
+                    return ascii - 64
+                case 48...57, 32:
+                    return ascii
+                default:
+                    return nil
+                }
+            }
     }
 
     private func qLinkProfileSectorRange() -> Range<Data.Index> {
