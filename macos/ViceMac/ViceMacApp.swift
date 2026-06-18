@@ -351,6 +351,9 @@ struct ViceMacApp: App {
             CommandMenu("Online") {
                 Button("Connect to Q-Link Reloaded") {
                     qLinkReloaded.connect(emulator: emulator)
+                    if UserDefaults.standard.bool(forKey: "vice.qlink.captureProtocol") {
+                        openWindow(id: QLinkCaptureWindow.id)
+                    }
                 }
                 .keyboardShortcut("q", modifiers: [.command, .shift])
                 .disabled(!qLinkReloaded.canConnect(machine: emulator.machine))
@@ -437,6 +440,11 @@ struct ViceMacApp: App {
         }
         .defaultSize(width: MediaLibraryWindow.size.width,
                      height: MediaLibraryWindow.size.height)
+
+        Window("Q-Link Packet Capture", id: QLinkCaptureWindow.id) {
+            QLinkCaptureWindowContent()
+        }
+        .defaultSize(width: 640, height: 480)
 
         Window("Debugger", id: DebuggerWindow.id) {
             DebuggerView()
@@ -1095,6 +1103,23 @@ final class QLinkReloadedService: ObservableObject {
         }
     }
 
+    /// Enable or disable Q-Link protocol capture for this session based on the
+    /// "Capture protocol" toggle. Sets the VICE "QLinkCaptureFile" resource
+    /// (path = capture to that file, "" = off) and records the active path in
+    /// UserDefaults so the capture viewer window can find it.
+    private func configureProtocolCapture(emulator: EmulatorSession) {
+        if Self.defaults.bool(forKey: "vice.qlink.captureProtocol") {
+            let name = "qlink-capture-\(Int(Date().timeIntervalSince1970)).cap"
+            let path = FileManager.default.temporaryDirectory
+                .appendingPathComponent(name).path
+            _ = emulator.engine.setStringResource("QLinkCaptureFile", value: path)
+            Self.defaults.set(path, forKey: "vice.qlink.activeCapturePath")
+        } else {
+            _ = emulator.engine.setStringResource("QLinkCaptureFile", value: "")
+            Self.defaults.removeObject(forKey: "vice.qlink.activeCapturePath")
+        }
+    }
+
     private func connectAndConfigure(emulator: EmulatorSession,
                                      allowSettingsOverride: Bool = false) async {
         do {
@@ -1168,6 +1193,8 @@ final class QLinkReloadedService: ObservableObject {
                              message: "VICE Mac configured the modem, but the selected Q-Link disk could not be started.")
                 return
             }
+
+            configureProtocolCapture(emulator: emulator)
 
             emulator.statusText = "Q-Link Reloaded connecting through q-link.net:5190"
             if !noticeMessages.isEmpty {

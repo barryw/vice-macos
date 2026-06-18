@@ -203,3 +203,26 @@ private struct QLinkEntryRow: View {
         }
     }
 }
+
+// MARK: - Window
+
+enum QLinkCaptureWindow {
+    static let id = "vice.qlink.captureWindow"
+}
+
+/// Window content: resolves the active capture path (set by QLinkReloadedService
+/// when connecting with capture enabled) and shows the live viewer.
+struct QLinkCaptureWindowContent: View {
+    @AppStorage("vice.qlink.activeCapturePath") private var activeCapturePath = ""
+
+    var body: some View {
+        if activeCapturePath.isEmpty {
+            ContentUnavailableView("No capture running",
+                                   systemImage: "antenna.radiowaves.left.and.right",
+                                   description: Text("Enable “Capture protocol” in Q-Link settings, then connect to Q-Link Reloaded."))
+                .frame(minWidth: 480, minHeight: 320)
+        } else {
+            QLinkCaptureViewer(capturePath: activeCapturePath)
+        }
+    }
+}
