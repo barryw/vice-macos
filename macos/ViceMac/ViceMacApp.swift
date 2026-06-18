@@ -1156,7 +1156,11 @@ final class QLinkReloadedService: ObservableObject {
                 emulator.reset(kind: .hard)
             }
 
-            guard emulator.openMedia(url: diskURL, behavior: .run) else {
+            guard emulator.attachDisk(to: 8,
+                                      driveNumber: 0,
+                                      url: diskURL,
+                                      behavior: .run,
+                                      programName: qLinkBootProgram(for: emulator.machine)) else {
                 presentError(title: "Q-Link Reloaded",
                              message: "VICE Mac configured the modem, but the selected Q-Link disk could not be started.")
                 return
@@ -1320,6 +1324,10 @@ final class QLinkReloadedService: ObservableObject {
         }
 
         return nil
+    }
+
+    private func qLinkBootProgram(for machine: EmulatedMachine) -> String {
+        machine.family == .c128 ? "boot128" : "boot64"
     }
 
     private func refreshManagedDiskPatch(at url: URL) throws {

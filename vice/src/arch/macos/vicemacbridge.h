@@ -233,6 +233,7 @@ int vicemac_queue_drive_reset(uint32_t unit);
 int vicemac_queue_drive_attach_disk(uint32_t unit,
                                     uint32_t drive,
                                     const char *path,
+                                    const char *program_name,
                                     int run_mode);
 int vicemac_queue_drive_detach_disk(uint32_t unit, uint32_t drive);
 int vicemac_queue_drive_sound_preview(uint32_t unit);
