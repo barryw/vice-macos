@@ -38,7 +38,13 @@ struct EmulatorView: View {
                 }
                 didStart = true
 
-                try? session.start()
+                do {
+                    try session.start()
+                } catch {
+                    assertionFailure(error.localizedDescription)
+                    return
+                }
+
                 session.typeText("10 PRINT \"HELLO FROM MACVICEKIT\"\n20 GOTO 10\nRUN\n")
             }
     }

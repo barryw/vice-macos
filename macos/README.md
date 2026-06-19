@@ -104,7 +104,9 @@ Release named `vice-mac-<VICE version>-<git sha>-1`. Tags matching
 `vice-mac-*` also package and publish a release for that tag. The pipeline
 requires the `github_token` and `sparkle_private_key` secrets. The release
 publisher signs the DMG with Sparkle's EdDSA key and uploads `appcast.xml`
-alongside the DMG and checksums.
+alongside the DMG and checksums. The website workflow waits for GitHub's
+`latest` release endpoint to report the new release before deploying the public
+site for release-producing `macos/native-metal` pushes.
 
 Notarized release builds also require `apple_codesign_identity` and
 `apple_development_team`. CI expects the runner login keychain to contain that

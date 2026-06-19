@@ -13,6 +13,7 @@ CONFIGURATION="${VICE_MAC_CI_CONFIGURATION:-Debug}"
 DESTINATION="${VICE_MAC_CI_DESTINATION:-platform=macOS,arch=arm64}"
 
 swift test --package-path "$MACOS_DIR/../MacVICEKit"
+bash "$MACOS_DIR/../MacVICEKit/tools/validate-documentation-examples.sh"
 bash -n "$SCRIPT_DIR/package-macvicekit-runtime.sh"
 bash -n "$MACOS_DIR/../website/tools/build-macvicekit-docs.sh"
 bash -n "$MACOS_DIR/../website/tools/validate-containerfile-pages.sh"

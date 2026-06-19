@@ -232,6 +232,8 @@ On a green push, CI:
 5. Signs, notarizes, staples, and smoke-tests the DMG.
 6. Publishes a GitHub Release named `vice-mac-<VICE version>-<git sha>-1`.
 7. Uploads the DMG, MacVICEKit SDK zip, `SHA256SUMS.txt`, and `appcast.xml`.
+8. Deploys the website after GitHub's `latest` release endpoint points at that
+   release.
 
 Required Woodpecker secrets:
 

@@ -73,4 +73,11 @@ done < <(find "$OUTPUT_DIR" -type f \( \
     -name '*.svg' \
 \) -print0)
 
+while IFS= read -r -d '' json_file; do
+    perl -MJSON::PP -0pi -e '
+        my $json = JSON::PP->new->utf8->decode($_);
+        $_ = JSON::PP->new->canonical->utf8->encode($json);
+    ' "$json_file"
+done < <(find "$OUTPUT_DIR" -type f -name '*.json' -print0)
+
 echo "Generated $OUTPUT_DIR"

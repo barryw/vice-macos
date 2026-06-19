@@ -172,13 +172,25 @@ struct EmulatorView: View {
             runtimeLocation: .automatic
         )
     )
+    @State private var didStart = false
 
     var body: some View {
         MacVICEDisplayView(session: session)
             .frame(minWidth: 768, minHeight: 544)
             .task {
-                try? session.start()
-                session.typeText("10 PRINT \"HELLO\"\n20 GOTO 10\nRUN\n")
+                guard !didStart else {
+                    return
+                }
+                didStart = true
+
+                do {
+                    try session.start()
+                } catch {
+                    assertionFailure(error.localizedDescription)
+                    return
+                }
+
+                session.typeText("10 PRINT \"HELLO FROM MACVICEKIT\"\n20 GOTO 10\nRUN\n")
             }
     }
 }</code></pre>

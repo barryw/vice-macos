@@ -1,5 +1,13 @@
 when:
   - event: push
+    evaluate: 'CI_COMMIT_BRANCH == "macos/native-metal"'
+    path:
+      exclude:
+        - website/**
+        - k8s/**
+        - .woodpecker/metal-ui.yaml
+        - .woodpecker/website.yaml
+  - event: push
     evaluate: 'CI_COMMIT_BRANCH == "macos/native-metal" || CI_COMMIT_BRANCH == "main"'
     path:
       include:
@@ -16,10 +24,31 @@ steps:
   - name: validate-static
     image: node:22-bookworm
     commands:
+      - bash -n MacVICEKit/tools/validate-documentation-examples.sh
       - bash -n website/tools/validate-containerfile-pages.sh
       - bash -n website/tools/capture-marketing-screenshots.sh
+      - bash MacVICEKit/tools/validate-documentation-examples.sh
       - bash website/tools/validate-containerfile-pages.sh
       - node --check website/site.js
+
+  - name: wait-for-release
+    image: node:22-bookworm
+    environment:
+      GH_TOKEN:
+        from_secret: github_token
+      VICE_MAC_WEBSITE_WAIT_FOR_RELEASE: "1"
+    commands:
+      - bash -n website/tools/wait-for-current-release.sh
+      - bash website/tools/wait-for-current-release.sh
+    when:
+      - event: push
+        evaluate: 'CI_COMMIT_BRANCH == "macos/native-metal"'
+        path:
+          exclude:
+            - website/**
+            - k8s/**
+            - .woodpecker/metal-ui.yaml
+            - .woodpecker/website.yaml
 
   - name: validate-k8s
     image: bitnami/kubectl:latest
@@ -34,6 +63,7 @@ steps:
     depends_on:
       - validate-static
       - validate-k8s
+      - wait-for-release
     environment:
       GHCR_TOKEN:
         from_secret: github_token
