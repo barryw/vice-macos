@@ -1,6 +1,6 @@
 when:
   - event: push
-    evaluate: 'CI_COMMIT_BRANCH == "macos/native-metal"'
+    evaluate: 'CI_COMMIT_BRANCH == "main"'
     path:
       exclude:
         - website/**
@@ -8,7 +8,7 @@ when:
         - .woodpecker/metal-ui.yaml
         - .woodpecker/website.yaml
   - event: manual
-    evaluate: 'CI_COMMIT_BRANCH == "macos/native-metal"'
+    evaluate: 'CI_COMMIT_BRANCH == "main"'
 
 labels:
   backend: local

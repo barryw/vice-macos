@@ -21,7 +21,7 @@ available. The MacVICEKit page uses the same release data to find the current
 
 The website deploy waits for GitHub's `latest` release endpoint to point at the
 current release commit before it pushes the public image for release-producing
-`macos/native-metal` builds. That keeps the download buttons from briefly
+`main` builds. That keeps the download buttons from briefly
 showing the previous release while the app artifacts are still publishing. If we
 later want a fully pinned, no-JavaScript release page, the same pipeline can
 rewrite a small `release.json` or inject the latest asset URLs before upload.

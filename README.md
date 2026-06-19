@@ -1,23 +1,75 @@
-# VICE Mac
+<p align="center">
+  <img src="website/assets/mac-vice-icon.png" width="132" alt="VICE Mac app icon">
+</p>
 
-Native Apple Silicon apps for VICE, built with SwiftUI and Metal.
+<h1 align="center">VICE Mac</h1>
 
-This branch is the macOS-native front end for VICE. It keeps the real VICE
-emulation core, but replaces the desktop experience with Mac apps that feel at
-home on modern macOS: native windows, native menus, Metal video output,
-first-class media handling, signed DMG releases, notarization, and Sparkle
-updates through GitHub Releases.
+<p align="center">
+  <strong>VICE underneath. Native Mac on top.</strong><br>
+  Apple Silicon Commodore emulation with SwiftUI, Metal, signed releases, a real media library, Q-Link Reloaded support, and MacVICEKit for developers.
+</p>
+
+<p align="center">
+  <a href="https://github.com/barryw/vice-macos/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/barryw/vice-macos?label=release&sort=semver"></a>
+  <a href="https://ci.barrywalker.io/repos/barryw/vice-macos"><img alt="Build status" src="https://ci.barrywalker.io/api/badges/barryw/vice-macos/status.svg?branch=main"></a>
+  <img alt="macOS 13+" src="https://img.shields.io/badge/macOS-13%2B-111111?logo=apple&logoColor=white">
+  <img alt="Apple Silicon" src="https://img.shields.io/badge/Apple%20Silicon-arm64-111111?logo=apple&logoColor=white">
+  <img alt="SwiftUI" src="https://img.shields.io/badge/SwiftUI-native-ff5a1f?logo=swift&logoColor=white">
+  <img alt="Metal" src="https://img.shields.io/badge/Metal-renderer-6e56cf">
+  <img alt="Coverage" src="https://img.shields.io/badge/coverage-XCTest%20gated-276ef1">
+</p>
+
+<p align="center">
+  <a href="https://github.com/barryw/vice-macos/releases/latest">Download</a>
+  ·
+  <a href="https://macvice.com/">Website</a>
+  ·
+  <a href="https://macvice.com/macvicekit.html">MacVICEKit</a>
+  ·
+  <a href="https://macvice.com/docs/macvicekit/documentation/macvicekit/">API Docs</a>
+  ·
+  <a href="https://github.com/barryw/vice-macos/releases/latest/download/appcast.xml">Sparkle Appcast</a>
+</p>
+
+<p align="center">
+  <img src="website/assets/screenshots/qlink-reloaded.png" width="920" alt="VICE Mac running Q-Link Reloaded">
+</p>
+
+## What It Is
+
+VICE Mac is the Mac-native front end VICE deserved.
+
+It keeps the real VICE emulation core and replaces the desktop experience with
+native macOS apps: SwiftUI windows, AppKit integration where it matters, Metal
+video output, native menus and toolbars, signed/notarized DMG releases, Sparkle
+updates, a media library, a disk image manager, Q-Link Reloaded setup, and a
+reusable Swift package for building other tools on top of VICE.
+
+No X11. No GTK shell. No generic Linux UI pretending to be a Mac app.
 
 ## Download
 
-Get the latest notarized DMG from:
+Grab the latest notarized Apple Silicon DMG:
 
-https://github.com/barryw/vice-macos/releases/latest
+**https://github.com/barryw/vice-macos/releases/latest**
 
-The release package contains separate apps for each supported machine. Drag the
-apps you want into `/Applications`.
+The release contains separate apps for each supported machine. Drag the apps
+you want into `/Applications`.
 
-## What Is Included
+## At A Glance
+
+| Area | What You Get |
+|---|---|
+| Display | Native Metal renderer with LCD, CRT, PVM, RF, scanline, mask, curvature, halation, persistence, saturation, and warmth controls |
+| Media | Stable media library for disks, programs, tapes, cartridges, snapshots, favorites, search, directory inspection, and quick launch |
+| Disk tools | Native D64/D67/D71/D80/D81/D82 image manager with file import/export, BAM/sector inspection, GEOS helpers, and explicit save control |
+| Controllers | Per-device keyboard, joystick, game controller, and 1351 mouse mapping with USB controller identification |
+| Networking | User Port, SwiftLink, and Turbo232 modem support where VICE supports it, plus Q-Link Reloaded helper flows |
+| Developer SDK | MacVICEKit Swift package with engine sessions, Metal display, audio/video sources, input routing, media helpers, snapshots, and debugger APIs |
+| Updates | Sparkle appcast backed by GitHub Releases |
+| Release quality | CI-built, signed, notarized, stapled, smoke-tested DMGs with checksums |
+
+## Included Apps
 
 | App | Machine |
 |---|---|
@@ -31,18 +83,6 @@ apps you want into `/Applications`.
 | `x128.app` | C128 |
 | `vsid.app` | SID player |
 
-## Why This Exists
-
-VICE is the emulator that serious Commodore users already trust. VICE Mac is
-the Mac-native shell around that engine:
-
-- No X11 or GTK runtime required for the Mac UI.
-- One app per machine, with the traditional VICE executable names.
-- Metal-rendered video with low-latency frame delivery from the emulator core.
-- Native menus and toolbars for day-to-day emulator work.
-- Apple Developer ID signing, notarization, stapled DMGs, and Sparkle updates.
-- CI-built release artifacts with checksums and appcast metadata.
-
 ## Highlights
 
 ### Native Metal Display
@@ -50,95 +90,83 @@ the Mac-native shell around that engine:
 The emulator frame buffer is rendered through Metal with display presets for a
 clean LCD view, Commodore 1702/1084-style CRTs, PVM, RF, and green, amber, or
 white phosphor displays. Scanlines, mask intensity, curvature, halation,
-persistence, saturation, and warmth are all adjustable.
+persistence, saturation, and warmth are adjustable per machine.
 
-### Machine-Aware Controls
+<p align="center">
+  <img src="website/assets/screenshots/x64sc-display-settings.png" width="720" alt="VICE Mac display settings">
+</p>
 
-Each app boots with the right machine model, ROM slots, drive defaults, video
-standard choices, SID options where supported, and machine-specific settings.
-The UI exposes C64/C128/VIC-20/PET/Plus-4-family differences instead of forcing
-everything through a generic emulator control panel.
+### Media Library
 
-### Media That Behaves Like Mac Media
-
-Open and run PRG, T64, and TAP media. Attach disk images to the first compatible
-drive, attach CRT cartridges on cartridge-capable machines, and load or save VSF
-snapshots from standard macOS panels. Recent documents and drag/open behavior
-work through normal AppKit paths.
+Import disks, programs, tapes, cartridges, and snapshots into a stable library
+location. Search them, favorite them, inspect disk directories, and run, load,
+or attach without hunting through folders every time.
 
 ### Disk Image Manager
 
-VICE Mac includes a native disk image manager for Commodore block images:
+Open D64, D67, D71, D80, D81, and D82 images. Create blank images, inspect
+directories and sectors, import PRGs, export files, rename entries, delete
+entries, clone optimized rebuilt images, and make explicit saves when you are
+ready to write changes.
 
-- Open D64, D67, D71, D80, D81, and D82 images.
-- Create blank disk images with a disk name and ID.
-- Inspect directories, sectors, BAM allocation, and image geometry.
-- Import PRG files, export files, rename files, and delete files.
-- Clone optimized rebuilt images when the original image layout allows it.
-- Package linked GEOS PRGs as GRC/CVT files and install them directly onto GEOS
-  system disks.
-- Patch GEOS input-driver ordering so a 1351 mouse can become the default
-  driver without hand-editing disk sectors.
-- Save modified images explicitly, so destructive edits stay under user control.
+<p align="center">
+  <img src="website/assets/screenshots/disk-manager-files.png" width="820" alt="VICE Mac disk image manager">
+</p>
+
+### Q-Link Reloaded
+
+VICE Mac can help configure a user-supplied Q-Link disk for Q-Link Reloaded,
+validate compatible modem settings, capture protocol traffic, and manage saved
+profiles through Keychain-backed storage.
+
+### Machine-Aware Settings
+
+Each app boots with the right machine model, ROM slots, drive defaults, video
+standard choices, SID options where supported, and machine-specific settings.
+The UI exposes C64, C128, VIC-20, PET, and Plus/4-family differences without
+forcing everything through a generic emulator panel.
 
 ### GEOS And Tiny Commodore Utilities
 
-This branch also carries a small `commodore-utils/` workspace for useful
-machine-side tools that make the native Mac experience smoother. The first one
-is `commodore-utils/geos-rtc`: a tiny GEOS auto-exec driver for C64 and C128
-GEOS that reads VICE's DS1307 userport RTC and sets GEOS date/time during boot.
+The repo includes `commodore-utils/geos-rtc`, a tiny GEOS auto-exec driver for
+C64 and C128 GEOS that reads VICE's DS1307 userport RTC and sets GEOS date/time
+during boot.
 
-The disk image manager can validate the linked PRG, generate matching GEOS
-metadata, export a CVT package, or install the auto-exec directly onto a GEOS
-disk. With "Sync system time with machine" enabled, GEOS boots with the Mac's
-current clock instead of the old default GEOS date.
-
-Build the utility payloads with:
+Build the utility payload with:
 
 ```sh
 make -C commodore-utils/geos-rtc
 ```
 
-### Controls, Sound, And Runtime State
-
-Pause/resume, reset, speed, sound, volume, display mode, control ports, keyboard
-joystick mapping, game controller mapping, drive reset, disk eject, true-drive
-versus fast disk access, and paste-into-emulator are all available from native
-controls.
-
 ### Optional AI Assistant
 
-The app can expose an assistant panel backed by Apple Foundation Models on Macs
-with Apple Intelligence available. It can answer questions about the current
-machine or operate the emulator through the app's internal tool surface.
+The app includes an optional assistant panel that can use local Foundation
+Models where available or an OpenAI-compatible provider. The assistant talks to
+the emulator through the app's internal tool surface, so it can inspect state
+and batch machine changes instead of pretending it changed something.
 
-### MacVICEKit
+## MacVICEKit
 
-The shared engine bridge, Metal display, audio/video sources, input forwarding,
-media attachment, snapshots, and debugger APIs now live in `MacVICEKit/`. The
-repo root keeps a tiny SwiftPM adapter manifest so Xcode users can add this repo
-URL directly while the real package stays out of the website, k8s, and app
-support files. The Mac apps dogfood that package so external tools can
-eventually embed the same VICE runtime without copying app internals.
+MacVICEKit is the reusable Swift package behind the app. It packages the VICE
+runtime bridge, Metal display, audio/video sources, input forwarding, media
+attachment, snapshots, and debugger APIs so other macOS tools can embed VICE
+without copying app internals.
 
-Release builds also publish `MacVICEKit-<version>-arm64.zip` and
-`MacVICEKit-latest-arm64.zip`, which are self-contained Swift packages. The
-package carries the Swift API, C bridge, matching signed
-`MacVICERuntime.xcframework`, bundled runtime dependencies, VICEData, and a
-manifest. See `MacVICEKit/README.md` and `docs/MacVICEKit.md` for consumer
-setup and runtime layout.
-
-## Updates
-
-Sparkle is wired to the latest GitHub Release appcast:
+Release builds publish a self-contained SDK artifact:
 
 ```text
-https://github.com/barryw/vice-macos/releases/latest/download/appcast.xml
+MacVICEKit-<version>-arm64.zip
 ```
 
-Release DMGs are signed with the Sparkle EdDSA key, signed with a Developer ID
-Application certificate, submitted to Apple notarization, stapled, smoke-tested,
-and then published with checksums.
+The package includes Swift APIs, the C bridge, a signed
+`MacVICERuntime.xcframework`, bundled runtime dependencies, `VICEData`, and a
+manifest.
+
+Read more:
+
+- [MacVICEKit product page](https://macvice.com/macvicekit.html)
+- [MacVICEKit API docs](https://macvice.com/docs/macvicekit/documentation/macvicekit/)
+- [MacVICEKit README](MacVICEKit/README.md)
 
 ## Building
 
@@ -148,7 +176,7 @@ Open the Xcode project:
 open macos/ViceMac.xcodeproj
 ```
 
-Or build a machine from the command line:
+Build a machine from the command line:
 
 ```sh
 xcodebuild \
@@ -167,7 +195,7 @@ xcodebuild test \
   -project macos/ViceMac.xcodeproj \
   -scheme "VICE Mac Tests" \
   -configuration Debug \
-  -destination 'platform=macOS' \
+  -destination 'platform=macOS,arch=arm64' \
   -derivedDataPath /private/tmp/vice-macos-tests
 ```
 
@@ -217,11 +245,11 @@ When notarization is enabled, the script signs all app bundles, re-signs
 Sparkle's nested updater helpers, signs the DMG, submits it to Apple, staples
 the ticket, validates the staple, and writes `SHA256SUMS.txt`.
 
-## CI Release Flow
+## Release Flow
 
-The Woodpecker `metal-ui` pipeline runs on pushes to `macos/native-metal` that
-touch the native Mac app, VICE bridge, packaging, or MacVICEKit sources. Release
-tags do not trigger a second release build.
+The Woodpecker `metal-ui` pipeline runs on pushes to `main` that touch the
+native Mac app, VICE bridge, packaging, or MacVICEKit sources. Release tags do
+not trigger a second release build.
 
 On a green push, CI:
 
@@ -232,7 +260,7 @@ On a green push, CI:
 5. Signs, notarizes, staples, and smoke-tests the DMG.
 6. Publishes a GitHub Release named `vice-mac-<VICE version>-<git sha>-1`.
 7. Uploads the DMG, MacVICEKit SDK zip, `SHA256SUMS.txt`, and `appcast.xml`.
-8. Deploys the website after GitHub's `latest` release endpoint points at that
+8. Deploys the website after GitHub's latest release endpoint points at that
    release.
 
 Required Woodpecker secrets:
@@ -249,6 +277,12 @@ This work builds on VICE, the canonical multi-platform Commodore emulator:
 
 https://vice-emu.sourceforge.io/
 
-The goal of this branch is not to fork the emulation core. The goal is to make
-VICE feel excellent on macOS while staying close enough to upstream that the
-engine work remains portable.
+This repository tracks VICE upstream directly. Local product work lives on
+`main`; `git pull` merges `VICE-Team/svn-mirror` `main`, and `git push` pushes
+this Mac product repo.
+
+## Credits
+
+VICE Mac exists because the VICE team did the hard emulator work first. This
+project adds the native macOS application layer, packaging, MacVICEKit, website,
+and Mac-specific workflow on top of that foundation.

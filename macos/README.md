@@ -92,21 +92,21 @@ Set `VICE_MAC_NOTARIZE=0` to sign without notarizing, or use
 
 ## Woodpecker CI
 
-The `.woodpecker/metal-ui.yaml` workflow runs on the `macos/native-metal`
-branch and expects a macOS Apple Silicon Woodpecker agent using the local
+The `.woodpecker/metal-ui.yaml` workflow runs on the `main` branch and expects
+a macOS Apple Silicon Woodpecker agent using the local
 backend, with the latest Xcode selected and `dos2unix` plus GitHub CLI `gh`
 installed.
 The prepare step downloads the Xcode Metal Toolchain component when it is not
 already installed.
 
-Push builds on `macos/native-metal` build, test, package, and publish a GitHub
-Release named `vice-mac-<VICE version>-<git sha>-1`. Tags matching
+Push builds on `main` build, test, package, and publish a GitHub Release named
+`vice-mac-<VICE version>-<git sha>-1`. Tags matching
 `vice-mac-*` also package and publish a release for that tag. The pipeline
 requires the `github_token` and `sparkle_private_key` secrets. The release
 publisher signs the DMG with Sparkle's EdDSA key and uploads `appcast.xml`
 alongside the DMG and checksums. The website workflow waits for GitHub's
 `latest` release endpoint to report the new release before deploying the public
-site for release-producing `macos/native-metal` pushes.
+site for release-producing `main` pushes.
 
 Notarized release builds also require `apple_codesign_identity` and
 `apple_development_team`. CI expects the runner login keychain to contain that
