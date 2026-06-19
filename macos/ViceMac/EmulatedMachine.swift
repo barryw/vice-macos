@@ -719,7 +719,7 @@ struct EmulatedMachine: Identifiable, Equatable {
             "-soundbufsize",
             "20",
             "-soundfragsize",
-            "0",
+            "3",
             "-soundoutput",
             "0",
             "-soundwarpmode",
