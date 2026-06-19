@@ -13,6 +13,13 @@
   const releaseNotesLink = document.getElementById("release-notes-link");
   const checksumsLink = document.getElementById("checksums-link");
   const heroReleaseNote = document.getElementById("hero-release-note");
+  const kitSdkLinks = [
+    document.getElementById("kit-sdk-download"),
+    document.getElementById("kit-sdk-download-secondary")
+  ].filter(Boolean);
+  const kitSdkVersion = document.getElementById("kit-sdk-version");
+  const kitSdkAsset = document.getElementById("kit-sdk-asset");
+  const kitSdkNote = document.getElementById("kit-sdk-note");
 
   const formatDate = (value) => {
     if (!value) {
@@ -58,6 +65,10 @@
     .then((release) => {
       const assets = Array.isArray(release.assets) ? release.assets : [];
       const dmg = assets.find((asset) => /\.dmg$/i.test(asset.name));
+      const kitSdk =
+        assets.find((asset) => /^MacVICEKit-(?!latest\b).+-arm64\.zip$/i.test(asset.name)) ||
+        assets.find((asset) => /^MacVICEKit-latest-arm64\.zip$/i.test(asset.name)) ||
+        assets.find((asset) => /^MacVICEKit-.+\.zip$/i.test(asset.name));
       const checksums = assets.find((asset) => /sha256|checksum/i.test(asset.name));
       const date = formatDate(release.published_at);
       const version = release.tag_name || release.name || "latest release";
@@ -72,6 +83,10 @@
 
       if (releaseVersion) {
         releaseVersion.textContent = version;
+      }
+
+      if (kitSdkVersion) {
+        kitSdkVersion.textContent = version;
       }
 
       if (releasePublished && date) {
@@ -97,9 +112,32 @@
       } else if (heroReleaseNote) {
         heroReleaseNote.textContent = `${version} is available on GitHub Releases.`;
       }
+
+      if (kitSdk) {
+        const size = formatBytes(kitSdk.size);
+        const label = size ? `${kitSdk.name} - ${size}` : kitSdk.name;
+
+        if (kitSdkAsset) {
+          kitSdkAsset.textContent = label;
+        }
+
+        kitSdkLinks.forEach((link) => {
+          link.href = kitSdk.browser_download_url;
+          link.textContent = "Download SDK zip";
+        });
+
+        if (kitSdkNote) {
+          kitSdkNote.textContent = `${version} includes ${kitSdk.name}.`;
+        }
+      } else if (kitSdkNote) {
+        kitSdkNote.textContent = `${version} is available on GitHub Releases.`;
+      }
     })
     .catch(() => {
       downloadLinks.forEach((link) => {
+        link.href = latestReleaseUrl;
+      });
+      kitSdkLinks.forEach((link) => {
         link.href = latestReleaseUrl;
       });
     });

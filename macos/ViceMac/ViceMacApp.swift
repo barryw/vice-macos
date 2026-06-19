@@ -2340,6 +2340,10 @@ final class QLinkCaptureViewerModel: ObservableObject {
     @Published var path: String = ""
     private var timer: Timer?
 
+    var allText: String {
+        lines.map(\.text).joined(separator: "\n")
+    }
+
     func start(path: String) {
         NSLog("QLINK viewer: start(path=\(path))")
         self.path = path
@@ -2387,6 +2391,13 @@ struct QLinkCaptureViewer: View {
                 Text("Q-Link Packet Capture").font(.headline)
                 Spacer()
                 Text("\(model.lines.count) lines").foregroundStyle(.secondary)
+                Button {
+                    copyAllCaptureText()
+                } label: {
+                    Label("Copy All", systemImage: "doc.on.doc")
+                }
+                .disabled(model.lines.isEmpty)
+                .help("Copy the full protocol capture")
                 Button("Done") { dismiss() }
             }.padding()
             Divider()
@@ -2413,6 +2424,15 @@ struct QLinkCaptureViewer: View {
         .onAppear { model.start(path: capturePath) }
         .onChange(of: capturePath) { _, newPath in model.start(path: newPath) }
         .onDisappear { model.stop() }
+    }
+
+    private func copyAllCaptureText() {
+        guard !model.lines.isEmpty else {
+            return
+        }
+
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(model.allText, forType: .string)
     }
 }
 

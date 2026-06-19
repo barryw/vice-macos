@@ -187,8 +187,17 @@ sign_sparkle_artifact() {
 }
 
 write_release_notes() {
+    write_release_notes_file "$1" "$2" markdown
+}
+
+write_appcast_release_notes() {
+    write_release_notes_file "$1" "$2" html
+}
+
+write_release_notes_file() {
     local tag="$1"
     local notes_file="$2"
+    local format="$3"
     local release_label="${tag#vice-mac-}"
     local release_ref
     local release_commit
@@ -199,6 +208,7 @@ write_release_notes() {
     local subject
     local category
     local category_file
+    local source_label
     local commit_count=0
     local scan_limit="${VICE_MAC_RELEASE_NOTE_SCAN_LIMIT:-500}"
 
@@ -220,12 +230,10 @@ write_release_notes() {
 
         subject="$(git -C "$REPO_ROOT" show -s --format=%s "$commit")"
         category="$(release_note_category "$subject")"
-        category_file="$notes_dir/$category.html"
+        category_file="$notes_dir/$category.tsv"
+        source_label="$(release_note_source_label "$commit")"
 
-        printf '            <li>%s%s</li>\n' \
-            "$(printf '%s' "$subject" | html_escape)" \
-            "$(release_note_source_badge "$commit")" \
-            >> "$category_file"
+        printf '%s\t%s\n' "$source_label" "$subject" >> "$category_file"
         commit_count=$((commit_count + 1))
         if [[ "$commit_count" -ge 20 ]]; then
             break
@@ -233,10 +241,22 @@ write_release_notes() {
     done < <(git -C "$REPO_ROOT" rev-list --no-merges --max-count="$scan_limit" "${rev_args[@]}")
 
     if [[ "$commit_count" -eq 0 ]]; then
-        printf '            <li>No emulator-facing changes since the previous VICE Mac release.</li>\n' >> "$notes_dir/changed.html"
+        printf 'LOCAL\tNo emulator-facing changes since the previous VICE Mac release.\n' >> "$notes_dir/changed.tsv"
     fi
 
-    write_release_notes_html "$release_label" "$notes_dir" > "$notes_file"
+    case "$format" in
+        html)
+            write_release_notes_html "$release_label" "$notes_dir" > "$notes_file"
+            ;;
+        markdown)
+            write_release_notes_markdown "$release_label" "$notes_dir" > "$notes_file"
+            ;;
+        *)
+            echo "Unknown release notes format: $format" >&2
+            exit 1
+            ;;
+    esac
+
     rm -rf "$notes_dir"
 }
 
@@ -308,11 +328,13 @@ release_note_category() {
     esac
 }
 
-release_note_source_badge() {
+release_note_source_label() {
     local commit="$1"
 
     if release_note_is_upstream_commit "$commit"; then
-        printf ' <span title="Upstream VICE change" style="display:inline-block;margin-left:6px;padding:1px 5px;border-radius:5px;background:#263f77;color:#dce8ff;font-size:10px;font-weight:800;letter-spacing:0;vertical-align:1px;">VICE</span>'
+        printf 'VICE'
+    else
+        printf 'LOCAL'
     fi
 }
 
@@ -346,6 +368,59 @@ release_note_upstream_ref() {
     done
 }
 
+markdown_escape() {
+    sed \
+        -e 's/&/\&amp;/g' \
+        -e 's/</\&lt;/g' \
+        -e 's/>/\&gt;/g'
+}
+
+write_release_notes_markdown() {
+    local release_label="$1"
+    local notes_dir="$2"
+
+    cat <<EOF
+## VICE Mac $release_label
+
+Native Apple Silicon VICE Mac release with signed DMG delivery, Sparkle updates, and targeted front-end or upstream emulator fixes.
+
+EOF
+    release_note_markdown_section "$notes_dir/new.tsv" "New"
+    release_note_markdown_section "$notes_dir/changed.tsv" "Changed"
+    release_note_markdown_section "$notes_dir/fixed.tsv" "Fixed"
+    release_note_markdown_section "$notes_dir/deprecated.tsv" "Deprecated"
+    cat <<EOF
+### Package
+- Notarized Apple Silicon DMG
+- MacVICEKit SDK zip
+- SHA256 checksums
+- Sparkle appcast
+
+Entries marked _upstream VICE_ come from the upstream VICE tree.
+EOF
+}
+
+release_note_markdown_section() {
+    local section_file="$1"
+    local label="$2"
+    local source_label
+    local subject
+
+    if [[ ! -s "$section_file" ]]; then
+        return
+    fi
+
+    printf '### %s\n' "$label"
+    while IFS=$'\t' read -r source_label subject; do
+        if [[ "$source_label" == "VICE" ]]; then
+            printf -- '- %s _upstream VICE_\n' "$(printf '%s' "$subject" | markdown_escape)"
+        else
+            printf -- '- %s\n' "$(printf '%s' "$subject" | markdown_escape)"
+        fi
+    done < "$section_file"
+    printf '\n'
+}
+
 write_release_notes_html() {
     local release_label="$1"
     local notes_dir="$2"
@@ -355,10 +430,10 @@ write_release_notes_html() {
     <p style="margin:0 0 14px 0;font-size:14px;color:#f4f4f4;">
         Focus: native Apple Silicon VICE Mac $release_label with signed DMG delivery, Sparkle updates, and targeted front-end or upstream emulator fixes.
     </p>
-$(release_note_section "$notes_dir/new.html" "NEW" "#102d1b" "#48d17b")
-$(release_note_section "$notes_dir/changed.html" "CHANGED" "#102b3d" "#57c7ff")
-$(release_note_section "$notes_dir/fixed.html" "FIXED" "#302409" "#ffcf5a")
-$(release_note_section "$notes_dir/deprecated.html" "DEPRECATED" "#32151a" "#ff6b7a")
+$(release_note_section "$notes_dir/new.tsv" "NEW" "#102d1b" "#48d17b")
+$(release_note_section "$notes_dir/changed.tsv" "CHANGED" "#102b3d" "#57c7ff")
+$(release_note_section "$notes_dir/fixed.tsv" "FIXED" "#302409" "#ffcf5a")
+$(release_note_section "$notes_dir/deprecated.tsv" "DEPRECATED" "#32151a" "#ff6b7a")
     <p style="margin:12px 0 0 0;color:#b8b8b8;font-size:12px;">
         Package: notarized Apple Silicon DMG, MacVICEKit SDK zip, SHA256 checksums, and Sparkle appcast. Bullets marked <span style="display:inline-block;padding:1px 5px;border-radius:5px;background:#263f77;color:#dce8ff;font-size:10px;font-weight:800;letter-spacing:0;">VICE</span> come from the upstream VICE tree.
     </p>
@@ -371,6 +446,8 @@ release_note_section() {
     local label="$2"
     local background="$3"
     local foreground="$4"
+    local source_label
+    local subject
 
     if [[ ! -s "$section_file" ]]; then
         return
@@ -382,10 +459,24 @@ release_note_section() {
             <span style="display:inline-block;border-radius:999px;background:$background;color:$foreground;border:1px solid $foreground;padding:2px 8px;font-size:11px;font-weight:800;letter-spacing:0;">$label</span>
         </div>
         <ul style="margin:0 0 0 18px;padding:0;color:#f4f4f4;">
-$(cat "$section_file")
+$(while IFS=$'\t' read -r source_label subject; do
+    if [[ "$source_label" == "VICE" ]]; then
+        printf '            <li>%s%s</li>\n' "$(printf '%s' "$subject" | html_escape)" "$(release_note_source_badge_for_label "$source_label")"
+    else
+        printf '            <li>%s</li>\n' "$(printf '%s' "$subject" | html_escape)"
+    fi
+done < "$section_file")
         </ul>
     </div>
 EOF
+}
+
+release_note_source_badge_for_label() {
+    local source_label="$1"
+
+    if [[ "$source_label" == "VICE" ]]; then
+        printf ' <span title="Upstream VICE change" style="display:inline-block;margin-left:6px;padding:1px 5px;border-radius:5px;background:#263f77;color:#dce8ff;font-size:10px;font-weight:800;letter-spacing:0;vertical-align:1px;">VICE</span>'
+    fi
 }
 
 write_appcast() {
@@ -495,6 +586,7 @@ publish_github_release_main() {
 
     release_label="${tag#vice-mac-}"
     notes_file="$DIST_DIR/release-notes.md"
+    appcast_notes_file="$DIST_DIR/appcast-release-notes.html"
     appcast_file="$DIST_DIR/appcast.xml"
     repo_args=()
     target_args=()
@@ -508,7 +600,8 @@ publish_github_release_main() {
     done < <(release_target_args)
 
     write_release_notes "$tag" "$notes_file"
-    write_appcast "$tag" "$release_label" "$notes_file" "${dmg_artifacts[0]}" "$appcast_file"
+    write_appcast_release_notes "$tag" "$appcast_notes_file"
+    write_appcast "$tag" "$release_label" "$appcast_notes_file" "${dmg_artifacts[0]}" "$appcast_file"
 
     artifacts=("${dmg_artifacts[@]}")
     sdk_artifacts=("$DIST_DIR"/*.zip)

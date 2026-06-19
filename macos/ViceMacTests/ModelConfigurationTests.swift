@@ -588,6 +588,14 @@ final class ModelConfigurationTests: XCTestCase {
         XCTAssertFalse(appSource.contains("submitLine(\"RUN\")"))
     }
 
+    func testQLinkCaptureViewerProvidesCopyAllAction() throws {
+        let appSource = try sourceText(at: "macos/ViceMac/ViceMacApp.swift")
+
+        XCTAssertTrue(appSource.contains("var allText: String"))
+        XCTAssertTrue(appSource.contains("Label(\"Copy All\", systemImage: \"doc.on.doc\")"))
+        XCTAssertTrue(appSource.contains("NSPasteboard.general.setString(model.allText, forType: .string)"))
+    }
+
     func testDiskAttachReappliesDriveConfigurationBeforeRuntimeAttach() throws {
         let mediaSource = try sourceText(at: "macos/ViceMac/EmulatorSession+Media.swift")
         let applyRange = try XCTUnwrap(mediaSource.range(of: "applyDriveConfigurations(updateStatus: false)"))

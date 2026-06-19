@@ -14,13 +14,15 @@ https://github.com/barryw/vice-macos/releases/latest
 ```
 
 At runtime, `site.js` asks the GitHub Releases API for the latest release and
-updates the button to point at the current `.dmg` asset. It also updates the
-version, publish date, and checksums link when that data is available.
+updates the app download button to point at the current `.dmg` asset, including
+the visible version, publish date, and checksums link when that data is
+available. The MacVICEKit page uses the same release data to find the current
+`MacVICEKit-*-arm64.zip` SDK asset.
 
 That means the release pipeline can deploy this directory as-is after publishing
 a new GitHub Release. If we later want a fully pinned, no-JavaScript release
 page, the same pipeline can rewrite a small `release.json` or inject the latest
-asset URL before upload.
+asset URLs before upload.
 
 ## Screenshots
 

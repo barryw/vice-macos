@@ -25,14 +25,14 @@ assert_contains() {
     local file="$1"
     local expected="$2"
 
-    grep -q "$expected" "$file" || fail "expected notes to contain: $expected"
+    grep -Fq "$expected" "$file" || fail "expected notes to contain: $expected"
 }
 
 assert_not_contains() {
     local file="$1"
     local unexpected="$2"
 
-    if grep -q "$unexpected" "$file"; then
+    if grep -Fq "$unexpected" "$file"; then
         fail "notes should not contain: $unexpected"
     fi
 }
@@ -63,25 +63,40 @@ git -C "$tmp_repo" merge -q --no-ff upstream -m "Merge upstream VICE"
 git -C "$tmp_repo" tag vice-mac-0.2
 
 REPO_ROOT="$tmp_repo"
-notes_file="$tmp_repo/release-notes.html"
+notes_file="$tmp_repo/release-notes.md"
 VICE_MAC_RELEASE_NOTE_SCAN_LIMIT=100 write_release_notes vice-mac-0.2 "$notes_file"
 
+assert_contains "$notes_file" "## VICE Mac 0.2"
 assert_contains "$notes_file" "Fix C128 display restore"
 assert_contains "$notes_file" "Fix upstream SID filter"
-assert_contains "$notes_file" "Upstream VICE change"
+assert_contains "$notes_file" "_upstream VICE_"
+assert_contains "$notes_file" "### Package"
+assert_not_contains "$notes_file" "<div"
+assert_not_contains "$notes_file" "<span"
 assert_not_contains "$notes_file" "Refresh marketing site"
 assert_not_contains "$notes_file" "Deploy website to Kubernetes"
 assert_not_contains "$notes_file" "Update website pipeline"
 assert_not_contains "$notes_file" "Document hosting setup"
 
+appcast_notes_file="$tmp_repo/appcast-release-notes.html"
+write_appcast_release_notes vice-mac-0.2 "$appcast_notes_file"
+
+assert_contains "$appcast_notes_file" "<div"
+assert_contains "$appcast_notes_file" "Fix C128 display restore"
+assert_contains "$appcast_notes_file" "Fix upstream SID filter"
+assert_contains "$appcast_notes_file" "Upstream VICE change"
+assert_contains "$appcast_notes_file" "<span"
+assert_not_contains "$appcast_notes_file" "Refresh marketing site"
+
 commit_file "$tmp_repo" "website/index.html" "site-only" "Polish website gallery"
 commit_file "$tmp_repo" "k8s/service.yaml" "service" "Update website service"
 git -C "$tmp_repo" tag vice-mac-0.3
 
-web_only_notes="$tmp_repo/web-only-release-notes.html"
+web_only_notes="$tmp_repo/web-only-release-notes.md"
 write_release_notes vice-mac-0.3 "$web_only_notes"
 
 assert_contains "$web_only_notes" "No emulator-facing changes"
+assert_not_contains "$web_only_notes" "<li>"
 assert_not_contains "$web_only_notes" "Polish website gallery"
 assert_not_contains "$web_only_notes" "Update website service"
 

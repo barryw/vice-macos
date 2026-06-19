@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>MacVICEKit - Embed VICE in Mac apps</title>
+    <meta
+      name="description"
+      content="MacVICEKit is the Swift package behind mac VICE, giving macOS developers a native way to embed the VICE core, Metal display output, media helpers, input routing, and debugger APIs."
+    >
+    <meta property="og:title" content="MacVICEKit">
+    <meta property="og:description" content="Embed the VICE core in native macOS apps.">
+    <meta property="og:type" content="website">
+    <meta property="og:image" content="assets/mac-vice-icon.png">
+    <link rel="icon" href="assets/mac-vice-icon.png">
+    <link rel="stylesheet" href="styles.css?v=20260618a">
+    <script src="site.js" defer></script>
+  </head>
+  <body class="kit-page">
+    <header class="site-header">
+      <a class="brand" href="index.html#top" aria-label="mac VICE home">
+        <img src="assets/mac-vice-icon.png" width="36" height="36" alt="">
+        <span>mac VICE</span>
+      </a>
+      <nav class="site-nav" aria-label="Primary">
+        <a href="index.html#features">Features</a>
+        <a href="index.html#gallery">Gallery</a>
+        <a href="index.html#disk-tool">Disk Manager</a>
+        <a href="index.html#qlink">Q-Link</a>
+        <a href="macvicekit.html" aria-current="page">MacVICEKit</a>
+        <a href="index.html#download">Download</a>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="kit-hero" aria-labelledby="kit-hero-title">
+        <div class="kit-hero-copy">
+          <p class="eyebrow">MacVICEKit</p>
+          <h1 id="kit-hero-title">VICE core. Native Swift surface.</h1>
+          <p class="hero-subtitle">
+            Build your own Mac tools on top of VICE without building an
+            emulator UI from scratch. MacVICEKit wraps the machine engine,
+            Metal display, media flow, input routing, callbacks, and debugger
+            APIs as a Swift package.
+          </p>
+          <div class="hero-actions">
+            <a
+              class="button primary"
+              id="kit-sdk-download"
+              href="https://github.com/barryw/vice-macos/releases/latest"
+            >Download SDK zip</a>
+            <a
+              class="button secondary"
+              href="https://github.com/barryw/vice-macos/tree/main/MacVICEKit"
+            >Read the source</a>
+          </div>
+          <p class="release-note" id="kit-sdk-note">
+            The release SDK includes the Swift package and matching VICE runtime.
+          </p>
+        </div>
+
+        <div class="kit-visual" aria-label="MacVICEKit architecture preview">
+          <figure class="kit-visual-shot">
+            <img
+              src="assets/screenshots/x64sc-basic.png"
+              width="1400"
+              height="1091"
+              alt="x64sc running BASIC through mac VICE"
+            >
+          </figure>
+          <div class="kit-stack-card" aria-label="MacVICEKit package contents">
+            <span>Swift API</span>
+            <span>C bridge</span>
+            <span>Metal display</span>
+            <span>MacVICERuntime.xcframework</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="section kit-flow-section" aria-labelledby="kit-flow-title">
+        <div class="section-heading">
+          <p class="eyebrow">Embeddable emulator engine</p>
+          <h2 id="kit-flow-title">One package, one runtime, one native app target.</h2>
+        </div>
+
+        <div class="kit-flow">
+          <article class="kit-flow-card">
+            <span class="kit-step">1</span>
+            <h3>Add the package</h3>
+            <p>
+              Use the release SDK zip for app integrations. It carries the Swift
+              API, bridge layer, and runtime as one versioned package.
+            </p>
+          </article>
+          <article class="kit-flow-card">
+            <span class="kit-step">2</span>
+            <h3>Start a session</h3>
+            <p>
+              Create a <code>MacVICEEngineSession</code>, pick a supported
+              machine, and embed <code>MacVICEDisplayView</code> in SwiftUI or
+              AppKit.
+            </p>
+          </article>
+          <article class="kit-flow-card">
+            <span class="kit-step">3</span>
+            <h3>Build the tool</h3>
+            <p>
+              Attach media, type text, read memory, step the CPU, capture
+              screenshots, or listen for emulator callbacks.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section kit-capabilities-section" aria-labelledby="kit-capabilities-title">
+        <div class="section-heading">
+          <p class="eyebrow">What it exposes</p>
+          <h2 id="kit-capabilities-title">The VICE pieces a Mac app actually needs.</h2>
+        </div>
+
+        <div class="kit-grid">
+          <article class="feature-card">
+            <h3>Engine control</h3>
+            <p>Start, pause, reset, type text, send keys, and coordinate emulator lifetime from Swift.</p>
+          </article>
+          <article class="feature-card">
+            <h3>Metal display</h3>
+            <p>Embed a native display view with the same rendering path used by mac VICE.</p>
+          </article>
+          <article class="feature-card">
+            <h3>Media helpers</h3>
+            <p>Attach disks, tapes, cartridges, snapshots, project folders, and autostart programs.</p>
+          </article>
+          <article class="feature-card">
+            <h3>Input routing</h3>
+            <p>Forward keyboard, paste, joystick, mouse, and controller input through Mac-facing APIs.</p>
+          </article>
+          <article class="feature-card">
+            <h3>Callbacks</h3>
+            <p>Observe video frames, audio samples, drive status, cartridge status, VSID data, and SID voices.</p>
+          </article>
+          <article class="feature-card">
+            <h3>Debugger APIs</h3>
+            <p>Peek, poke, disassemble, step, manage breakpoints, and inspect registers from native tools.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section kit-code-section" aria-labelledby="kit-code-title">
+        <div class="kit-code-layout">
+          <div class="section-heading">
+            <p class="eyebrow">Quick start</p>
+            <h2 id="kit-code-title">A C64 display in a SwiftUI view.</h2>
+            <p>
+              This starts <code>x64sc</code>, renders it with Metal, and feeds
+              a tiny BASIC program through VICE's keyboard buffer.
+            </p>
+          </div>
+
+          <div class="code-window" aria-label="MacVICEKit Swift quick start">
+            <pre><code>import SwiftUI
+import MacVICEKit
+
+struct EmulatorView: View {
+    @State private var session = MacVICEEngineSession(
+        configuration: MacVICEMachineConfiguration(
+            machine: .c64sc,
+            runtimeLocation: .automatic
+        )
+    )
+
+    var body: some View {
+        MacVICEDisplayView(session: session)
+            .frame(minWidth: 768, minHeight: 544)
+            .task {
+                try? session.start()
+                session.typeText("10 PRINT \"HELLO\"\n20 GOTO 10\nRUN\n")
+            }
+    }
+}</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <section class="section kit-runtime-section" aria-labelledby="kit-runtime-title">
+        <div class="kit-runtime-layout">
+          <div class="kit-runtime-copy">
+            <p class="eyebrow">Runtime included</p>
+            <h2 id="kit-runtime-title">No Homebrew, shell scripts, or local VICE build required.</h2>
+            <p>
+              The release SDK includes
+              <code>Runtime/MacVICERuntime.xcframework</code>. Xcode embeds the
+              runtime binary target when your app depends on the
+              <code>MacVICEKit</code> product.
+            </p>
+          </div>
+
+          <div class="kit-runtime-card">
+            <h3>Supported machines</h3>
+            <p>
+              <code>x64sc</code>, <code>x128</code>, <code>xvic</code>,
+              <code>xpet</code>, <code>xplus4</code>, <code>xc16</code>,
+              <code>xc232</code>, <code>xv364</code>, and <code>vsid</code>.
+            </p>
+            <h3>Runtime lookup</h3>
+            <p>
+              <code>.automatic</code> checks an explicit runtime directory,
+              embedded framework layouts, app bundle Frameworks, and local
+              development builds.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="download-section kit-download-section" aria-labelledby="kit-download-title">
+        <div class="download-copy">
+          <p class="eyebrow">SDK download</p>
+          <h2 id="kit-download-title">Use the release zip for real app integrations.</h2>
+          <p>
+            The Git checkout has the Swift API and bridge source. The release
+            SDK zip adds the matching prepared native VICE runtime.
+          </p>
+        </div>
+
+        <div class="download-panel">
+          <div class="download-meta">
+            <span id="kit-sdk-version">GitHub latest release</span>
+            <strong id="kit-sdk-asset">MacVICEKit SDK zip</strong>
+            <span>Apple Silicon macOS package</span>
+          </div>
+          <a
+            class="button primary download-button"
+            id="kit-sdk-download-secondary"
+            href="https://github.com/barryw/vice-macos/releases/latest"
+          >Download SDK zip</a>
+          <div class="release-links" aria-label="MacVICEKit links">
+            <a href="https://github.com/barryw/vice-macos/tree/main/MacVICEKit">Package source</a>
+            <a href="https://github.com/barryw/vice-macos/releases/latest">Release notes</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <span>© 2026 Barry Walker for original mac VICE work. Built on VICE.</span>
+      <div class="footer-links">
+        <a href="index.html#notices">Notices</a>
+        <a href="https://github.com/barryw/vice-macos">GitHub</a>
+      </div>
+    </footer>
+  </body>
+</html>
