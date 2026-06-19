@@ -592,8 +592,38 @@ final class ModelConfigurationTests: XCTestCase {
         let appSource = try sourceText(at: "macos/ViceMac/ViceMacApp.swift")
 
         XCTAssertTrue(appSource.contains("var allText: String"))
+        XCTAssertTrue(appSource.contains("var rawCapturePath: String"))
         XCTAssertTrue(appSource.contains("Label(\"Copy All\", systemImage: \"doc.on.doc\")"))
+        XCTAssertTrue(appSource.contains("Label(\"Copy .cap Path\", systemImage: \"doc\")"))
         XCTAssertTrue(appSource.contains("NSPasteboard.general.setString(model.allText, forType: .string)"))
+        XCTAssertTrue(appSource.contains("NSPasteboard.general.setString(model.rawCapturePath, forType: .string)"))
+    }
+
+    func testQLinkProtocolCaptureWritesRawCapBesideLog() throws {
+        let rootURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ViceMacQLinkCaptureTests-\(UUID().uuidString)", isDirectory: true)
+        let logURL = rootURL.appendingPathComponent("qlink-capture.log")
+        try FileManager.default.createDirectory(at: rootURL,
+                                                withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.removeItem(at: rootURL)
+        }
+
+        let capture = try XCTUnwrap(QLinkProtocolCapture(logURL: logURL))
+        capture.record(direction: 0, bytes: [0x5A, 0x01, 0x02])
+        capture.record(direction: 1, bytes: [0x20, 0x46, 0x44, 0x4F])
+        capture.close()
+
+        let capURL = QLinkProtocolCapture.capURL(forLogURL: logURL)
+        let capBytes = [UInt8](try Data(contentsOf: capURL))
+        XCTAssertEqual(capBytes, [
+            0, 3, 0, 0x5A, 0x01, 0x02,
+            1, 4, 0, 0x20, 0x46, 0x44, 0x4F
+        ])
+
+        let logText = try String(contentsOf: logURL, encoding: .utf8)
+        XCTAssertTrue(logText.contains("# raw capture: \(capURL.path)"))
+        XCTAssertTrue(logText.contains("dir uint8 (0=C2S,1=S2C), length uint16-le, bytes"))
     }
 
     func testDiskAttachReappliesDriveConfigurationBeforeRuntimeAttach() throws {

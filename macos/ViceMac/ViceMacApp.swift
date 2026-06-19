@@ -1104,20 +1104,23 @@ final class QLinkReloadedService: ObservableObject {
     }
 
     /// Enable or disable Q-Link protocol capture for this session based on the
-    /// "Capture protocol" toggle. Sets the VICE "QLinkCaptureFile" resource
-    /// (path = capture to that file, "" = off) and records the active path in
-    /// UserDefaults so the capture viewer window can find it.
+    /// "Capture protocol" toggle. The `.log` path is shown in the capture
+    /// viewer; a raw direction-tagged `.cap` is written beside it.
     private func configureProtocolCapture(emulator: EmulatorSession) {
         if Self.defaults.bool(forKey: "vice.qlink.captureProtocol") {
             let name = "qlink-capture-\(Int(Date().timeIntervalSince1970)).log"
             let url = FileManager.default.temporaryDirectory
                 .appendingPathComponent(name)
+            let capURL = QLinkProtocolCapture.capURL(forLogURL: url)
             emulator.startProtocolCapture(to: url)
             Self.defaults.set(url.path, forKey: "vice.qlink.activeCapturePath")
-            NSLog("QLINK capture -> \(url.path)")
+            Self.defaults.set(capURL.path, forKey: "vice.qlink.activeCaptureRawPath")
+            NSLog("QLINK capture log -> \(url.path)")
+            NSLog("QLINK capture raw -> \(capURL.path)")
         } else {
             emulator.stopProtocolCapture()
             Self.defaults.removeObject(forKey: "vice.qlink.activeCapturePath")
+            Self.defaults.removeObject(forKey: "vice.qlink.activeCaptureRawPath")
         }
     }
 
@@ -2344,6 +2347,14 @@ final class QLinkCaptureViewerModel: ObservableObject {
         lines.map(\.text).joined(separator: "\n")
     }
 
+    var rawCapturePath: String {
+        guard !path.isEmpty else {
+            return ""
+        }
+
+        return QLinkProtocolCapture.capURL(forLogURL: URL(fileURLWithPath: path)).path
+    }
+
     func start(path: String) {
         NSLog("QLINK viewer: start(path=\(path))")
         self.path = path
@@ -2398,6 +2409,13 @@ struct QLinkCaptureViewer: View {
                 }
                 .disabled(model.lines.isEmpty)
                 .help("Copy the full protocol capture")
+                Button {
+                    copyRawCapturePath()
+                } label: {
+                    Label("Copy .cap Path", systemImage: "doc")
+                }
+                .disabled(model.rawCapturePath.isEmpty)
+                .help("Copy the raw binary capture path")
                 Button("Done") { dismiss() }
             }.padding()
             Divider()
@@ -2433,6 +2451,15 @@ struct QLinkCaptureViewer: View {
 
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(model.allText, forType: .string)
+    }
+
+    private func copyRawCapturePath() {
+        guard !model.rawCapturePath.isEmpty else {
+            return
+        }
+
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(model.rawCapturePath, forType: .string)
     }
 }
 

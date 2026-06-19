@@ -154,7 +154,7 @@ final class HayesModemService: @unchecked Sendable {
     private var ringTimer: DispatchSourceTimer?
     private var dialTimer: DispatchSourceTimer?
     private let dialTimeout: DispatchTimeInterval
-    private var captureLog: QLinkProtocolCapture?
+    private var protocolCapture: QLinkProtocolCapture?
 
     init(dialTimeout: DispatchTimeInterval = HayesModemService.defaultDialTimeout) {
         self.dialTimeout = dialTimeout
@@ -217,20 +217,19 @@ final class HayesModemService: @unchecked Sendable {
         }
     }
 
-    /// Begin writing a human-readable Q-Link protocol capture to `url`. Each line
-    /// is one decoded frame (or raw handshake chunk) with an absolute millisecond
-    /// timestamp and the delta from the previous line. No decoder tool needed.
+    /// Begin writing Q-Link protocol captures. `url` is the human-readable log;
+    /// a raw binary `.cap` with the same basename is written beside it.
     func startProtocolCapture(to url: URL) {
         queue.async {
-            self.captureLog?.close()
-            self.captureLog = QLinkProtocolCapture(url: url)
+            self.protocolCapture?.close()
+            self.protocolCapture = QLinkProtocolCapture(logURL: url)
         }
     }
 
     func stopProtocolCapture() {
         queue.async {
-            self.captureLog?.close()
-            self.captureLog = nil
+            self.protocolCapture?.close()
+            self.protocolCapture = nil
         }
     }
 
@@ -550,7 +549,7 @@ final class HayesModemService: @unchecked Sendable {
 
                 if let data,
                    !data.isEmpty {
-                    self.captureLog?.record(direction: 1, bytes: Array(data))
+                    self.protocolCapture?.record(direction: 1, bytes: Array(data))
                     let bytes = self.bytesForSerial(fromRemoteBytes: Array(data))
                     self.sendSerialData(bytes)
                 }
@@ -1122,7 +1121,7 @@ final class HayesModemService: @unchecked Sendable {
             return
         }
 
-        captureLog?.record(direction: 0, bytes: bytes)
+        protocolCapture?.record(direction: 0, bytes: bytes)
 
         let payload: [UInt8]
         if configuration.transportMode == .telnet {
@@ -1311,21 +1310,25 @@ final class HayesModemService: @unchecked Sendable {
     }
 }
 
-/// Streams the raw Q-Link protocol bytes exchanged with the remote host into a
-/// human-readable text log. Reassembles Q-Link frames ($5A … $0D) across chunk
-/// boundaries and writes one line per frame (or per raw/handshake chunk) with an
-/// absolute millisecond timestamp and the delta from the previous line. The file
-/// is plain UTF-8 text — `cat`/`tail -f` it directly, no decoder needed.
+/// Streams Q-Link protocol bytes exchanged with the remote host into two files:
+/// a human-readable text log and a raw binary capture. The log reassembles
+/// Q-Link frames ($5A … $0D) across chunk boundaries and writes one line per
+/// frame (or per raw/handshake chunk) with an absolute millisecond timestamp and
+/// the delta from the previous line. The `.cap` file preserves raw bytes by
+/// direction as repeated records: dir byte, uint16 little-endian length, payload.
 ///
 /// Frame layout: $5A c1 c2 c3 c4 sendseq recvseq cmd [payload…] $0D
 ///   c1..c4 = CRC-16 ($A001) nibble-packed; $20 = ACTION (2-char code at payload[0..2]).
 ///
 /// All methods are expected to run on the owning HayesModemService serial queue.
 final class QLinkProtocolCapture {
-    private let handle: FileHandle?
+    private let logHandle: FileHandle?
+    private let capHandle: FileHandle
     private var bufC2S = [UInt8]()
     private var bufS2C = [UInt8]()
     private var lastLineTime: Date?
+    let logURL: URL
+    let capURL: URL
 
     private static let CMD_START: UInt8 = 0x5A
     private static let FRAME_END: UInt8 = 0x0D
@@ -1340,18 +1343,34 @@ final class QLinkProtocolCapture {
         return formatter
     }()
 
-    init?(url: URL) {
-        FileManager.default.createFile(atPath: url.path, contents: nil)
-        guard let handle = try? FileHandle(forWritingTo: url) else {
+    static func capURL(forLogURL logURL: URL) -> URL {
+        logURL.deletingPathExtension().appendingPathExtension("cap")
+    }
+
+    init?(logURL: URL) {
+        let capURL = Self.capURL(forLogURL: logURL)
+        FileManager.default.createFile(atPath: logURL.path, contents: nil)
+        FileManager.default.createFile(atPath: capURL.path, contents: nil)
+        guard let logHandle = try? FileHandle(forWritingTo: logURL) else {
             return nil
         }
-        self.handle = handle
+        guard let capHandle = try? FileHandle(forWritingTo: capURL) else {
+            try? logHandle.close()
+            return nil
+        }
+        self.logHandle = logHandle
+        self.capHandle = capHandle
+        self.logURL = logURL
+        self.capURL = capURL
         writeLine("# Q-Link protocol capture — started \(Self.timeFormatter.string(from: Date()))")
         writeLine("# columns: <time> <Δsec> <dir> <frame>   (→ client→server, ← server→client)")
+        writeLine("# raw capture: \(capURL.path)")
+        writeLine("# raw format: repeated records: dir uint8 (0=C2S,1=S2C), length uint16-le, bytes")
     }
 
     func close() {
-        try? handle?.close()
+        try? logHandle?.close()
+        try? capHandle.close()
     }
 
     /// direction: 0 = client→server (→), 1 = server→client (←).
@@ -1359,6 +1378,7 @@ final class QLinkProtocolCapture {
         guard !bytes.isEmpty else {
             return
         }
+        writeRawCapture(direction: direction, bytes: bytes)
         if direction == 0 {
             bufC2S.append(contentsOf: bytes)
             drain(&bufC2S, arrow: "→", tag: "C2S")
@@ -1436,7 +1456,24 @@ final class QLinkProtocolCapture {
         guard let data = (line + "\n").data(using: .utf8) else {
             return
         }
-        try? handle?.write(contentsOf: data)
+        try? logHandle?.write(contentsOf: data)
+    }
+
+    private func writeRawCapture(direction: UInt8, bytes: [UInt8]) {
+        var offset = bytes.startIndex
+        while offset < bytes.endIndex {
+            let remaining = bytes.distance(from: offset, to: bytes.endIndex)
+            let count = min(remaining, Int(UInt16.max))
+            let end = bytes.index(offset, offsetBy: count)
+            let length = UInt16(count)
+            var record = Data()
+            record.append(direction == 1 ? 1 : 0)
+            record.append(UInt8(length & 0x00FF))
+            record.append(UInt8((length >> 8) & 0x00FF))
+            record.append(contentsOf: bytes[offset..<end])
+            try? capHandle.write(contentsOf: record)
+            offset = end
+        }
     }
 
     private static func crc16(_ bytes: ArraySlice<UInt8>) -> UInt16 {

@@ -299,54 +299,63 @@ p {
   line-height: 1;
 }
 
-.kit-visual {
-  position: relative;
+.kit-sdk-panel {
   display: grid;
-  justify-items: end;
-}
-
-.kit-visual-shot {
-  width: min(700px, 100%);
-  margin: 0;
-}
-
-.kit-visual-shot img {
-  width: 100%;
-  height: auto;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  gap: 18px;
+  width: min(620px, 100%);
+  margin-left: auto;
+  border: 1px solid var(--line);
   border-radius: 8px;
-  background: #050605;
+  background: #101211;
+  padding: clamp(22px, 3vw, 30px);
   box-shadow: var(--shadow);
 }
 
-.kit-stack-card {
-  display: grid;
-  gap: 8px;
-  width: min(360px, 86%);
-  margin-top: -42px;
-  margin-right: 24px;
-  border: 1px solid rgba(100, 210, 255, 0.34);
-  border-radius: 8px;
-  background: rgba(25, 28, 26, 0.94);
-  padding: 16px;
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.36);
-}
-
-.kit-stack-card span {
+.kit-sdk-header {
   display: flex;
   align-items: center;
-  gap: 10px;
-  color: var(--muted);
-  font-size: 0.95rem;
+  gap: 14px;
 }
 
-.kit-stack-card span::before {
-  content: "";
+.kit-sdk-header img {
   flex: 0 0 auto;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--cyan);
+  border-radius: 12px;
+}
+
+.kit-sdk-header strong,
+.kit-sdk-header span {
+  display: block;
+}
+
+.kit-sdk-header strong {
+  font-size: 1.3rem;
+}
+
+.kit-sdk-header span {
+  color: var(--muted);
+}
+
+.kit-sdk-list {
+  display: grid;
+  gap: 10px;
+}
+
+.kit-sdk-list span {
+  display: block;
+  border: 1px solid rgba(100, 210, 255, 0.22);
+  border-radius: 8px;
+  background: rgba(100, 210, 255, 0.06);
+  padding: 12px 14px;
+}
+
+.kit-sdk-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+  color: var(--subtle);
+  font-size: 0.92rem;
 }
 
 .kit-flow,
@@ -855,9 +864,14 @@ p {
     width: 100%;
   }
 
-  .kit-stack-card {
+  .kit-sdk-panel {
     width: 100%;
-    margin: 12px 0 0;
+    margin-left: 0;
+  }
+
+  .kit-sdk-footer {
+    display: grid;
+    gap: 4px;
   }
 
   .code-window pre {

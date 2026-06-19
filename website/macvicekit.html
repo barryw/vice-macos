@@ -35,13 +35,12 @@
     <main id="top">
       <section class="kit-hero" aria-labelledby="kit-hero-title">
         <div class="kit-hero-copy">
-          <p class="eyebrow">MacVICEKit</p>
-          <h1 id="kit-hero-title">VICE core. Native Swift surface.</h1>
+          <p class="eyebrow">Swift package for macOS</p>
+          <h1 id="kit-hero-title">MacVICEKit</h1>
           <p class="hero-subtitle">
-            Build your own Mac tools on top of VICE without building an
-            emulator UI from scratch. MacVICEKit wraps the machine engine,
-            Metal display, media flow, input routing, callbacks, and debugger
-            APIs as a Swift package.
+            Embed the VICE core in your own Mac app. The SDK packages a Swift
+            engine API, Metal display view, media helpers, input routing,
+            callbacks, debugger hooks, and a matching native runtime.
           </p>
           <div class="hero-actions">
             <a
@@ -59,20 +58,25 @@
           </p>
         </div>
 
-        <div class="kit-visual" aria-label="MacVICEKit architecture preview">
-          <figure class="kit-visual-shot">
-            <img
-              src="assets/screenshots/x64sc-basic.png"
-              width="1400"
-              height="1091"
-              alt="x64sc running BASIC through mac VICE"
-            >
-          </figure>
-          <div class="kit-stack-card" aria-label="MacVICEKit package contents">
-            <span>Swift API</span>
-            <span>C bridge</span>
-            <span>Metal display</span>
-            <span>MacVICERuntime.xcframework</span>
+        <div class="kit-sdk-panel" aria-label="MacVICEKit package contents">
+          <div class="kit-sdk-header">
+            <img src="assets/mac-vice-icon.png" width="56" height="56" alt="">
+            <div>
+              <strong>MacVICEKit</strong>
+              <span>Swift package + VICE runtime</span>
+            </div>
+          </div>
+
+          <div class="kit-sdk-list">
+            <span><code>MacVICEEngineSession</code></span>
+            <span><code>MacVICEDisplayView</code></span>
+            <span><code>MacVICEMachineConfiguration</code></span>
+            <span><code>MacVICERuntime.xcframework</code></span>
+          </div>
+
+          <div class="kit-sdk-footer">
+            <span>Package.swift</span>
+            <span>macOS 13+ · arm64</span>
           </div>
         </div>
       </section>

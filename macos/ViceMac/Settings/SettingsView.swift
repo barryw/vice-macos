@@ -1422,7 +1422,7 @@ private struct NetworkSettingsPane: View {
                 Toggle(isOn: $qlinkCaptureProtocol) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Capture protocol")
-                        Text("Record every byte to/from the server and open a live packet viewer when you connect.")
+                        Text("Write a decoded .log for the viewer and a raw direction-tagged .cap beside it.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
