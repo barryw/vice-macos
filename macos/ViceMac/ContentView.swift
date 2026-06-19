@@ -179,7 +179,7 @@ private struct QLinkReloadedToolbarButton: View {
         } label: {
             Label(buttonTitle, systemImage: "network")
         }
-        .disabled(qLinkReloaded.isConnecting)
+        .disabled(!qLinkReloaded.canConnect(machine: emulator.machine))
         .help(helpText)
     }
 
@@ -190,6 +190,10 @@ private struct QLinkReloadedToolbarButton: View {
     private var helpText: String {
         if qLinkReloaded.isConnecting {
             return "Connecting to Q-Link Reloaded"
+        }
+
+        guard qLinkReloaded.hasConfiguredDisk else {
+            return "Choose a Q-Link disk before connecting"
         }
 
         if let configuredDiskTitle = qLinkReloaded.configuredDiskTitle,

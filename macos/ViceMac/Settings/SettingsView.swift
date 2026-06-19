@@ -1227,139 +1227,227 @@ private struct PrintingSettingsPane: View {
 
 private struct NetworkSettingsPane: View {
     @EnvironmentObject private var emulator: EmulatorSession
+    @EnvironmentObject private var qLinkReloaded: QLinkReloadedService
     @State private var hardRestartRequest: MachineHardRestartRequest?
+    @State private var showsQLinkProfileManager = false
+    @AppStorage("vice.qlink.captureProtocol") private var qlinkCaptureProtocol = false
 
     var body: some View {
         SettingsPane {
-            Section("Modem") {
-                Toggle("Modem", isOn: modemEnabledBinding)
+            modemSection
+            dialingSection
+            qLinkReloadedSection
+            testLineSection
+            incomingCallsSection
+        }
+        .machineHardRestartConfirmation($hardRestartRequest)
+        .onAppear {
+            qLinkReloaded.refreshRegistrationProfiles()
+            qLinkReloaded.refreshConfiguredDiskRegistrationProfile()
+        }
+        .sheet(isPresented: $showsQLinkProfileManager) {
+            QLinkProfileManagerSheet()
+                .environmentObject(emulator)
+                .environmentObject(qLinkReloaded)
+        }
+    }
 
-                Picker("Interface", selection: modemInterfaceBinding) {
-                    ForEach(emulator.availableModemInterfaces) { modemInterface in
-                        Label(modemInterface.title,
-                              systemImage: modemInterface.systemImage)
-                            .tag(modemInterface)
+    @ViewBuilder
+    private var modemSection: some View {
+        Section("Modem") {
+            Toggle("Modem", isOn: modemEnabledBinding)
+
+            Picker("Interface", selection: modemInterfaceBinding) {
+                ForEach(emulator.availableModemInterfaces) { modemInterface in
+                    Label(modemInterface.title,
+                          systemImage: modemInterface.systemImage)
+                        .tag(modemInterface)
+                }
+            }
+            .pickerStyle(.segmented)
+            .disabled(!emulator.networkModem.isEnabled)
+
+            LabeledContent("Hardware") {
+                SettingsValueText(emulator.networkModem.interface.detailTitle)
+            }
+
+            if emulator.networkModem.interface.requiresACIAAddress {
+                Picker("Address", selection: modemACIAAddressBinding) {
+                    ForEach(emulator.availableModemACIAAddresses) { address in
+                        Text(address.title).tag(address)
                     }
                 }
-                .pickerStyle(.segmented)
                 .disabled(!emulator.networkModem.isEnabled)
 
-                LabeledContent("Hardware") {
-                    SettingsValueText(emulator.networkModem.interface.detailTitle)
-                }
-
-                if emulator.networkModem.interface.requiresACIAAddress {
-                    Picker("Address", selection: modemACIAAddressBinding) {
-                        ForEach(emulator.availableModemACIAAddresses) { address in
-                            Text(address.title).tag(address)
-                        }
-                    }
-                    .disabled(!emulator.networkModem.isEnabled)
-
-                    if let terminalHint = emulator.networkModem.terminalSelectionHint(for: emulator.machine) {
-                        LabeledContent("Terminal") {
-                            SettingsValueText(terminalHint,
-                                              lineLimit: 2)
-                        }
-                    }
-                }
-
-                if !emulator.networkModem.interface.requiresACIAAddress,
-                   let terminalHint = emulator.networkModem.terminalSelectionHint(for: emulator.machine) {
+                if let terminalHint = emulator.networkModem.terminalSelectionHint(for: emulator.machine) {
                     LabeledContent("Terminal") {
                         SettingsValueText(terminalHint,
                                           lineLimit: 2)
                     }
                 }
+            }
 
-                Picker("Speed", selection: $emulator.networkModem.baudRate) {
-                    ForEach(emulator.networkModem.supportedBaudRates, id: \.self) { baudRate in
-                        Text("\(baudRate)").tag(baudRate)
-                    }
+            if !emulator.networkModem.interface.requiresACIAAddress,
+               let terminalHint = emulator.networkModem.terminalSelectionHint(for: emulator.machine) {
+                LabeledContent("Terminal") {
+                    SettingsValueText(terminalHint,
+                                      lineLimit: 2)
                 }
+            }
+
+            Picker("Speed", selection: $emulator.networkModem.baudRate) {
+                ForEach(emulator.networkModem.supportedBaudRates, id: \.self) { baudRate in
+                    Text(String(baudRate)).tag(baudRate)
+                }
+            }
+            .disabled(!emulator.networkModem.isEnabled)
+
+            Picker("Connection", selection: $emulator.networkModem.transportMode) {
+                ForEach(NetworkTransportMode.allCases) { mode in
+                    Text(mode.title).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .disabled(!emulator.networkModem.isEnabled)
+
+            Toggle("Echo commands", isOn: $emulator.networkModem.echoCommands)
                 .disabled(!emulator.networkModem.isEnabled)
 
-                Picker("Connection", selection: $emulator.networkModem.transportMode) {
-                    ForEach(NetworkTransportMode.allCases) { mode in
-                        Text(mode.title).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
+            Toggle("Verbose result codes", isOn: $emulator.networkModem.verboseResultCodes)
                 .disabled(!emulator.networkModem.isEnabled)
 
-                Toggle("Echo commands", isOn: $emulator.networkModem.echoCommands)
-                    .disabled(!emulator.networkModem.isEnabled)
-
-                Toggle("Verbose result codes", isOn: $emulator.networkModem.verboseResultCodes)
-                    .disabled(!emulator.networkModem.isEnabled)
-
-                LabeledContent("Status") {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(emulator.networkModemStatus.title)
-                            .foregroundStyle(statusColor)
-                        SettingsValueText(emulator.networkModemStatus.detailTitle,
-                                          lineLimit: 2)
-                    }
-                }
-
-                if emulator.networkModem.usesActiveUserPort {
-                    LabeledContent("User port") {
-                        SettingsValueText("System time sync is off while the modem uses the user port.",
-                                          lineLimit: 2)
-                    }
+            LabeledContent("Status") {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(emulator.networkModemStatus.title)
+                        .foregroundStyle(statusColor)
+                    SettingsValueText(emulator.networkModemStatus.detailTitle,
+                                      lineLimit: 2)
                 }
             }
 
-            Section("Dialing") {
-                LabeledContent("Default host") {
-                    TextField("Host", text: $emulator.networkModem.defaultDialHost)
-                        .textFieldStyle(.roundedBorder)
-                        .disabled(!emulator.networkModem.isEnabled)
+            if emulator.networkModem.usesActiveUserPort {
+                LabeledContent("User port") {
+                    SettingsValueText("System time sync is off while the modem uses the user port.",
+                                      lineLimit: 2)
                 }
-
-                LabeledContent("Default port") {
-                    TextField("Port",
-                              value: $emulator.networkModem.defaultDialPort,
-                              format: .number)
-                        .frame(width: 86)
-                        .disabled(!emulator.networkModem.isEnabled)
-                }
-
-                LabeledContent("Command") {
-                    SettingsValueText(emulator.networkModem.dialCommandPreview)
-                        .font(.system(.body, design: .monospaced))
-                }
-            }
-
-            Section("Test Line") {
-                LabeledContent("Dial") {
-                    SettingsValueText(emulator.networkModem.testDialCommand)
-                        .font(.system(.body, design: .monospaced))
-                }
-            }
-
-            Section("Incoming Calls") {
-                Toggle("Accept incoming calls", isOn: $emulator.networkModem.acceptsIncomingCalls)
-                    .disabled(!emulator.networkModem.isEnabled)
-
-                LabeledContent("Port") {
-                    TextField("Port",
-                              value: $emulator.networkModem.incomingPort,
-                              format: .number)
-                        .frame(width: 86)
-                        .disabled(!emulator.networkModem.isEnabled
-                                  || !emulator.networkModem.acceptsIncomingCalls)
-                }
-
-                Stepper(value: $emulator.networkModem.autoAnswerRings,
-                        in: 0...9) {
-                    Text(autoAnswerTitle)
-                }
-                .disabled(!emulator.networkModem.isEnabled
-                          || !emulator.networkModem.acceptsIncomingCalls)
             }
         }
-        .machineHardRestartConfirmation($hardRestartRequest)
+    }
+
+    private var dialingSection: some View {
+        Section("Dialing") {
+            LabeledContent("Default host") {
+                TextField("Host", text: $emulator.networkModem.defaultDialHost)
+                    .textFieldStyle(.roundedBorder)
+                    .disabled(!emulator.networkModem.isEnabled)
+            }
+
+            LabeledContent("Default port") {
+                TextField("Port",
+                          value: $emulator.networkModem.defaultDialPort,
+                          format: .number)
+                    .frame(width: 86)
+                    .disabled(!emulator.networkModem.isEnabled)
+            }
+
+            LabeledContent("Command") {
+                SettingsValueText(emulator.networkModem.dialCommandPreview)
+                    .font(.system(.body, design: .monospaced))
+            }
+        }
+    }
+
+    private var testLineSection: some View {
+        Section("Test Line") {
+            LabeledContent("Dial") {
+                SettingsValueText(emulator.networkModem.testDialCommand)
+                    .font(.system(.body, design: .monospaced))
+            }
+        }
+    }
+
+    private var incomingCallsSection: some View {
+        Section("Incoming Calls") {
+            Toggle("Accept incoming calls", isOn: $emulator.networkModem.acceptsIncomingCalls)
+                .disabled(!emulator.networkModem.isEnabled)
+
+            LabeledContent("Port") {
+                TextField("Port",
+                          value: $emulator.networkModem.incomingPort,
+                          format: .number)
+                    .frame(width: 86)
+                    .disabled(!emulator.networkModem.isEnabled
+                              || !emulator.networkModem.acceptsIncomingCalls)
+            }
+
+            Stepper(value: $emulator.networkModem.autoAnswerRings,
+                    in: 0...9) {
+                Text(autoAnswerTitle)
+            }
+            .disabled(!emulator.networkModem.isEnabled
+                      || !emulator.networkModem.acceptsIncomingCalls)
+        }
+    }
+
+    @ViewBuilder
+    private var qLinkReloadedSection: some View {
+        if qLinkReloaded.supports(machine: emulator.machine) {
+            Section("Q-Link Reloaded") {
+                LabeledContent("Disk") {
+                    HStack(spacing: 8) {
+                        SettingsValueText(qLinkDiskTitle,
+                                          lineLimit: 2,
+                                          truncationMode: .middle)
+                        Button {
+                            qLinkReloaded.chooseDisk(for: emulator.machine)
+                        } label: {
+                            Label("Choose Disk", systemImage: "externaldrive")
+                        }
+                        .disabled(qLinkReloaded.isConnecting)
+                    }
+                }
+
+                LabeledContent("Profiles") {
+                    HStack(spacing: 8) {
+                        SettingsValueText(qLinkProfileSummary)
+
+                        Button {
+                            showsQLinkProfileManager = true
+                        } label: {
+                            Label("Manage Profiles", systemImage: "person.crop.circle.badge.gearshape")
+                        }
+                    }
+                }
+
+                Toggle(isOn: $qlinkCaptureProtocol) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Capture protocol")
+                        Text("Record every byte to/from the server and open a live packet viewer when you connect.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .disabled(qLinkReloaded.isConnecting)
+            }
+        }
+    }
+
+    private var qLinkDiskTitle: String {
+        guard let configuredDiskTitle = qLinkReloaded.configuredDiskTitle else {
+            return "No disk selected"
+        }
+
+        if let configuredDiskVersionTitle = qLinkReloaded.configuredDiskVersionTitle {
+            return "\(configuredDiskTitle) (\(configuredDiskVersionTitle))"
+        }
+
+        return configuredDiskTitle
+    }
+
+    private var qLinkProfileSummary: String {
+        let diskCount = qLinkReloaded.configuredDiskRegistrationProfiles.count
+        let keychainCount = qLinkReloaded.registrationProfiles.count
+        return "\(diskCount) on disk, \(keychainCount) in Keychain"
     }
 
     private var modemEnabledBinding: Binding<Bool> {
@@ -1459,6 +1547,737 @@ private struct NetworkSettingsPane: View {
         }
 
         return rings == 1 ? "Auto-answer after 1 ring" : "Auto-answer after \(rings) rings"
+    }
+}
+
+private struct QLinkProfileManagerSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var emulator: EmulatorSession
+    @EnvironmentObject private var qLinkReloaded: QLinkReloadedService
+    @State private var selectedDiskProfileID: String?
+    @State private var selectedKeychainProfileID: String?
+    @State private var pendingTransfer: QLinkProfileTransferConfirmation?
+    @State private var pendingDeletion: QLinkProfileDeletionConfirmation?
+    @State private var inspectedProfile: QLinkProfileInspection?
+
+    var body: some View {
+        SettingsSheetLayout(title: "Manage Q-Link Profiles",
+                            width: 780,
+                            minHeight: 520) {
+            VStack(alignment: .leading, spacing: 14) {
+                diskHeader
+                profileTransferView
+            }
+        } actions: {
+            Button("Done") {
+                dismiss()
+            }
+            .keyboardShortcut(.defaultAction)
+        }
+        .onAppear(perform: refreshProfiles)
+        .onChange(of: qLinkReloaded.configuredDiskRegistrationProfiles) { _, _ in
+            syncDiskProfileSelection()
+        }
+        .onChange(of: qLinkReloaded.registrationProfiles) { _, _ in
+            syncKeychainProfileSelection()
+        }
+        .confirmationDialog(transferConfirmationTitle,
+                            isPresented: transferConfirmationBinding,
+                            titleVisibility: .visible) {
+            if let pendingTransfer {
+                Button(pendingTransfer.buttonTitle) {
+                    performTransfer(pendingTransfer)
+                    self.pendingTransfer = nil
+                }
+            }
+
+            Button("Cancel", role: .cancel) {
+                pendingTransfer = nil
+            }
+        } message: {
+            Text(transferConfirmationMessage)
+        }
+        .confirmationDialog(deletionConfirmationTitle,
+                            isPresented: deletionConfirmationBinding,
+                            titleVisibility: .visible) {
+            if let pendingDeletion {
+                Button(pendingDeletion.buttonTitle, role: .destructive) {
+                    performDeletion(pendingDeletion)
+                    self.pendingDeletion = nil
+                }
+            }
+
+            Button("Cancel", role: .cancel) {
+                pendingDeletion = nil
+            }
+        } message: {
+            Text(deletionConfirmationMessage)
+        }
+        .sheet(item: $inspectedProfile) { inspection in
+            QLinkProfileDetailSheet(inspection: inspection)
+        }
+    }
+
+    private var diskHeader: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Label("Disk", systemImage: "externaldrive")
+                .font(.headline)
+
+            SettingsValueText(qLinkDiskTitle,
+                              lineLimit: 2,
+                              truncationMode: .middle)
+
+            Spacer()
+
+            Button {
+                qLinkReloaded.chooseDisk(for: emulator.machine)
+                refreshProfiles()
+            } label: {
+                Label("Choose Disk", systemImage: "externaldrive")
+            }
+            .disabled(qLinkReloaded.isConnecting)
+
+            Button {
+                refreshProfiles()
+            } label: {
+                Image(systemName: "arrow.clockwise")
+                    .frame(width: 18, height: 18)
+            }
+            .help("Refresh Q-Link profiles")
+        }
+    }
+
+    private var profileTransferView: some View {
+        HStack(alignment: .top, spacing: 12) {
+            diskProfileList
+
+            VStack(spacing: 10) {
+                Spacer(minLength: 72)
+
+                Button {
+                    copyDiskProfileToKeychain()
+                } label: {
+                    Image(systemName: "arrow.right")
+                        .frame(width: 20, height: 18)
+                }
+                .disabled(!canCopyDiskProfileToKeychain)
+                .help(copyDiskToKeychainHelp)
+                .accessibilityLabel("Copy to Keychain")
+
+                Button {
+                    copyKeychainProfileToDisk()
+                } label: {
+                    Image(systemName: "arrow.left")
+                        .frame(width: 20, height: 18)
+                }
+                .disabled(!canCopyKeychainProfileToDisk)
+                .help(copyKeychainToDiskHelp)
+                .accessibilityLabel("Copy to Q-Link disk")
+
+                Spacer()
+            }
+            .frame(width: 44)
+
+            keychainProfileList
+        }
+    }
+
+    private var diskProfileList: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("On the Q-Link Disk")
+                .font(.headline)
+
+            SettingsTableContainer(minHeight: 290) {
+                ZStack {
+                    List(selection: $selectedDiskProfileID) {
+                        ForEach(qLinkReloaded.configuredDiskRegistrationProfiles) { profile in
+                            profileRow(profile, source: .disk)
+                                .tag(profile.id)
+                        }
+                    }
+
+                    if qLinkReloaded.configuredDiskRegistrationProfiles.isEmpty {
+                        ContentUnavailableView(diskProfilesEmptyTitle,
+                                               systemImage: "person.crop.circle.badge.questionmark",
+                                               description: Text(diskProfilesEmptyDescription))
+                    }
+                }
+            } footer: {
+                HStack(spacing: 6) {
+                    Text(diskProfileCountTitle)
+                        .foregroundStyle(.secondary)
+
+                    Spacer()
+
+                    Button {
+                        inspectSelectedDiskProfile()
+                    } label: {
+                        Image(systemName: "info.circle")
+                            .frame(width: 18, height: 18)
+                    }
+                    .disabled(selectedDiskProfile == nil)
+                    .help("Show selected disk profile")
+
+                    Button(role: .destructive) {
+                        if let selectedDiskProfile {
+                            pendingDeletion = QLinkProfileDeletionConfirmation(location: .disk,
+                                                                               profile: selectedDiskProfile)
+                        }
+                    } label: {
+                        Image(systemName: "trash")
+                            .frame(width: 18, height: 18)
+                    }
+                    .disabled(selectedDiskProfile == nil)
+                    .help("Remove selected profile from the Q-Link disk")
+                }
+                .buttonStyle(.borderless)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var keychainProfileList: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("In Your Keychain")
+                .font(.headline)
+
+            SettingsTableContainer(minHeight: 290) {
+                ZStack {
+                    List(selection: $selectedKeychainProfileID) {
+                        ForEach(qLinkReloaded.registrationProfiles) { profile in
+                            profileRow(profile, source: .keychain)
+                                .tag(profile.id)
+                        }
+                    }
+
+                    if qLinkReloaded.registrationProfiles.isEmpty {
+                        ContentUnavailableView("No Profiles",
+                                               systemImage: "key",
+                                               description: Text("Saved Q-Link profiles will appear here."))
+                    }
+                }
+            } footer: {
+                HStack(spacing: 6) {
+                    Text(keychainProfileCountTitle)
+                        .foregroundStyle(.secondary)
+
+                    Spacer()
+
+                    Button {
+                        inspectSelectedKeychainProfile()
+                    } label: {
+                        Image(systemName: "info.circle")
+                            .frame(width: 18, height: 18)
+                    }
+                    .disabled(selectedKeychainProfile == nil)
+                    .help("Show selected Keychain profile")
+
+                    Button(role: .destructive) {
+                        if let selectedKeychainProfile {
+                            pendingDeletion = QLinkProfileDeletionConfirmation(location: .keychain,
+                                                                               profile: selectedKeychainProfile)
+                        }
+                    } label: {
+                        Image(systemName: "trash")
+                            .frame(width: 18, height: 18)
+                    }
+                    .disabled(selectedKeychainProfile == nil)
+                    .help("Delete selected profile from Keychain")
+                }
+                .buttonStyle(.borderless)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func profileRow(_ profile: QLinkReloadedRegistrationProfile,
+                            source: QLinkProfileLocation) -> some View {
+        HStack(spacing: 8) {
+            Label(profile.displayTitle, systemImage: source.systemImage)
+                .lineLimit(1)
+
+            Spacer()
+
+            Text(profile.accountDisplayTitle)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+                .lineLimit(1)
+        }
+        .contentShape(Rectangle())
+        .overlay {
+            SettingsTableCellClickHandler {
+                switch source {
+                case .disk:
+                    selectedDiskProfileID = profile.id
+                case .keychain:
+                    selectedKeychainProfileID = profile.id
+                }
+            } onDoubleClick: {
+                inspect(profile, source: source)
+            }
+        }
+    }
+
+    private var selectedDiskProfile: QLinkReloadedRegistrationProfile? {
+        guard let selectedDiskProfileID else {
+            return nil
+        }
+
+        return qLinkReloaded.configuredDiskRegistrationProfiles.first { $0.id == selectedDiskProfileID }
+    }
+
+    private var selectedKeychainProfile: QLinkReloadedRegistrationProfile? {
+        guard let selectedKeychainProfileID else {
+            return nil
+        }
+
+        return qLinkReloaded.registrationProfiles.first { $0.id == selectedKeychainProfileID }
+    }
+
+    private var canCopyDiskProfileToKeychain: Bool {
+        guard let selectedDiskProfile else {
+            return false
+        }
+
+        if let matchingProfile = keychainProfile(matching: selectedDiskProfile),
+           profilesMatch(selectedDiskProfile, matchingProfile) {
+            return false
+        }
+
+        return true
+    }
+
+    private var canCopyKeychainProfileToDisk: Bool {
+        guard qLinkReloaded.hasConfiguredDisk,
+              let selectedKeychainProfile else {
+            return false
+        }
+
+        if let matchingProfile = diskProfile(matching: selectedKeychainProfile) {
+            return !profilesMatch(selectedKeychainProfile, matchingProfile)
+        }
+
+        return qLinkReloaded.configuredDiskRegistrationProfiles.count < QLinkReloadedDiskPatcher.maximumRegistrationProfileCount
+    }
+
+    private var copyDiskToKeychainHelp: String {
+        guard let selectedDiskProfile else {
+            return "Select a disk profile"
+        }
+
+        if let matchingProfile = keychainProfile(matching: selectedDiskProfile),
+           profilesMatch(selectedDiskProfile, matchingProfile) {
+            return "This profile is already saved in Keychain"
+        }
+
+        return "Copy selected disk profile to Keychain"
+    }
+
+    private var copyKeychainToDiskHelp: String {
+        guard qLinkReloaded.hasConfiguredDisk else {
+            return "Choose a Q-Link disk"
+        }
+
+        guard let selectedKeychainProfile else {
+            return "Select a Keychain profile"
+        }
+
+        if let matchingProfile = diskProfile(matching: selectedKeychainProfile),
+           profilesMatch(selectedKeychainProfile, matchingProfile) {
+            return "This profile is already on the Q-Link disk"
+        }
+
+        if qLinkReloaded.configuredDiskRegistrationProfiles.count >= QLinkReloadedDiskPatcher.maximumRegistrationProfileCount,
+           diskProfile(matching: selectedKeychainProfile) == nil {
+            return "The Q-Link disk already has 10 profiles"
+        }
+
+        return "Copy selected Keychain profile to the Q-Link disk"
+    }
+
+    private var qLinkDiskTitle: String {
+        guard let configuredDiskTitle = qLinkReloaded.configuredDiskTitle else {
+            return "No Q-Link disk selected"
+        }
+
+        if let configuredDiskVersionTitle = qLinkReloaded.configuredDiskVersionTitle {
+            return "\(configuredDiskTitle) (\(configuredDiskVersionTitle))"
+        }
+
+        return configuredDiskTitle
+    }
+
+    private var diskProfilesEmptyTitle: String {
+        qLinkReloaded.hasConfiguredDisk ? "No Profiles" : "No Q-Link Disk"
+    }
+
+    private var diskProfilesEmptyDescription: String {
+        qLinkReloaded.hasConfiguredDisk
+            ? "This disk does not currently have saved Q-Link users."
+            : "Choose a validated Q-Link disk to manage its saved users."
+    }
+
+    private var diskProfileCountTitle: String {
+        "\(qLinkReloaded.configuredDiskRegistrationProfiles.count)/\(QLinkReloadedDiskPatcher.maximumRegistrationProfileCount)"
+    }
+
+    private var keychainProfileCountTitle: String {
+        let count = qLinkReloaded.registrationProfiles.count
+        return count == 1 ? "1 saved" : "\(count) saved"
+    }
+
+    private var transferConfirmationTitle: String {
+        pendingTransfer?.title ?? "Replace Q-Link Profile?"
+    }
+
+    private var transferConfirmationMessage: String {
+        pendingTransfer?.message ?? ""
+    }
+
+    private var transferConfirmationBinding: Binding<Bool> {
+        Binding {
+            pendingTransfer != nil
+        } set: { isPresented in
+            if !isPresented {
+                pendingTransfer = nil
+            }
+        }
+    }
+
+    private var deletionConfirmationTitle: String {
+        pendingDeletion?.title ?? "Remove Q-Link Profile?"
+    }
+
+    private var deletionConfirmationMessage: String {
+        pendingDeletion?.message ?? ""
+    }
+
+    private var deletionConfirmationBinding: Binding<Bool> {
+        Binding {
+            pendingDeletion != nil
+        } set: { isPresented in
+            if !isPresented {
+                pendingDeletion = nil
+            }
+        }
+    }
+
+    private func copyDiskProfileToKeychain() {
+        guard let selectedDiskProfile else {
+            return
+        }
+
+        if let matchingProfile = keychainProfile(matching: selectedDiskProfile) {
+            guard !profilesMatch(selectedDiskProfile, matchingProfile) else {
+                return
+            }
+
+            pendingTransfer = QLinkProfileTransferConfirmation(direction: .diskToKeychain,
+                                                               profile: selectedDiskProfile,
+                                                               reason: .profileMismatch)
+            return
+        }
+
+        performDiskToKeychainTransfer(selectedDiskProfile)
+    }
+
+    private func copyKeychainProfileToDisk() {
+        guard qLinkReloaded.hasConfiguredDisk,
+              let selectedKeychainProfile else {
+            return
+        }
+
+        if let matchingProfile = diskProfile(matching: selectedKeychainProfile) {
+            guard !profilesMatch(selectedKeychainProfile, matchingProfile) else {
+                return
+            }
+
+            pendingTransfer = QLinkProfileTransferConfirmation(direction: .keychainToDisk,
+                                                               profile: selectedKeychainProfile,
+                                                               reason: .profileMismatch)
+            return
+        }
+
+        guard qLinkReloaded.configuredDiskRegistrationProfiles.count < QLinkReloadedDiskPatcher.maximumRegistrationProfileCount else {
+            return
+        }
+
+        if let diskAccessCode = qLinkReloaded.configuredDiskRegistrationProfiles.first?.accessCode,
+           diskAccessCode != selectedKeychainProfile.accessCode {
+            pendingTransfer = QLinkProfileTransferConfirmation(direction: .keychainToDisk,
+                                                               profile: selectedKeychainProfile,
+                                                               reason: .sharedAccessCodeMismatch)
+            return
+        }
+
+        performKeychainToDiskTransfer(selectedKeychainProfile)
+    }
+
+    private func performTransfer(_ transfer: QLinkProfileTransferConfirmation) {
+        switch transfer.direction {
+        case .diskToKeychain:
+            performDiskToKeychainTransfer(transfer.profile)
+        case .keychainToDisk:
+            performKeychainToDiskTransfer(transfer.profile)
+        }
+    }
+
+    private func performDiskToKeychainTransfer(_ profile: QLinkReloadedRegistrationProfile) {
+        qLinkReloaded.copyRegistrationFromConfiguredDisk(id: profile.id,
+                                                         presentsNotice: false)
+        selectedKeychainProfileID = profile.id
+        refreshProfiles()
+    }
+
+    private func performKeychainToDiskTransfer(_ profile: QLinkReloadedRegistrationProfile) {
+        qLinkReloaded.addRegistrationToConfiguredDisk(id: profile.id,
+                                                      presentsNotice: false)
+        selectedDiskProfileID = profile.id
+        refreshProfiles()
+    }
+
+    private func performDeletion(_ deletion: QLinkProfileDeletionConfirmation) {
+        switch deletion.location {
+        case .disk:
+            qLinkReloaded.removeRegistrationFromConfiguredDisk(id: deletion.profile.id,
+                                                               presentsNotice: false)
+            if selectedDiskProfileID == deletion.profile.id {
+                selectedDiskProfileID = nil
+            }
+            qLinkReloaded.refreshConfiguredDiskRegistrationProfile()
+            syncDiskProfileSelection()
+        case .keychain:
+            qLinkReloaded.deleteRegistration(id: deletion.profile.id)
+            if selectedKeychainProfileID == deletion.profile.id {
+                selectedKeychainProfileID = nil
+            }
+            qLinkReloaded.refreshRegistrationProfiles()
+            syncKeychainProfileSelection()
+        }
+    }
+
+    private func inspectSelectedDiskProfile() {
+        if let selectedDiskProfile {
+            inspect(selectedDiskProfile, source: .disk)
+        }
+    }
+
+    private func inspectSelectedKeychainProfile() {
+        if let selectedKeychainProfile {
+            inspect(selectedKeychainProfile, source: .keychain)
+        }
+    }
+
+    private func inspect(_ profile: QLinkReloadedRegistrationProfile,
+                         source: QLinkProfileLocation) {
+        inspectedProfile = QLinkProfileInspection(location: source,
+                                                  profile: profile)
+    }
+
+    private func refreshProfiles() {
+        qLinkReloaded.refreshRegistrationProfiles()
+        qLinkReloaded.refreshConfiguredDiskRegistrationProfile()
+        syncDiskProfileSelection()
+        syncKeychainProfileSelection()
+    }
+
+    private func syncDiskProfileSelection() {
+        let profiles = qLinkReloaded.configuredDiskRegistrationProfiles
+        guard !profiles.contains(where: { $0.id == selectedDiskProfileID }) else {
+            return
+        }
+
+        selectedDiskProfileID = profiles.first?.id
+    }
+
+    private func syncKeychainProfileSelection() {
+        let profiles = qLinkReloaded.registrationProfiles
+        guard !profiles.contains(where: { $0.id == selectedKeychainProfileID }) else {
+            return
+        }
+
+        selectedKeychainProfileID = profiles.first?.id
+    }
+
+    private func keychainProfile(matching profile: QLinkReloadedRegistrationProfile) -> QLinkReloadedRegistrationProfile? {
+        qLinkReloaded.registrationProfiles.first { $0.id == profile.id }
+    }
+
+    private func diskProfile(matching profile: QLinkReloadedRegistrationProfile) -> QLinkReloadedRegistrationProfile? {
+        qLinkReloaded.configuredDiskRegistrationProfiles.first { $0.id == profile.id }
+    }
+
+    private func profilesMatch(_ lhs: QLinkReloadedRegistrationProfile,
+                               _ rhs: QLinkReloadedRegistrationProfile) -> Bool {
+        if !lhs.userRecord.isEmpty || !rhs.userRecord.isEmpty {
+            return lhs.accessCode == rhs.accessCode
+                && lhs.accountID == rhs.accountID
+                && lhs.userRecord == rhs.userRecord
+        }
+
+        return lhs == rhs
+    }
+}
+
+private struct QLinkProfileDetailSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let inspection: QLinkProfileInspection
+
+    var body: some View {
+        SettingsSheetLayout(title: "Q-Link Profile",
+                            width: 420,
+                            minHeight: 210) {
+            Form {
+                Section("Profile") {
+                    LabeledContent("Location") {
+                        SettingsValueText(inspection.location.detailTitle)
+                    }
+
+                    LabeledContent("Name") {
+                        SettingsValueText(inspection.profile.displayTitle)
+                    }
+
+                    LabeledContent("Account") {
+                        SettingsValueText(inspection.profile.fullAccountDisplayTitle)
+                            .monospacedDigit()
+                    }
+
+                    LabeledContent("Access Code") {
+                        SettingsValueText(inspection.profile.accessCode)
+                            .monospacedDigit()
+                    }
+
+                    LabeledContent("Key") {
+                        SettingsValueText(inspection.profile.id,
+                                          truncationMode: .middle)
+                    }
+                }
+            }
+            .formStyle(.grouped)
+        } actions: {
+            Button("Done") {
+                dismiss()
+            }
+            .keyboardShortcut(.defaultAction)
+        }
+    }
+}
+
+private enum QLinkProfileLocation {
+    case disk
+    case keychain
+
+    var detailTitle: String {
+        switch self {
+        case .disk:
+            return "On the Q-Link disk"
+        case .keychain:
+            return "In your Keychain"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .disk:
+            return "externaldrive"
+        case .keychain:
+            return "key"
+        }
+    }
+}
+
+private struct QLinkProfileInspection: Identifiable {
+    let id = UUID()
+    let location: QLinkProfileLocation
+    let profile: QLinkReloadedRegistrationProfile
+}
+
+private enum QLinkProfileTransferDirection {
+    case diskToKeychain
+    case keychainToDisk
+}
+
+private enum QLinkProfileTransferReason {
+    case profileMismatch
+    case sharedAccessCodeMismatch
+}
+
+private struct QLinkProfileTransferConfirmation: Identifiable {
+    let id = UUID()
+    let direction: QLinkProfileTransferDirection
+    let profile: QLinkReloadedRegistrationProfile
+    let reason: QLinkProfileTransferReason
+
+    var title: String {
+        if reason == .sharedAccessCodeMismatch {
+            return "Update Disk Access Code?"
+        }
+
+        switch direction {
+        case .diskToKeychain:
+            return "Replace Keychain Profile?"
+        case .keychainToDisk:
+            return "Replace Disk Profile?"
+        }
+    }
+
+    var buttonTitle: String {
+        if reason == .sharedAccessCodeMismatch {
+            return "Copy and Update Disk"
+        }
+
+        switch direction {
+        case .diskToKeychain:
+            return "Replace in Keychain"
+        case .keychainToDisk:
+            return "Replace on Disk"
+        }
+    }
+
+    var message: String {
+        if reason == .sharedAccessCodeMismatch {
+            return "This Q-Link disk already has profiles with a different shared access code. Copying \(profile.displayTitle) will replace that code for the disk and can affect the existing profiles on it."
+        }
+
+        switch direction {
+        case .diskToKeychain:
+            return "\(profile.displayTitle) already exists in Keychain, but its account or access code does not match the selected disk profile."
+        case .keychainToDisk:
+            return "\(profile.displayTitle) already exists on the Q-Link disk, but its account or access code does not match the selected Keychain profile."
+        }
+    }
+}
+
+private struct QLinkProfileDeletionConfirmation: Identifiable {
+    let id = UUID()
+    let location: QLinkProfileLocation
+    let profile: QLinkReloadedRegistrationProfile
+
+    var title: String {
+        switch location {
+        case .disk:
+            return "Remove Disk Profile?"
+        case .keychain:
+            return "Delete Keychain Profile?"
+        }
+    }
+
+    var buttonTitle: String {
+        switch location {
+        case .disk:
+            return "Remove from Disk"
+        case .keychain:
+            return "Delete from Keychain"
+        }
+    }
+
+    var message: String {
+        switch location {
+        case .disk:
+            return "Remove \(profile.displayTitle) from the managed Q-Link disk copy. Saved Keychain profiles will not be changed."
+        case .keychain:
+            return "Delete \(profile.displayTitle) from Keychain. The Q-Link disk will not be changed."
+        }
     }
 }
 
@@ -1653,7 +2472,7 @@ private struct ControlSettingsPane: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
             .overlay {
-                ControlDeviceCellClickHandler {
+                SettingsTableCellClickHandler {
                     selectedDeviceID = device.id
                 } onDoubleClick: {
                     editDevice(device)
@@ -1717,7 +2536,7 @@ private struct ControlSettingsPane: View {
     }
 }
 
-private struct ControlDeviceCellClickHandler: NSViewRepresentable {
+private struct SettingsTableCellClickHandler: NSViewRepresentable {
     let onSelect: () -> Void
     let onDoubleClick: () -> Void
 
@@ -1738,8 +2557,8 @@ private struct ControlDeviceCellClickHandler: NSViewRepresentable {
         var onDoubleClick: () -> Void = {}
 
         override func mouseDown(with event: NSEvent) {
-            if let tableView = enclosingTableView {
-                window?.makeFirstResponder(tableView)
+            if let enclosingSelectableView {
+                window?.makeFirstResponder(enclosingSelectableView)
             }
 
             onSelect()
@@ -1749,11 +2568,11 @@ private struct ControlDeviceCellClickHandler: NSViewRepresentable {
             }
         }
 
-        private var enclosingTableView: NSTableView? {
+        private var enclosingSelectableView: NSView? {
             var view = superview
             while let currentView = view {
-                if let tableView = currentView as? NSTableView {
-                    return tableView
+                if currentView is NSTableView || currentView is NSOutlineView {
+                    return currentView
                 }
 
                 view = currentView.superview
@@ -2598,4 +3417,5 @@ private struct SettingsPane<Content: View>: View {
         .environmentObject(AIAssistantSettings())
         .environmentObject(AIDocumentLibraryStore(rootURL: FileManager.default.temporaryDirectory.appendingPathComponent("ViceMacPreviewAIDocuments", isDirectory: true)))
         .environmentObject(MetadataIngestionSettings())
+        .environmentObject(QLinkReloadedService(registrationStore: QLinkReloadedRegistrationMemoryStore()))
 }

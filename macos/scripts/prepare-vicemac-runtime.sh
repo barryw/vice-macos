@@ -25,12 +25,83 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:/opt/local/bin:$PATH"
 
 mkdir -p "$BUILD_DIR" "$PRODUCTS_DIR"
 
+# --- Reliability guard -------------------------------------------------------
+# The build below only rebuilds a curated subset of the VICE source tree (see the
+# explicit `make -C ...` calls) and links each machine from pre-built static
+# archives. Edits to any source dir that is not in that subset (for example
+# src/rs232drv) are otherwise silently linked from stale objects, shipping a
+# runtime dylib that does not match the source. To guarantee the shared library
+# is rebuilt whenever it is needed, force a full clean rebuild when any tracked
+# VICE source file is newer than a previously built runtime dylib (or when no
+# dylib exists yet).
+vice_tracked_source_newer_than() {
+    local reference="$1"
+    find "$VICE_SRC/src" \
+        \( -name '*.c' -o -name '*.h' -o -name '*.S' \
+           -o -name '*.cc' -o -name '*.cpp' -o -name '*.y' -o -name '*.l' \) \
+        -newer "$reference" -print -quit 2>/dev/null
+}
+
+vice_runtime_dylib_is_stale() {
+    local target dylib
+    for target in "${MACHINE_TARGETS[@]}"; do
+        dylib="$PRODUCTS_DIR/libvicemac${target}.dylib"
+        if [[ ! -f "$dylib" ]]; then
+            return 0
+        fi
+        if [[ -n "$(vice_tracked_source_newer_than "$dylib")" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+if vice_runtime_dylib_is_stale; then
+    echo "VICE source changed since the last runtime build — forcing a clean rebuild of the engine." >&2
+    rm -rf "$BUILD_DIR"
+    mkdir -p "$BUILD_DIR"
+fi
+# -----------------------------------------------------------------------------
+
 latest_macos_runtime_target() {
     sw_vers -productVersion | awk -F. '{ print $1 "." $2 }'
 }
 
 ENGINE_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-$(latest_macos_runtime_target)}"
 export MACOSX_DEPLOYMENT_TARGET="$ENGINE_DEPLOYMENT_TARGET"
+
+clean_in_place_config() {
+    if [[ ! -f "$VICE_SRC/config.status" && ! -f "$VICE_SRC/Makefile" ]]; then
+        return
+    fi
+
+    cat >&2 <<EOF
+The VICE source tree has generated in-place configure state:
+  $VICE_SRC
+
+VICE Mac builds the emulator runtime out-of-tree in:
+  $BUILD_DIR
+
+Cleaning the generated in-place state before continuing.
+EOF
+
+    if [[ -f "$VICE_SRC/Makefile" ]]; then
+        make -C "$VICE_SRC" distclean
+    else
+        rm -f "$VICE_SRC/config.status" "$VICE_SRC/config.log"
+    fi
+
+    if [[ -f "$VICE_SRC/config.status" || -f "$VICE_SRC/Makefile" ]]; then
+        cat >&2 <<EOF
+VICE Mac could not remove the in-place VICE configure state.
+Run this once, then build again:
+  make -C "$VICE_SRC" distclean
+EOF
+        exit 1
+    fi
+}
+
+clean_in_place_config
 
 needs_autogen=0
 if [[ ! -x "$VICE_SRC/configure" || "$VICE_SRC/configure.ac" -nt "$VICE_SRC/configure" ]]; then
@@ -442,13 +513,14 @@ sign_runtime_framework_payload() {
 }
 
 embed_runtime_framework_in_app() {
-    local framework_dir="$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH/$FRAMEWORK_NAME"
+    local framework_dir
     local version
 
     if [[ -z "${TARGET_BUILD_DIR:-}" || -z "${FRAMEWORKS_FOLDER_PATH:-}" ]]; then
         return
     fi
 
+    framework_dir="$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH/$FRAMEWORK_NAME"
     version="$(runtime_version)"
     create_runtime_framework_skeleton "$framework_dir" "$version"
     copy_runtime_framework_payload "$framework_dir"
@@ -597,6 +669,28 @@ for machine_target in "${MACHINE_TARGETS[@]}"; do
     codesign_dylib "$dylib_path"
 
 done
+
+# --- Fail-closed verification ------------------------------------------------
+# Never let a stale runtime dylib ship silently. If, after building, any tracked
+# source is still newer than the produced dylib, the engine did not actually
+# rebuild that source — fail the build loudly instead of shipping a mismatched
+# runtime.
+for machine_target in "${MACHINE_TARGETS[@]}"; do
+    dylib_path="$PRODUCTS_DIR/libvicemac${machine_target}.dylib"
+    if [[ ! -f "$dylib_path" ]]; then
+        echo "BUILD ERROR: expected runtime dylib was not produced: $dylib_path" >&2
+        exit 1
+    fi
+    stale_source="$(vice_tracked_source_newer_than "$dylib_path")"
+    if [[ -n "$stale_source" ]]; then
+        echo "BUILD ERROR: runtime dylib is older than a source file — the engine did not rebuild it:" >&2
+        echo "  dylib:  $dylib_path" >&2
+        echo "  source: $stale_source" >&2
+        echo "Remove the engine build dir and rebuild:  rm -rf \"$BUILD_DIR\"" >&2
+        exit 1
+    fi
+done
+# -----------------------------------------------------------------------------
 
 embed_runtime_framework_in_app
 

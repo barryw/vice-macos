@@ -154,6 +154,7 @@ final class HayesModemService: @unchecked Sendable {
     private var ringTimer: DispatchSourceTimer?
     private var dialTimer: DispatchSourceTimer?
     private let dialTimeout: DispatchTimeInterval
+    private var captureLog: QLinkProtocolCapture?
 
     init(dialTimeout: DispatchTimeInterval = HayesModemService.defaultDialTimeout) {
         self.dialTimeout = dialTimeout
@@ -213,6 +214,23 @@ final class HayesModemService: @unchecked Sendable {
     func stop() {
         queue.sync {
             stopOnQueue(publish: true)
+        }
+    }
+
+    /// Begin writing a human-readable Q-Link protocol capture to `url`. Each line
+    /// is one decoded frame (or raw handshake chunk) with an absolute millisecond
+    /// timestamp and the delta from the previous line. No decoder tool needed.
+    func startProtocolCapture(to url: URL) {
+        queue.async {
+            self.captureLog?.close()
+            self.captureLog = QLinkProtocolCapture(url: url)
+        }
+    }
+
+    func stopProtocolCapture() {
+        queue.async {
+            self.captureLog?.close()
+            self.captureLog = nil
         }
     }
 
@@ -532,6 +550,7 @@ final class HayesModemService: @unchecked Sendable {
 
                 if let data,
                    !data.isEmpty {
+                    self.captureLog?.record(direction: 1, bytes: Array(data))
                     let bytes = self.bytesForSerial(fromRemoteBytes: Array(data))
                     self.sendSerialData(bytes)
                 }
@@ -1103,6 +1122,8 @@ final class HayesModemService: @unchecked Sendable {
             return
         }
 
+        captureLog?.record(direction: 0, bytes: bytes)
+
         let payload: [UInt8]
         if configuration.transportMode == .telnet {
             payload = bytes.flatMap { byte in
@@ -1287,5 +1308,170 @@ final class HayesModemService: @unchecked Sendable {
         default:
             return "\(endpoint)"
         }
+    }
+}
+
+/// Streams the raw Q-Link protocol bytes exchanged with the remote host into a
+/// human-readable text log. Reassembles Q-Link frames ($5A … $0D) across chunk
+/// boundaries and writes one line per frame (or per raw/handshake chunk) with an
+/// absolute millisecond timestamp and the delta from the previous line. The file
+/// is plain UTF-8 text — `cat`/`tail -f` it directly, no decoder needed.
+///
+/// Frame layout: $5A c1 c2 c3 c4 sendseq recvseq cmd [payload…] $0D
+///   c1..c4 = CRC-16 ($A001) nibble-packed; $20 = ACTION (2-char code at payload[0..2]).
+///
+/// All methods are expected to run on the owning HayesModemService serial queue.
+final class QLinkProtocolCapture {
+    private let handle: FileHandle?
+    private var bufC2S = [UInt8]()
+    private var bufS2C = [UInt8]()
+    private var lastLineTime: Date?
+
+    private static let CMD_START: UInt8 = 0x5A
+    private static let FRAME_END: UInt8 = 0x0D
+    private static let CMD_ACTION: UInt8 = 0x20
+    private static let cmdNames: [UInt8: String] = [
+        0x20: "ACTION", 0x69: "PING", 0x72: "RESET", 0x73: "RESETACK",
+        0x71: "WINDOWFULL", 0x65: "SEQERR", 0x61: "ACK"]
+
+    private static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss.SSS"
+        return formatter
+    }()
+
+    init?(url: URL) {
+        FileManager.default.createFile(atPath: url.path, contents: nil)
+        guard let handle = try? FileHandle(forWritingTo: url) else {
+            return nil
+        }
+        self.handle = handle
+        writeLine("# Q-Link protocol capture — started \(Self.timeFormatter.string(from: Date()))")
+        writeLine("# columns: <time> <Δsec> <dir> <frame>   (→ client→server, ← server→client)")
+    }
+
+    func close() {
+        try? handle?.close()
+    }
+
+    /// direction: 0 = client→server (→), 1 = server→client (←).
+    func record(direction: UInt8, bytes: [UInt8]) {
+        guard !bytes.isEmpty else {
+            return
+        }
+        if direction == 0 {
+            bufC2S.append(contentsOf: bytes)
+            drain(&bufC2S, arrow: "→", tag: "C2S")
+        } else {
+            bufS2C.append(contentsOf: bytes)
+            drain(&bufS2C, arrow: "←", tag: "S2C")
+        }
+    }
+
+    private func drain(_ buf: inout [UInt8], arrow: String, tag: String) {
+        while true {
+            guard let start = buf.firstIndex(of: Self.CMD_START) else {
+                if !buf.isEmpty {
+                    emitRaw(Array(buf), arrow: arrow, tag: tag)
+                    buf.removeAll()
+                }
+                return
+            }
+
+            if start > 0 {
+                emitRaw(Array(buf[0..<start]), arrow: arrow, tag: tag)
+                buf.removeFirst(start)
+            }
+
+            guard let end = buf[1...].firstIndex(of: Self.FRAME_END) else {
+                return  // incomplete frame — wait for more bytes
+            }
+
+            let frame = Array(buf[0...end])
+            buf.removeFirst(end + 1)
+            emitFrame(frame, arrow: arrow, tag: tag)
+        }
+    }
+
+    private func emitFrame(_ frame: [UInt8], arrow: String, tag: String) {
+        guard frame.count >= 9 else {
+            emitRaw(frame, arrow: arrow, tag: tag)
+            return
+        }
+
+        let c1 = frame[1], c2 = frame[2], c3 = frame[3], c4 = frame[4]
+        let reportedCRC = (UInt16(c1 & 0xF0 | c2 & 0x0F) << 8) | UInt16(c3 & 0xF0 | c4 & 0x0F)
+        let sendSeq = frame[5], recvSeq = frame[6], cmd = frame[7]
+        let payload = Array(frame[8..<(frame.count - 1)])
+        let computedCRC = Self.crc16(frame[5..<(frame.count - 1)])
+        let name = Self.cmdNames[cmd] ?? String(format: "$%02X", cmd)
+        let crcMark = computedCRC == reportedCRC
+            ? "crc✓"
+            : String(format: "crc✗(calc=$%04X)", computedCRC)
+
+        var summary: String
+        if cmd == Self.CMD_ACTION, payload.count >= 2 {
+            let code = Self.printable(Array(payload[0..<2]))
+            summary = "'\(code)' \(Self.printable(Array(payload[2...])))"
+        } else {
+            summary = Self.printable(payload)
+        }
+
+        emit("\(tag) \(arrow) \(name) s\(Self.hex2(sendSeq))/r\(Self.hex2(recvSeq)) \(crcMark) len=\(payload.count)  \(summary)")
+    }
+
+    private func emitRaw(_ bytes: [UInt8], arrow: String, tag: String) {
+        emit("\(tag) \(arrow) raw \(bytes.count)B  \(Self.escaped(bytes))")
+    }
+
+    private func emit(_ body: String) {
+        let now = Date()
+        let delta = lastLineTime.map { now.timeIntervalSince($0) } ?? 0
+        lastLineTime = now
+        let deltaText = String(format: "%+8.3f", delta)
+        writeLine("\(Self.timeFormatter.string(from: now))  \(deltaText)  \(body)")
+    }
+
+    private func writeLine(_ line: String) {
+        guard let data = (line + "\n").data(using: .utf8) else {
+            return
+        }
+        try? handle?.write(contentsOf: data)
+    }
+
+    private static func crc16(_ bytes: ArraySlice<UInt8>) -> UInt16 {
+        var crc: UInt16 = 0
+        for byte in bytes {
+            crc ^= UInt16(byte)
+            for _ in 0..<8 {
+                crc = (crc & 1) != 0 ? (crc >> 1) ^ 0xA001 : (crc >> 1)
+            }
+        }
+        return crc
+    }
+
+    private static func hex2(_ byte: UInt8) -> String {
+        String(format: "%02X", byte)
+    }
+
+    /// Printable rendering for frame payloads: printable ASCII verbatim, others as '.'.
+    private static func printable(_ bytes: [UInt8]) -> String {
+        String(bytes.map { (32..<127).contains($0) ? Character(UnicodeScalar($0)) : "." })
+    }
+
+    /// One-line rendering for raw/handshake bytes: printable ASCII verbatim, common
+    /// control chars as escapes, everything else as \xHH so the line stays readable.
+    private static func escaped(_ bytes: [UInt8]) -> String {
+        var out = ""
+        for byte in bytes {
+            switch byte {
+            case 0x0D: out += "\\r"
+            case 0x0A: out += "\\n"
+            case 0x09: out += "\\t"
+            case 0x20..<0x7F: out.unicodeScalars.append(UnicodeScalar(byte))
+            default: out += String(format: "\\x%02X", byte)
+            }
+        }
+        return out
     }
 }

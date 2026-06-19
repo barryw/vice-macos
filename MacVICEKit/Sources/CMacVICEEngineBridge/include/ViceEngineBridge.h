@@ -189,7 +189,11 @@ bool ViceEngineSetMachineModel(const char *model);
 bool ViceEngineTriggerMachineReset(bool hardReset);
 bool ViceEngineSetWarpMode(bool enabled);
 bool ViceEngineResetDrive(uint32_t unit);
-bool ViceEngineAttachDisk(uint32_t unit, uint32_t drive, const char *path, int32_t runMode);
+bool ViceEngineAttachDisk(uint32_t unit,
+                          uint32_t drive,
+                          const char *path,
+                          const char *programName,
+                          int32_t runMode);
 bool ViceEngineDetachDisk(uint32_t unit, uint32_t drive);
 bool ViceEnginePreviewDriveSound(uint32_t unit);
 bool ViceEngineAutostartMedia(const char *path, int32_t runMode);

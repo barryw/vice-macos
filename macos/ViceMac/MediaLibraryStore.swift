@@ -332,6 +332,8 @@ final class MediaLibraryStore {
 
         let sha256 = try Self.sha256Hex(for: sourceURL)
         if let existing = try item(matchingSHA256: sha256) {
+            try restoreManagedFileIfNeeded(for: existing,
+                                           from: sourceURL)
             return existing
         }
 
@@ -381,6 +383,31 @@ final class MediaLibraryStore {
 
     private func item(matchingSHA256 sha256: String) throws -> MediaLibraryItem? {
         try items().first { $0.primaryFile.sha256 == sha256 }
+    }
+
+    private func restoreManagedFileIfNeeded(for item: MediaLibraryItem,
+                                            from sourceURL: URL) throws {
+        let destinationURL = primaryFileURL(for: item)
+        guard !FileManager.default.fileExists(atPath: destinationURL.path) else {
+            return
+        }
+
+        let now = Date()
+        try FileManager.default.createDirectory(at: destinationURL.deletingLastPathComponent(),
+                                                withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+        let byteCount = try Self.byteCount(for: destinationURL)
+
+        _ = try executeUpdate("""
+        UPDATE media_files
+        SET original_path = ?, byte_count = ?, imported_at = ?
+        WHERE id = ?
+        """) { statement in
+            bind(sourceURL.path, to: statement, at: 1)
+            sqlite3_bind_int64(statement, 2, byteCount)
+            bind(now, to: statement, at: 3)
+            bind(item.primaryFile.id.uuidString, to: statement, at: 4)
+        }
     }
 
     private func insert(_ item: MediaLibraryItem) throws {
