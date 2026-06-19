@@ -14,6 +14,16 @@ DESTINATION="${VICE_MAC_CI_DESTINATION:-platform=macOS,arch=arm64}"
 
 swift test --package-path "$MACOS_DIR/../MacVICEKit"
 bash -n "$SCRIPT_DIR/package-macvicekit-runtime.sh"
+bash -n "$MACOS_DIR/../website/tools/build-macvicekit-docs.sh"
+bash -n "$MACOS_DIR/../website/tools/validate-containerfile-pages.sh"
+MACVICEKIT_DOC_OUTPUT_DIR="$DERIVED_DATA/MacVICEKitDocs" \
+    MACVICEKIT_DOC_DERIVED_DATA="$DERIVED_DATA/MacVICEKitDocBuild" \
+    bash "$MACOS_DIR/../website/tools/build-macvicekit-docs.sh"
+if [[ ! -f "$DERIVED_DATA/MacVICEKitDocs/documentation/macvicekit/index.html" ]]; then
+    echo "MacVICEKit DocC website output is missing its documentation entry point." >&2
+    exit 1
+fi
+bash "$MACOS_DIR/../website/tools/validate-containerfile-pages.sh"
 
 SCHEMES=(
     "VICE Mac C64"

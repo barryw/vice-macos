@@ -22,6 +22,7 @@ SDK_DIR="$WORK_DIR/$SDK_NAME"
 FRAMEWORK_DIR="$WORK_DIR/$FRAMEWORK_NAME"
 XCFRAMEWORK_NAME="MacVICERuntime.xcframework"
 XCFRAMEWORK_DIR="$SDK_DIR/Runtime/$XCFRAMEWORK_NAME"
+DOC_DERIVED_DATA="$WORK_DIR/macvicekit-docbuild"
 SDK_ZIP_PATH="$DIST_DIR/$SDK_NAME.zip"
 LATEST_SDK_ZIP_PATH="$DIST_DIR/MacVICEKit-latest-arm64.zip"
 
@@ -257,10 +258,30 @@ EOF
         "$REPO_ROOT/MacVICEKit/Tests/" "$SDK_DIR/Tests/"
 
     cp "$REPO_ROOT/MacVICEKit/README.md" "$SDK_DIR/README.md"
+    copy_docc_documentation "$docs_dir"
+}
 
-    if [[ -f "$REPO_ROOT/docs/MacVICEKit.md" ]]; then
-        cp "$REPO_ROOT/docs/MacVICEKit.md" "$docs_dir/MacVICEKit.md"
+copy_docc_documentation() {
+    local docs_dir="$1"
+    local archive
+
+    rm -rf "$DOC_DERIVED_DATA"
+    (
+        cd "$REPO_ROOT/MacVICEKit"
+        xcodebuild docbuild \
+            -scheme MacVICEKit \
+            -destination generic/platform=macOS \
+            -derivedDataPath "$DOC_DERIVED_DATA" \
+            -quiet
+    )
+
+    archive="$(find "$DOC_DERIVED_DATA/Build/Products" -name 'MacVICEKit.doccarchive' -type d -print -quit)"
+    if [[ -z "$archive" ]]; then
+        echo "MacVICEKit.doccarchive was not produced." >&2
+        exit 1
     fi
+
+    rsync -a --delete "$archive/" "$docs_dir/MacVICEKit.doccarchive/"
 }
 
 create_runtime_xcframework() {
@@ -282,7 +303,7 @@ Contents:
 - Sources/
 - Tests/
 - Runtime/MacVICERuntime.xcframework
-- Documentation/MacVICEKit.md
+- Documentation/MacVICEKit.doccarchive
 
 Use it from Xcode:
 

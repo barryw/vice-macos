@@ -69,3 +69,21 @@ VICE_MAC_SCREENSHOT_D64_LEFT=/path/to/disk.d64 website/tools/capture-marketing-s
 Pass `disk-manager` to refresh only the disk manager captures. CP/M-formatted
 D64s are real D64 containers, but they are not used for the marketing screenshot
 until CP/M directory support lands in the manager.
+
+## MacVICEKit Documentation
+
+MacVICEKit API docs are generated with Apple's DocC toolchain and committed as a
+static site under `docs/macvicekit/` so the Linux website deploy can serve them
+without needing Xcode.
+
+To regenerate them from the DocC catalog:
+
+```sh
+website/tools/build-macvicekit-docs.sh
+```
+
+The public entry point is:
+
+```text
+docs/macvicekit/documentation/macvicekit/
+```

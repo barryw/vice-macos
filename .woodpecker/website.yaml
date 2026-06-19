@@ -16,7 +16,9 @@ steps:
   - name: validate-static
     image: node:22-bookworm
     commands:
+      - bash -n website/tools/validate-containerfile-pages.sh
       - bash -n website/tools/capture-marketing-screenshots.sh
+      - bash website/tools/validate-containerfile-pages.sh
       - node --check website/site.js
 
   - name: validate-k8s

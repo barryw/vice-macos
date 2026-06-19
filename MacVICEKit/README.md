@@ -144,8 +144,15 @@ That directory must contain the `libvicemac*.dylib` files plus `VICEData`.
 
 `MacVICEMachine` currently supports `x64sc`, `x128`, `xvic`, `xpet`, `xplus4`, `xc16`, `xc232`, `xv364`, and `vsid`.
 
-## More Documentation
+## Apple Documentation
 
-See `docs/MacVICEKit.md` in the source checkout or
-`Documentation/MacVICEKit.md` in the release SDK for runtime packaging details,
-display configuration, project folder drives, and debugger examples.
+MacVICEKit ships with a DocC catalog. Open the package in Xcode and choose
+**Product > Build Documentation** to generate native Apple documentation, or
+build the website copy from the repository root:
+
+```sh
+website/tools/build-macvicekit-docs.sh
+```
+
+The release SDK includes `Documentation/MacVICEKit.doccarchive` for local
+Xcode-style API browsing.
