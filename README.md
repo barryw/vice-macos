@@ -11,12 +11,9 @@
 
 <p align="center">
   <a href="https://github.com/barryw/vice-macos/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/barryw/vice-macos?label=release&sort=semver"></a>
-  <a href="https://ci.barrywalker.io/repos/barryw/vice-macos"><img alt="Build status" src="https://ci.barrywalker.io/api/badges/barryw/vice-macos/status.svg?branch=main"></a>
-  <img alt="macOS 13+" src="https://img.shields.io/badge/macOS-13%2B-111111?logo=apple&logoColor=white">
-  <img alt="Apple Silicon" src="https://img.shields.io/badge/Apple%20Silicon-arm64-111111?logo=apple&logoColor=white">
-  <img alt="SwiftUI" src="https://img.shields.io/badge/SwiftUI-native-ff5a1f?logo=swift&logoColor=white">
-  <img alt="Metal" src="https://img.shields.io/badge/Metal-renderer-6e56cf">
-  <img alt="Coverage" src="https://img.shields.io/badge/coverage-XCTest%20gated-276ef1">
+  <a href="https://ci.barrywalker.io/repos/barryw/vice-macos"><img alt="Pipeline status" src="https://ci.barrywalker.io/api/badges/barryw/vice-macos/status.svg?branch=main"></a>
+  <img alt="macOS 26.5+" src="https://img.shields.io/badge/macOS-26.5%2B-111111?logo=apple&logoColor=white">
+  <a href="https://github.com/barryw/vice-macos/releases/latest/download/coverage.json"><img alt="Test coverage" src="https://img.shields.io/endpoint?url=https%3A%2F%2Fgithub.com%2Fbarryw%2Fvice-macos%2Freleases%2Flatest%2Fdownload%2Fcoverage.json"></a>
 </p>
 
 <p align="center">
@@ -259,7 +256,8 @@ On a green push, CI:
 4. Builds the reusable MacVICEKit SDK artifact with `MacVICERuntime.xcframework`.
 5. Signs, notarizes, staples, and smoke-tests the DMG.
 6. Publishes a GitHub Release named `vice-mac-<VICE version>-<git sha>-1`.
-7. Uploads the DMG, MacVICEKit SDK zip, `SHA256SUMS.txt`, and `appcast.xml`.
+7. Uploads the DMG, MacVICEKit SDK zip, `SHA256SUMS.txt`, `coverage.json`,
+   and `appcast.xml`.
 8. Deploys the website after GitHub's latest release endpoint points at that
    release.
 

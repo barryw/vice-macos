@@ -796,6 +796,11 @@ VICE_MAC_RUNTIME_VERSION="$RELEASE_ASSET_VERSION" \
 VICE_MAC_DIST_DIR="$DIST_DIR" \
 "$SCRIPT_DIR/package-macvicekit-runtime.sh"
 
+coverage_badge="${VICE_MAC_COVERAGE_BADGE_PATH:-$MACOS_DIR/BuildProducts/coverage/coverage.json}"
+if [[ -f "$coverage_badge" ]]; then
+    cp "$coverage_badge" "$DIST_DIR/coverage.json"
+fi
+
 (
     cd "$DIST_DIR"
     shopt -s nullglob

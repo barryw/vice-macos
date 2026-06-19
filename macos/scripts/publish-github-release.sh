@@ -611,6 +611,9 @@ publish_github_release_main() {
     if [[ -f "$DIST_DIR/SHA256SUMS.txt" ]]; then
         artifacts+=("$DIST_DIR/SHA256SUMS.txt")
     fi
+    if [[ -f "$DIST_DIR/coverage.json" ]]; then
+        artifacts+=("$DIST_DIR/coverage.json")
+    fi
     artifacts+=("$appcast_file")
 
     if ! gh release view "$tag" "${repo_args[@]}" >/dev/null 2>&1; then

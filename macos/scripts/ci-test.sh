@@ -11,12 +11,18 @@ fi
 DERIVED_DATA="${VICE_MAC_CI_DERIVED_DATA:-$DEFAULT_DERIVED_DATA}"
 CONFIGURATION="${VICE_MAC_CI_CONFIGURATION:-Debug}"
 DESTINATION="${VICE_MAC_CI_DESTINATION:-platform=macOS,arch=arm64}"
+COVERAGE_DIR="${VICE_MAC_COVERAGE_DIR:-$MACOS_DIR/BuildProducts/coverage}"
+COVERAGE_RESULT_BUNDLE="${VICE_MAC_COVERAGE_RESULT_BUNDLE:-$COVERAGE_DIR/ViceMacTests.xcresult}"
+COVERAGE_BADGE_PATH="${VICE_MAC_COVERAGE_BADGE_PATH:-$COVERAGE_DIR/coverage.json}"
+COVERAGE_SUMMARY_PATH="${VICE_MAC_COVERAGE_SUMMARY_PATH:-$COVERAGE_DIR/coverage.txt}"
 
 swift test --package-path "$MACOS_DIR/../MacVICEKit"
 bash "$MACOS_DIR/../MacVICEKit/tools/validate-documentation-examples.sh"
 bash -n "$SCRIPT_DIR/package-macvicekit-runtime.sh"
 bash -n "$MACOS_DIR/../website/tools/build-macvicekit-docs.sh"
 bash -n "$MACOS_DIR/../website/tools/validate-containerfile-pages.sh"
+bash -n "$SCRIPT_DIR/write-coverage-badge.sh"
+bash "$SCRIPT_DIR/test-coverage-badge.sh"
 MACVICEKIT_DOC_OUTPUT_DIR="$DERIVED_DATA/MacVICEKitDocs" \
     MACVICEKIT_DOC_DERIVED_DATA="$DERIVED_DATA/MacVICEKitDocBuild" \
     bash "$MACOS_DIR/../website/tools/build-macvicekit-docs.sh"
@@ -91,13 +97,22 @@ for index in "${!SCHEMES[@]}"; do
     verify_built_app_runtime "$app_name"
 done
 
+rm -rf "$COVERAGE_RESULT_BUNDLE"
+mkdir -p "$COVERAGE_DIR"
 xcodebuild \
     test \
     -project "$PROJECT" \
     -scheme "VICE Mac Tests" \
     -configuration "$CONFIGURATION" \
     -destination "$DESTINATION" \
-    -derivedDataPath "$DERIVED_DATA"
+    -derivedDataPath "$DERIVED_DATA" \
+    -enableCodeCoverage YES \
+    -resultBundlePath "$COVERAGE_RESULT_BUNDLE"
+
+bash "$SCRIPT_DIR/write-coverage-badge.sh" \
+    "$COVERAGE_RESULT_BUNDLE" \
+    "$COVERAGE_BADGE_PATH" \
+    "$COVERAGE_SUMMARY_PATH"
 
 bash "$SCRIPT_DIR/smoke-test-macvicekit-sdk.sh"
 bash "$SCRIPT_DIR/test-release-notes.sh"
