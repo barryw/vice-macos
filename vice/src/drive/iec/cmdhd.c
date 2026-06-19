@@ -805,19 +805,17 @@ static void store_pra9(via_context_t *via_context, uint8_t byte, uint8_t oldpa,
     }
 }
 
-static uint8_t read_pra9(via_context_t *via_context, uint16_t addr, bool peek_only)
+static uint8_t read_pra9(via_context_t *via_context, uint16_t addr)
 {
     cmdhd_context_t *hd = (cmdhd_context_t *)via_context->context;
     scsi_context_t *scsi = (scsi_context_t*)(hd->scsi);
     uint8_t byte;
 
     byte = scsi_get_bus(scsi);
-    if (!peek_only) {
-        if (scsi->state != SCSI_STATE_BUSFREE && (addr & 0xf) == VIA_PRA) {
-            scsi_process_ack(scsi);
-        } else {
-            scsi_process_noack(scsi);
-        }
+    if (scsi->state!=SCSI_STATE_BUSFREE && ((addr & 0xf) == VIA_PRA) ) {
+        scsi_process_ack(scsi);
+    } else {
+        scsi_process_noack(scsi);
     }
     return byte;
 }
@@ -835,21 +833,18 @@ static void store_prb9(via_context_t *via_context, uint8_t byte, uint8_t p_oldpb
         scsi->sel, scsi->bsyo, byte, scsi->rst));
 }
 
-static uint8_t read_prb9(via_context_t *via_context, bool peek_only)
+static uint8_t read_prb9(via_context_t *via_context)
 {
     cmdhd_context_t *hd = (cmdhd_context_t *)via_context->context;
     scsi_context_t *scsi = (scsi_context_t*)(hd->scsi);
     uint8_t temp, state;
 
-    if (!peek_only) {
-        scsi_process_noack(scsi);
-    }
-
+    scsi_process_noack(scsi);
     IDBG((LOG, "CMDHD: rprb9: SEL=%d BSY=%d REQ=%d", scsi->sel, scsi->bsyo, scsi->req));
     if ( (via_context->via[VIA_PCR] & 0xf0) == 0xf0 ) {
-        temp = (scsi->sel) & (scsi->bsyo);
+        temp=(scsi->sel) & (scsi->bsyo);
     } else {
-        temp = (!scsi->sel) & (scsi->bsyo);
+        temp=(!scsi->sel) & (scsi->bsyo);
     }
 
     /* mask scsi state to cmd specific pld value */
@@ -881,7 +876,7 @@ static uint8_t read_prb9(via_context_t *via_context, bool peek_only)
         (hd->scsi_dir << 3) | (state & 7);
 }
 
-static uint8_t read_prb10(via_context_t *via_context, bool peek_only)
+static uint8_t read_prb10(via_context_t *via_context)
 {
     uint8_t byte;
     drivevia_context_t *viap;
@@ -991,7 +986,7 @@ static void reset(via_context_t *via_context)
 {
 }
 
-static uint8_t read_pra10(via_context_t *via_context, uint16_t addr, bool peek_only)
+static uint8_t read_pra10(via_context_t *via_context, uint16_t addr)
 {
     return 255;
 }

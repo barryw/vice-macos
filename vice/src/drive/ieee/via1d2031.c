@@ -249,7 +249,7 @@ static void reset(via_context_t *via_context)
     parieee_is_out = 1;
 }
 
-static uint8_t read_pra(via_context_t *via_context, uint16_t addr, bool peek_only)
+static uint8_t read_pra(via_context_t *via_context, uint16_t addr)
 {
     uint8_t byte;
     drivevia1_context_t *via1p;
@@ -262,7 +262,7 @@ static uint8_t read_pra(via_context_t *via_context, uint16_t addr, bool peek_onl
            | (via_context->via[VIA_PRA] & via_context->via[VIA_DDRA]);
 }
 
-static uint8_t read_prb(via_context_t *via_context, bool peek_only)
+static uint8_t read_prb(via_context_t *via_context)
 {
     uint8_t byte;
     drivevia1_context_t *via1p;

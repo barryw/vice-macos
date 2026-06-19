@@ -117,7 +117,6 @@ void iec_drive_write(uint8_t data, unsigned int dnr)
     resolve_bus_signals();
 }
 
-/* This function must have no side effects */
 uint8_t iec_drive_read(unsigned int dnr)
 {
     uint8_t drive_bus_val;
@@ -141,18 +140,13 @@ uint8_t iec_drive_read(unsigned int dnr)
 
 /* These two routines are called for VIA1 Port A. */
 
-uint8_t iec_pa_peek(void)
-{
-    cpu_bus_val = (bus_data << 1) | bus_clock | (NOT(bus_atn) << 7);
-
-    return cpu_bus_val;
-}
-
 uint8_t iec_pa_read(void)
 {
     drive_catch_up_hook(maincpu_clk);
 
-    return iec_pa_peek();
+    cpu_bus_val = (bus_data << 1) | bus_clock | (NOT(bus_atn) << 7);
+
+    return cpu_bus_val;
 }
 
 /* NOTE: when adding drives, do the equivalent change in src/iecbus/iecbus.c */
