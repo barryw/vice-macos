@@ -36,6 +36,7 @@
 #include "autostart.h"
 #include "cmdline.h"
 #include "debug.h"
+#include "drive.h"
 #include "interrupt.h"
 #include "log.h"
 #include "machine.h"
@@ -279,6 +280,7 @@ void maincpu_resync_limits(void)
 
 void maincpu_mainloop(void)
 {
+#define ORIGIN_MEMSPACE (e_comp_space)
     /* Notice that using a struct for these would make it a lot slower (at
        least, on gcc 2.7.2.x).  */
  union regs {
@@ -380,6 +382,8 @@ void maincpu_mainloop(void)
 #include "65816core.c"
 
         maincpu_int_status->num_dma_per_opcode = 0;
+
+        drive_cycle_hook();
 
         if (maincpu_clk_limit && (maincpu_clk > maincpu_clk_limit)) {
             log_error(LOG_DEFAULT, "cycle limit reached.");

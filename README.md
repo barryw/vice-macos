@@ -14,8 +14,9 @@ Not bolted on. Not a wrapper. **~17,000 lines of C woven into the emulator itsel
 ## What Can You Do With This?
 
 ### For AI Agents
-Point any MCP-compatible client — Claude Desktop, Cursor, your own agent — at
-`localhost:6510` and you have a fully controllable Commodore 64. Your agent can:
+Point any MCP-compatible client - Claude Desktop, Cursor, your own agent - at
+`http://127.0.0.1:6510/mcp` and you have a fully controllable Commodore 64.
+Your agent can:
 
 - **Load and run software** — autostart PRGs and disk images
 - **Debug 6502 code** — breakpoints, watchpoints, conditional breaks, single-stepping
@@ -105,13 +106,13 @@ agent debugging a C128 program gets VIC-II *and* the VDC 80-column display.
 │         │  MCP Server     │                      │
 │         │  (libmcp.a)     │                      │
 │         │                 │                      │
-│         │  JSON-RPC 2.0   │◄──── POST /mcp ─────┤
-│         │  libmicrohttpd  │────► GET /events ───►│
+│         │  JSON-RPC 2.0   │<---- POST /mcp -----│
+│         │  libmicrohttpd  │---- GET /events 501>│
 │         │  Trap Dispatch  │                      │
 │         └─────────────────┘                      │
 │                                                  │
 └─────────────────────────────────────────────────┘
-        localhost:6510
+        127.0.0.1:6510 by default
 ```
 
 **Key design decisions:**
@@ -126,8 +127,8 @@ agent debugging a C128 program gets VIC-II *and* the VDC 80-column display.
   what it's working with.
 - **Monitor integration** — Works alongside VICE's built-in monitor. If the emulator
   is paused in the monitor, MCP requests execute directly without traps.
-- **SSE events** — Real-time notifications for breakpoint hits and state changes via
-  Server-Sent Events on `/events`.
+- **Reserved events endpoint** — `GET /events` exists but currently returns
+  `501 Not Implemented`. Poll state through `/mcp` until event streaming lands.
 
 ## Quick Start
 
@@ -145,41 +146,91 @@ x128 -mcpserver
 # VIC-20
 xvic -mcpserver
 
-# Custom port and host
-x64sc -mcpserver -mcpserverport 7000 -mcpserverhost 0.0.0.0
+# Listen on all network interfaces, port 7000
+x64sc -mcpserver -mcpserverhost 0.0.0.0 -mcpserverport 7000
 ```
 
-The MCP server starts on `localhost:6510` by default.
+The MCP server starts on `127.0.0.1:6510` by default. MCP clients connect to:
+
+```text
+http://127.0.0.1:6510/mcp
+```
+
+`0.0.0.0` is a bind address, not a client address. It means "listen on every
+interface". A client on the same Mac still connects to `127.0.0.1`; a client on
+another machine connects to the Mac's LAN IP address, for example
+`http://192.168.1.42:6510/mcp`.
+
+### Connection Recipes
+
+| Use case | Start VICE with | Client URL | Auth header |
+|---|---|---|---|
+| Same Mac, default | `x64sc -mcpserver` | `http://127.0.0.1:6510/mcp` | None |
+| Same Mac, custom port | `x64sc -mcpserver -mcpserverport 7000` | `http://127.0.0.1:7000/mcp` | None |
+| LAN access, trusted network | `x64sc -mcpserver -mcpserverhost 0.0.0.0` | `http://<mac-lan-ip>:6510/mcp` | None |
+| LAN access with bearer token | `x64sc -mcpserver -mcpserverhost 0.0.0.0 -mcpservertoken secret` | `http://<mac-lan-ip>:6510/mcp` | `Authorization: Bearer secret` |
+| Browser app with CORS | `x64sc -mcpserver -mcpservercorsorigin http://localhost:3000 -mcpservertoken secret` | `http://127.0.0.1:6510/mcp` | `Authorization: Bearer secret` |
+
+Token rules are intentionally simple:
+
+- No token configured: non-browser MCP clients can connect without an
+  `Authorization` header.
+- Token configured: every MCP request must include
+  `Authorization: Bearer <token>`.
+- CORS configured: a token is required. Wildcard CORS (`*`) is rejected.
+- Binding to `0.0.0.0` without a token is allowed for backwards compatibility,
+  but VICE logs a warning because remote clients can control the emulator.
 
 ### Talk to It
 
+All HTTP requests go to `/mcp`, must use `Content-Type: application/json`, and
+should send `Accept: application/json`.
+
 ```bash
-# Ping
-curl -s http://localhost:6510/mcp -d '{
-  "jsonrpc": "2.0", "id": 1,
+# Direct JSON-RPC call
+curl -sS http://127.0.0.1:6510/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json' \
+  --data '{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "vice.ping"
+}'
+
+# Standard MCP tools/call form, used by Claude Code and other MCP clients
+curl -sS http://127.0.0.1:6510/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json' \
+  --data '{
+  "jsonrpc": "2.0",
+  "id": 2,
   "method": "tools/call",
-  "params": { "name": "vice.ping" }
+  "params": { "name": "vice_ping", "arguments": {} }
 }'
 
 # Read the BASIC ROM entry point
-curl -s http://localhost:6510/mcp -d '{
-  "jsonrpc": "2.0", "id": 2,
+curl -sS http://127.0.0.1:6510/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json' \
+  --data '{
+  "jsonrpc": "2.0",
+  "id": 3,
   "method": "tools/call",
   "params": {
-    "name": "vice.memory.read",
-    "arguments": { "address": "0xA000", "length": 16 }
+    "name": "vice_memory_read",
+    "arguments": { "address": "0xA000", "size": 16, "encoding": "hex" }
   }
 }'
+```
 
-# Take a screenshot
-curl -s http://localhost:6510/mcp -d '{
-  "jsonrpc": "2.0", "id": 3,
-  "method": "tools/call",
-  "params": {
-    "name": "vice.display.screenshot",
-    "arguments": { "format": "base64" }
-  }
-}'
+When a token is configured, add the bearer header to every request:
+
+```bash
+curl -sS http://127.0.0.1:6510/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json' \
+  -H 'Authorization: Bearer secret' \
+  --data '{"jsonrpc":"2.0","id":1,"method":"vice.ping"}'
 ```
 
 ### Use with Claude Desktop
@@ -190,13 +241,17 @@ Add this to your Claude Desktop MCP config:
 {
   "mcpServers": {
     "vice": {
-      "url": "http://localhost:6510/mcp"
+      "url": "http://127.0.0.1:6510/mcp"
     }
   }
 }
 ```
 
 Then just talk to it: *"Load the game on drive 8 and show me what's on screen."*
+
+If VICE was started with `-mcpservertoken`, the client must send
+`Authorization: Bearer <token>` on every request. If your MCP client cannot
+configure HTTP headers, do not use a token for local-only `127.0.0.1` sessions.
 
 ## Building from Source
 
@@ -252,7 +307,7 @@ a convenience method for every tool:
 ```python
 from tools.resilience.vice_mcp_resilient import ViceMCPClient
 
-with ViceMCPClient("http://localhost:6510") as vice:
+with ViceMCPClient("http://127.0.0.1:6510") as vice:
     # Load a program
     vice.autostart("/path/to/game.prg")
 
@@ -319,17 +374,31 @@ Any MCP-compatible client can drive VICE directly:
 
 ## Security
 
-The MCP server is **localhost-only by default** (`127.0.0.1`). It has no authentication
-and no TLS — it's designed for local development, not network exposure.
+The MCP server is **localhost-only by default** (`127.0.0.1`). With the default
+settings, only programs on the same machine can connect.
+
+It has no TLS. It has optional bearer-token authentication. It is designed for
+local development first, and network exposure should be deliberate.
 
 If you need remote access, put it behind a reverse proxy with proper auth:
 
 ```
-nginx/caddy → auth → https → localhost:6510
+nginx/caddy -> auth -> https -> 127.0.0.1:6510
 ```
 
-Binding to `0.0.0.0` is supported via `-mcpserverhost` but you're on your own
-for security at that point.
+Binding to `0.0.0.0` is supported via `-mcpserverhost`. That makes VICE listen
+on every network interface. It does not mean clients connect to `0.0.0.0`; remote
+clients connect to the Mac/Linux/Windows host's real IP address.
+
+Use this checklist for remote sessions:
+
+- Start VICE with `-mcpserverhost 0.0.0.0`.
+- Prefer adding `-mcpservertoken <token>` unless the network is already trusted.
+- Configure the client URL as `http://<host-ip>:6510/mcp`.
+- If a token is configured, configure the client to send
+  `Authorization: Bearer <token>`.
+- For browser-based clients, also configure one exact
+  `-mcpservercorsorigin <origin>` and a token. CORS without a token is rejected.
 
 ## Relationship to Upstream VICE
 
@@ -347,7 +416,7 @@ is structured to export cleanly as unified diffs for SVN submission.
 ## Tool Reference
 
 <details>
-<summary><strong>Click to expand full reference for all 63 tools</strong></summary>
+<summary><strong>Click to expand full reference for all 64 tools</strong></summary>
 
 ### Execution Control
 
@@ -836,7 +905,7 @@ Read entries without stopping the log.
 ## Project Status
 
 This is active, working software. The MCP server compiles and runs on Linux, macOS,
-and Windows. All 63 tools are implemented and tested. CI produces binaries for all
+and Windows. All 64 tools are implemented and tested. CI produces binaries for all
 three platforms on every push.
 
 **What's solid:**
@@ -847,7 +916,7 @@ three platforms on every push.
 - Automated CI/CD pipeline with binary releases
 
 **What's in progress:**
-- SSE event streaming (infrastructure present, limited by libmicrohttpd)
+- Event streaming. `GET /events` is reserved but returns `501 Not Implemented` today.
 - Execution tracing and interrupt logging hooks into VICE CPU core
 
 ## Contributing
@@ -861,7 +930,7 @@ and modern AI tooling. Contributions from either world (or both) are welcome.
 **Areas where help would be especially appreciated:**
 
 - **VICE internals** — Hooking execution tracing and interrupt logging into the CPU core
-- **WebSocket transport** — Upgrading from SSE to full bidirectional streaming
+- **Event streaming transport** — Adding real-time breakpoint and state-change notifications
 - **Additional machine support** — Testing and tuning tools for PET, CBM-II, Plus/4
 - **Client libraries** — TypeScript, Rust, Go clients
 - **Documentation** — Tutorials, example workflows, video demos

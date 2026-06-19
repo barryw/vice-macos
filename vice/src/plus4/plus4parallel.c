@@ -62,6 +62,9 @@ void parallel_cable_drive_write(int port, uint8_t data, int handshake, unsigned 
     parallel_cable_drive_value[dnr] = data;
 }
 
+/*
+ * This function must have no side effects if handshake is false.
+ */
 uint8_t parallel_cable_drive_read(int type, int handshake)
 {
     return parallel_cable_cpu_value & parallel_cable_drive_value[0] & parallel_cable_drive_value[1];
@@ -131,7 +134,7 @@ static void parallel_cable_cpu_write(int type, uint8_t data)
         return;
     }
 
-    drive_cpu_execute_all(last_write_cycle);
+    drive_catch_up_hook(last_write_cycle);
 
     parallel_cable_cpu_value = data;
 }
@@ -145,7 +148,7 @@ static uint8_t parallel_cable_cpu_read(int type, uint8_t orig)
         return orig;
     }
 
-    drive_cpu_execute_all(maincpu_clk);
+    drive_catch_up_hook(maincpu_clk);
 
     return data & (parallel_cable_cpu_value & parallel_cable_drive_value[0] & parallel_cable_drive_value[1]);
 }
