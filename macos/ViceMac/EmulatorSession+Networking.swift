@@ -71,6 +71,16 @@ extension EmulatorSession {
         }
     }
 
+    /// Start writing a human-readable Q-Link protocol capture (taps the modem's
+    /// remote connection — the actual q-link.net wire).
+    func startProtocolCapture(to url: URL) {
+        hayesModemService.startProtocolCapture(to: url)
+    }
+
+    func stopProtocolCapture() {
+        hayesModemService.stopProtocolCapture()
+    }
+
     private func applyNetworkModemResources(configuration: NetworkModemConfiguration,
                                             localPort: Int) {
         setVICEStringResource("RsDevice3", value: "127.0.0.1:\(localPort)")

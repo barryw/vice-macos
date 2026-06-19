@@ -1109,13 +1109,14 @@ final class QLinkReloadedService: ObservableObject {
     /// UserDefaults so the capture viewer window can find it.
     private func configureProtocolCapture(emulator: EmulatorSession) {
         if Self.defaults.bool(forKey: "vice.qlink.captureProtocol") {
-            let name = "qlink-capture-\(Int(Date().timeIntervalSince1970)).cap"
-            let path = FileManager.default.temporaryDirectory
-                .appendingPathComponent(name).path
-            _ = emulator.engine.setStringResource("QLinkCaptureFile", value: path)
-            Self.defaults.set(path, forKey: "vice.qlink.activeCapturePath")
+            let name = "qlink-capture-\(Int(Date().timeIntervalSince1970)).log"
+            let url = FileManager.default.temporaryDirectory
+                .appendingPathComponent(name)
+            emulator.startProtocolCapture(to: url)
+            Self.defaults.set(url.path, forKey: "vice.qlink.activeCapturePath")
+            NSLog("QLINK capture -> \(url.path)")
         } else {
-            _ = emulator.engine.setStringResource("QLinkCaptureFile", value: "")
+            emulator.stopProtocolCapture()
             Self.defaults.removeObject(forKey: "vice.qlink.activeCapturePath")
         }
     }
@@ -1194,6 +1195,10 @@ final class QLinkReloadedService: ObservableObject {
                 return
             }
 
+            // Set the capture resource AFTER attachDisk has powered the machine on
+            // — the engine bridge drops resource writes while the engine is not
+            // running (ViceEngineSetStringResource returns false), so this must run
+            // here and not before the machine starts.
             configureProtocolCapture(emulator: emulator)
 
             emulator.statusText = "Q-Link Reloaded connecting through q-link.net:5190"
@@ -2326,11 +2331,17 @@ enum QLinkDecoder {
 
 @MainActor
 final class QLinkCaptureViewerModel: ObservableObject {
-    @Published var entries: [QLinkEntry] = []
+    struct CaptureLine: Identifiable {
+        let id: Int
+        let text: String
+    }
+
+    @Published var lines: [CaptureLine] = []
     @Published var path: String = ""
     private var timer: Timer?
 
     func start(path: String) {
+        NSLog("QLINK viewer: start(path=\(path))")
         self.path = path
         timer?.invalidate()
         refresh()
@@ -2342,8 +2353,24 @@ final class QLinkCaptureViewerModel: ObservableObject {
     func stop() { timer?.invalidate(); timer = nil }
 
     private func refresh() {
-        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)) else { return }
-        entries = QLinkDecoder.parse(data)
+        // The capture file is plain UTF-8 text (one decoded frame per line); just tail it.
+        guard !path.isEmpty else { return }
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)) else {
+            NSLog("QLINK viewer: cannot read path=\(path)")
+            return
+        }
+        guard let text = String(data: data, encoding: .utf8) else {
+            NSLog("QLINK viewer: not utf8 (\(data.count) bytes) path=\(path)")
+            return
+        }
+        let newLines = text
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .enumerated()
+            .map { CaptureLine(id: $0.offset, text: String($0.element)) }
+        if newLines.count != lines.count {
+            NSLog("QLINK viewer: \(data.count) bytes, \(newLines.count) lines, path=\(path)")
+        }
+        lines = newLines
     }
 }
 
@@ -2359,21 +2386,32 @@ struct QLinkCaptureViewer: View {
             HStack {
                 Text("Q-Link Packet Capture").font(.headline)
                 Spacer()
-                Text("\(model.entries.count) frames").foregroundStyle(.secondary)
+                Text("\(model.lines.count) lines").foregroundStyle(.secondary)
                 Button("Done") { dismiss() }
             }.padding()
             Divider()
             ScrollViewReader { proxy in
-                List(model.entries) { e in
-                    QLinkEntryRow(entry: e).id(e.id)
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 1) {
+                        ForEach(model.lines) { line in
+                            Text(line.text.isEmpty ? " " : line.text)
+                                .font(.system(.caption, design: .monospaced))
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .id(line.id)
+                        }
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
                 }
-                .onChange(of: model.entries.count) { _, _ in
-                    if let last = model.entries.last { proxy.scrollTo(last.id, anchor: .bottom) }
+                .onChange(of: model.lines.count) { _, _ in
+                    if let last = model.lines.last { proxy.scrollTo(last.id, anchor: .bottom) }
                 }
             }
         }
-        .frame(minWidth: 560, minHeight: 420)
+        .frame(minWidth: 640, minHeight: 420)
         .onAppear { model.start(path: capturePath) }
+        .onChange(of: capturePath) { _, newPath in model.start(path: newPath) }
         .onDisappear { model.stop() }
     }
 }
