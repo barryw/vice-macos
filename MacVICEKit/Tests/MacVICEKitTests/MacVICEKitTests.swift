@@ -782,7 +782,10 @@ final class MacVICEKitTests: XCTestCase {
     }
 
     private func sourceText(at relativePath: String) throws -> String {
-        let rootURL = try repositoryRoot()
+        guard let rootURL = repositoryRoot() else {
+            throw XCTSkip("Source checkout unavailable; this test requires the bundled VICE source tree.")
+        }
+
         return try String(contentsOf: rootURL.appendingPathComponent(relativePath),
                           encoding: .utf8)
     }
@@ -898,7 +901,7 @@ final class MacVICEKitTests: XCTestCase {
         return false
     }
 
-    private func repositoryRoot() throws -> URL {
+    private func repositoryRoot() -> URL? {
         var url = URL(fileURLWithPath: #filePath)
         while url.path != "/" {
             let fileManager = FileManager.default
@@ -908,7 +911,7 @@ final class MacVICEKitTests: XCTestCase {
             }
             url.deleteLastPathComponent()
         }
-        throw MacVICEError.runtimeNotFound("Unable to locate repository root from \(#filePath)")
+        return nil
     }
 
     private func createRuntimeDirectory(for machines: MacVICEMachine...) throws -> URL {
