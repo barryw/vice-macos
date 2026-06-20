@@ -1,6 +1,7 @@
 import CryptoKit
 import Foundation
 import MacVICEKit
+import Network
 import Security
 
 enum QLinkReloadedServiceError: LocalizedError, Equatable {
@@ -32,12 +33,430 @@ enum QLinkReloadedServiceError: LocalizedError, Equatable {
             return """
             Some current settings are not compatible with Q-Link Reloaded. VICE Mac did not change them.
 
-            Q-Link Reloaded needs a User Port modem at 1200 baud using Raw TCP to q-link.net:5190, plus a writable disk image in drive 8 so the client can validate and update its disk.
+            Q-Link Reloaded needs a User Port modem at 1200 baud using Raw TCP with a dial host configured, plus a writable disk image in drive 8 so the client can validate and update its disk.
 
             Current differences:
             \(issueText)
             """
         }
+    }
+}
+
+enum QLinkReloadedSupport {
+    static func canConnect(machine: EmulatedMachine,
+                           hasConfiguredDisk: Bool,
+                           isConnecting: Bool) -> Bool {
+        supports(machine: machine) && hasConfiguredDisk && !isConnecting
+    }
+
+    static func supports(machine: EmulatedMachine) -> Bool {
+        switch machine.family {
+        case .c64, .c128:
+            return machine.capabilities.supportsNetworking
+        case .pet, .vic20, .ted:
+            return false
+        }
+    }
+}
+
+enum QLinkReloadedServerCheckResult: Equatable {
+    case success
+    case failure(String)
+}
+
+protocol QLinkReloadedConnectionChecking: Sendable {
+    func validateQLinkServer(host: String, port: Int) async -> QLinkReloadedServerCheckResult
+}
+
+enum QLinkReloadedConfigurationValidationOutcome: Equatable {
+    case success(String)
+    case failure(String)
+}
+
+enum QLinkReloadedConfigurationValidationStatus: Equatable {
+    case idle
+    case checking
+    case valid(String)
+    case invalid(String)
+
+    var title: String {
+        switch self {
+        case .idle:
+            return "Not checked"
+        case .checking:
+            return "Checking..."
+        case let .valid(message), let .invalid(message):
+            return message
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .idle:
+            return "questionmark.circle"
+        case .checking:
+            return "hourglass"
+        case .valid:
+            return "checkmark.circle"
+        case .invalid:
+            return "xmark.octagon"
+        }
+    }
+
+    var isChecking: Bool {
+        if case .checking = self {
+            return true
+        }
+        return false
+    }
+
+    static func status(for outcome: QLinkReloadedConfigurationValidationOutcome) -> Self {
+        switch outcome {
+        case let .success(message):
+            return .valid(message)
+        case let .failure(message):
+            return .invalid(message)
+        }
+    }
+}
+
+struct QLinkReloadedConfigurationValidator: Sendable {
+    private let connectionChecker: any QLinkReloadedConnectionChecking
+
+    init(connectionChecker: any QLinkReloadedConnectionChecking = QLinkReloadedServerConnectionChecker()) {
+        self.connectionChecker = connectionChecker
+    }
+
+    func validate(configuration: NetworkModemConfiguration,
+                  machine: EmulatedMachine,
+                  storedProfileCount: Int) async -> QLinkReloadedConfigurationValidationOutcome {
+        let issues = QLinkReloadedModemRequirements.incompatibilities(in: configuration,
+                                                                      for: machine)
+        guard issues.isEmpty else {
+            return .failure("Current modem settings are not compatible with Q-Link Reloaded:\n" + issues.map { "- \($0)" }.joined(separator: "\n"))
+        }
+
+        let modem = configuration.normalized(for: machine)
+        let result = await connectionChecker.validateQLinkServer(host: modem.defaultDialHost,
+                                                                 port: modem.defaultDialPort)
+        switch result {
+        case .success:
+            return .success(successMessage(storedProfileCount: storedProfileCount))
+        case let .failure(message):
+            return .failure(message)
+        }
+    }
+
+    private func successMessage(storedProfileCount: Int) -> String {
+        switch storedProfileCount {
+        case 0:
+            return "Server responded correctly. No stored profiles are available locally."
+        case 1:
+            return "Server responded correctly. 1 stored profile is available locally."
+        default:
+            return "Server responded correctly. \(storedProfileCount) stored profiles are available locally."
+        }
+    }
+}
+
+enum QLinkReloadedProtocolProbe {
+    static let commandStart: UInt8 = 0x5A
+    static let frameEnd: UInt8 = 0x0D
+    static let resetCommand: UInt8 = 0x23
+    static let resetAckCommand: UInt8 = 0x24
+    static let defaultSequence: UInt8 = 0x7F
+
+    static func resetFrame() -> Data {
+        frame(command: resetCommand,
+              sendSequence: defaultSequence,
+              receiveSequence: defaultSequence,
+              payload: [5, 9])
+    }
+
+    static func frame(command: UInt8,
+                      sendSequence: UInt8,
+                      receiveSequence: UInt8,
+                      payload: [UInt8]) -> Data {
+        var bytes = [UInt8](repeating: 0, count: 8 + payload.count)
+        bytes[0] = commandStart
+        bytes[5] = sendSequence
+        bytes[6] = receiveSequence
+        bytes[7] = command
+        for (index, byte) in payload.enumerated() {
+            bytes[8 + index] = byte
+        }
+        writeCRC(into: &bytes)
+        bytes.append(frameEnd)
+        return Data(bytes)
+    }
+
+    static func containsResetAck(in bytes: [UInt8]) -> Bool {
+        var index = 0
+        while index < bytes.count {
+            guard bytes[index] == commandStart else {
+                index += 1
+                continue
+            }
+
+            guard let end = bytes[(index + 1)...].firstIndex(of: frameEnd) else {
+                return false
+            }
+
+            if isResetAckFrame(Array(bytes[index...end])) {
+                return true
+            }
+            index = end + 1
+        }
+
+        return false
+    }
+
+    static func isValidFrame(_ frame: [UInt8]) -> Bool {
+        guard frame.count >= 9,
+              frame.first == commandStart,
+              frame.last == frameEnd else {
+            return false
+        }
+
+        let body = Array(frame.dropLast())
+        return reportedCRC(in: body) == crc16(body[5..<body.count])
+    }
+
+    private static func isResetAckFrame(_ frame: [UInt8]) -> Bool {
+        isValidFrame(frame) && frame.count >= 9 && frame[7] == resetAckCommand
+    }
+
+    private static func writeCRC(into bytes: inout [UInt8]) {
+        let crc = crc16(bytes[5..<bytes.count])
+        bytes[1] = UInt8(((crc & 0xF000) >> 8) | 0x01)
+        bytes[2] = UInt8(((crc & 0x0F00) >> 8) | 0x40)
+        bytes[3] = UInt8((crc & 0x00F0) | 0x01)
+        bytes[4] = UInt8((crc & 0x000F) | 0x40)
+    }
+
+    private static func reportedCRC(in bytes: [UInt8]) -> UInt16 {
+        guard bytes.count >= 5 else {
+            return 0
+        }
+
+        return (UInt16(bytes[1] & 0xF0 | bytes[2] & 0x0F) << 8)
+            | UInt16(bytes[3] & 0xF0 | bytes[4] & 0x0F)
+    }
+
+    private static func crc16(_ bytes: ArraySlice<UInt8>) -> UInt16 {
+        var crc: UInt16 = 0
+        for byte in bytes {
+            crc ^= UInt16(byte)
+            for _ in 0..<8 {
+                crc = (crc & 1) != 0 ? (crc >> 1) ^ 0xA001 : (crc >> 1)
+            }
+        }
+        return crc
+    }
+}
+
+struct QLinkReloadedServerConnectionChecker: QLinkReloadedConnectionChecking {
+    var timeout: TimeInterval = 6
+
+    func validateQLinkServer(host: String, port: Int) async -> QLinkReloadedServerCheckResult {
+        guard NetworkModemConfiguration.tcpPortRange.contains(port),
+              let endpointPort = NWEndpoint.Port(rawValue: UInt16(port)) else {
+            return .failure("Port \(port) is not valid.")
+        }
+
+        return await QLinkReloadedServerProbe(host: host,
+                                              port: endpointPort,
+                                              timeout: timeout).validate()
+    }
+}
+
+private final class QLinkReloadedServerProbe: @unchecked Sendable {
+    private enum Phase {
+        case waitingForTerminalPrompt
+        case waitingForTerminalAccepted
+        case waitingForConnected
+        case waitingForResetAck
+    }
+
+    private let host: String
+    private let port: NWEndpoint.Port
+    private let timeout: TimeInterval
+    private let queue = DispatchQueue(label: "com.barrywalker.ViceMac.QLinkValidation")
+    private lazy var connection = NWConnection(host: NWEndpoint.Host(host),
+                                               port: port,
+                                               using: .tcp)
+    private var continuation: CheckedContinuation<QLinkReloadedServerCheckResult, Never>?
+    private var phase = Phase.waitingForTerminalPrompt
+    private var receivedBytes: [UInt8] = []
+    private var didFinish = false
+
+    init(host: String, port: NWEndpoint.Port, timeout: TimeInterval) {
+        self.host = host
+        self.port = port
+        self.timeout = timeout
+    }
+
+    func validate() async -> QLinkReloadedServerCheckResult {
+        await withTaskGroup(of: QLinkReloadedServerCheckResult.self) { group in
+            group.addTask {
+                await self.start()
+            }
+            group.addTask {
+                let nanoseconds = UInt64(self.timeout * 1_000_000_000)
+                try? await Task.sleep(nanoseconds: nanoseconds)
+                self.cancel()
+                return .failure("Timed out waiting for Q-Link Reloaded to respond.")
+            }
+
+            guard let result = await group.next() else {
+                return .failure("Could not start Q-Link Reloaded validation.")
+            }
+
+            group.cancelAll()
+            cancel()
+            return result
+        }
+    }
+
+    private func start() async -> QLinkReloadedServerCheckResult {
+        await withCheckedContinuation { continuation in
+            queue.async {
+                self.continuation = continuation
+                self.connection.stateUpdateHandler = { [weak self] state in
+                    guard let probe = self else {
+                        return
+                    }
+
+                    probe.queue.async {
+                        probe.handleConnectionState(state)
+                    }
+                }
+                self.connection.start(queue: self.queue)
+            }
+        }
+    }
+
+    private func cancel() {
+        queue.async {
+            self.connection.cancel()
+        }
+    }
+
+    private func handleConnectionState(_ state: NWConnection.State) {
+        switch state {
+        case .ready:
+            sendText("\r\r\r")
+            receive()
+        case let .failed(error):
+            finish(.failure("Could not reach Q-Link Reloaded: \(error.localizedDescription)"))
+        case .cancelled:
+            break
+        default:
+            break
+        }
+    }
+
+    private func receive() {
+        connection.receive(minimumIncompleteLength: 1,
+                           maximumLength: 4096) { [weak self] data, _, isComplete, error in
+            guard let self else {
+                return
+            }
+
+            self.queue.async {
+                if let error {
+                    self.finish(.failure("Q-Link Reloaded closed the validation connection: \(error.localizedDescription)"))
+                    return
+                }
+
+                if let data, !data.isEmpty {
+                    self.receivedBytes.append(contentsOf: data)
+                    self.processReceivedBytes()
+                }
+
+                if isComplete {
+                    self.finish(.failure("Q-Link Reloaded closed the validation connection before completing the protocol check."))
+                    return
+                }
+
+                if !self.didFinish {
+                    self.receive()
+                }
+            }
+        }
+    }
+
+    private func processReceivedBytes() {
+        switch phase {
+        case .waitingForTerminalPrompt:
+            guard receivedText.contains("TERMINAL=") else {
+                return
+            }
+            receivedBytes.removeAll()
+            phase = .waitingForTerminalAccepted
+            sendText("D1\r")
+
+        case .waitingForTerminalAccepted:
+            guard receivedText.contains("@") else {
+                return
+            }
+            receivedBytes.removeAll()
+            phase = .waitingForConnected
+            sendText("CONNECT 1200\r")
+
+        case .waitingForConnected:
+            guard receivedText.contains("CONNECTED") else {
+                return
+            }
+            receivedBytes.removeAll()
+            phase = .waitingForResetAck
+            sendData(QLinkReloadedProtocolProbe.resetFrame())
+
+        case .waitingForResetAck:
+            if QLinkReloadedProtocolProbe.containsResetAck(in: receivedBytes) {
+                finish(.success)
+            }
+        }
+    }
+
+    private var receivedText: String {
+        String(decoding: receivedBytes, as: UTF8.self)
+    }
+
+    private func sendText(_ text: String) {
+        guard let data = text.data(using: .isoLatin1) else {
+            finish(.failure("Could not encode Q-Link validation handshake."))
+            return
+        }
+        sendData(data)
+    }
+
+    private func sendData(_ data: Data) {
+        connection.send(content: data,
+                        completion: .contentProcessed { [weak self] error in
+            guard let error else {
+                return
+            }
+
+            guard let probe = self else {
+                return
+            }
+
+            probe.queue.async {
+                probe.finish(.failure("Could not send Q-Link validation handshake: \(error.localizedDescription)"))
+            }
+        })
+    }
+
+    private func finish(_ result: QLinkReloadedServerCheckResult) {
+        guard !didFinish else {
+            return
+        }
+
+        didFinish = true
+        connection.cancel()
+        continuation?.resume(returning: result)
+        continuation = nil
     }
 }
 
@@ -1486,13 +1905,8 @@ enum QLinkReloadedModemRequirements {
             issues.append("Connection is \(modem.transportMode.title), not Raw TCP")
         }
 
-        if modem.defaultDialHost.compare(serverHost, options: [.caseInsensitive, .diacriticInsensitive]) != .orderedSame {
-            let host = modem.defaultDialHost.isEmpty ? "blank" : modem.defaultDialHost
-            issues.append("Default host is \(host), not \(serverHost)")
-        }
-
-        if modem.defaultDialPort != serverPort {
-            issues.append("Default port is \(modem.defaultDialPort), not \(serverPort)")
+        if modem.defaultDialHost.isEmpty {
+            issues.append("Dial host is blank")
         }
 
         if !modem.verboseResultCodes {
@@ -1592,6 +2006,8 @@ struct NetworkModemConfiguration: Codable, Equatable {
     var defaultDialPort: Int
     var defaultDialHost: String
     var aciaBaseAddress: NetworkModemACIAAddress
+
+    static let tcpPortRange = 1...65535
 
     static let standard = NetworkModemConfiguration(isEnabled: false,
                                                     interface: .swiftLink,
@@ -1697,6 +2113,10 @@ struct NetworkModemConfiguration: Codable, Equatable {
         "ATDTEST"
     }
 
+    static func clampedTCPPort(_ port: Int) -> Int {
+        min(max(port, tcpPortRange.lowerBound), tcpPortRange.upperBound)
+    }
+
     func terminalSelectionHint(for machine: EmulatedMachine) -> String? {
         switch interface {
         case .userPort:
@@ -1758,12 +2178,11 @@ struct NetworkModemConfiguration: Codable, Equatable {
     }
 
     private static func normalizedTCPPort(_ port: Int, fallback: Int) -> Int {
-        switch port {
-        case 1...65535:
+        if tcpPortRange.contains(port) {
             return port
-        default:
-            return fallback
         }
+
+        return fallback
     }
 
     private static func normalizedDialHost(_ host: String) -> String {
@@ -1774,6 +2193,71 @@ struct NetworkModemConfiguration: Codable, Equatable {
 
     private static func normalizedAutoAnswerRings(_ rings: Int) -> Int {
         min(max(rings, 0), 9)
+    }
+}
+
+struct NetworkSettingsPresentation {
+    static func dialingSectionTitle(supportsQLinkReloaded: Bool) -> String {
+        supportsQLinkReloaded ? "Q-Link Reloaded" : "Dialing"
+    }
+
+    static func autoAnswerOptionTitle(for rings: Int) -> String {
+        guard rings > 0 else {
+            return "Off"
+        }
+
+        return rings == 1 ? "After 1 ring" : "After \(rings) rings"
+    }
+
+    static func qLinkDiskTitle(configuredDiskTitle: String?,
+                               configuredDiskVersionTitle: String?) -> String {
+        guard let configuredDiskTitle else {
+            return "No disk selected"
+        }
+
+        guard let configuredDiskVersionTitle else {
+            return configuredDiskTitle
+        }
+
+        return "\(configuredDiskTitle) (\(configuredDiskVersionTitle))"
+    }
+
+    static func qLinkProfileSummary(diskProfileCount: Int,
+                                    keychainProfileCount: Int) -> String {
+        "\(diskProfileCount) on disk, \(keychainProfileCount) in Keychain"
+    }
+}
+
+struct QLinkProfileManagerPresentation {
+    static func diskTitle(configuredDiskTitle: String?,
+                          configuredDiskVersionTitle: String?) -> String {
+        guard let configuredDiskTitle else {
+            return "No Q-Link disk selected"
+        }
+
+        guard let configuredDiskVersionTitle else {
+            return configuredDiskTitle
+        }
+
+        return "\(configuredDiskTitle) (\(configuredDiskVersionTitle))"
+    }
+
+    static func diskProfilesEmptyTitle(hasConfiguredDisk: Bool) -> String {
+        hasConfiguredDisk ? "No Profiles" : "No Q-Link Disk"
+    }
+
+    static func diskProfilesEmptyDescription(hasConfiguredDisk: Bool) -> String {
+        hasConfiguredDisk
+            ? "This disk does not currently have saved Q-Link users."
+            : "Choose a validated Q-Link disk to manage its saved users."
+    }
+
+    static func diskProfileCapacityTitle(count: Int, maximum: Int) -> String {
+        "\(count)/\(maximum)"
+    }
+
+    static func keychainProfileCountTitle(count: Int) -> String {
+        count == 1 ? "1 saved" : "\(count) saved"
     }
 }
 

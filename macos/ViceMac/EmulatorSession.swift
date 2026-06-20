@@ -36,6 +36,30 @@ enum MachineResetKind {
     }
 }
 
+struct ViceMacTerminationPolicy {
+    enum Decision: Equatable {
+        case terminateNow
+        case requestEngineQuitAndWait
+        case keepWaitingForEngineQuit
+    }
+
+    private var didRequestEngineQuit = false
+
+    mutating func decision(isEngineRunning: Bool,
+                           requestEngineQuit: () -> Bool) -> Decision {
+        guard isEngineRunning else {
+            return .terminateNow
+        }
+
+        guard !didRequestEngineQuit else {
+            return .keepWaitingForEngineQuit
+        }
+
+        didRequestEngineQuit = true
+        return requestEngineQuit() ? .requestEngineQuitAndWait : .terminateNow
+    }
+}
+
 
 @MainActor
 final class EmulatorSession: ObservableObject {

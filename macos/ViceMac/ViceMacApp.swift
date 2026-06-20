@@ -1,6 +1,7 @@
 import AppKit
 import Darwin
 import MacVICEKit
+import os
 import Sparkle
 import SwiftUI
 import UniformTypeIdentifiers
@@ -498,14 +499,20 @@ struct ViceMacApp: App {
 
 @MainActor
 private final class ViceMacAppDelegate: NSObject, NSApplicationDelegate {
+    private static let logger = Logger(subsystem: "com.barrywalker.ViceMac", category: "AppLifecycle")
+
     private var smokeTestSession: EmulatorSession?
-    private var didRequestEngineTermination = false
+    private var terminationPolicy = ViceMacTerminationPolicy()
+    private var terminationTask: Task<Void, Never>?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        Self.logger.info("Application finished launching")
+
         guard let configuration = ViceMacLaunchConfiguration.current.releaseSmokeTest else {
             return
         }
 
+        Self.logger.info("Starting release smoke test")
         NSApp.setActivationPolicy(.accessory)
 
         let emulator = EmulatorSession()
@@ -519,25 +526,48 @@ private final class ViceMacAppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         WindowFrameRestoration.saveOpenWindowFrames()
 
-        guard MacVICEEngineSession.isRunning else {
+        switch terminationPolicy.decision(isEngineRunning: MacVICEEngineSession.isRunning,
+                                          requestEngineQuit: MacVICEEngineSession.requestQuit) {
+        case .terminateNow:
+            Self.logger.info("Application termination proceeding immediately")
             return .terminateNow
-        }
 
-        guard !didRequestEngineTermination else {
+        case .keepWaitingForEngineQuit:
+            Self.logger.info("Application termination still waiting for emulator engine quit")
+            return .terminateLater
+
+        case .requestEngineQuitAndWait:
+            Self.logger.info("Application termination requested emulator engine quit")
+            terminationTask?.cancel()
+            terminationTask = Task { @MainActor in
+                await Self.finishTerminationAfterEngineStops()
+            }
             return .terminateLater
         }
+    }
 
-        didRequestEngineTermination = true
-        if !MacVICEEngineSession.requestQuit() {
-            Darwin._exit(0)
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        Self.logger.info("Ignoring last-window-close termination request")
+        return false
+    }
+
+    private static func finishTerminationAfterEngineStops() async {
+        let deadline = Date().addingTimeInterval(2)
+        while MacVICEEngineSession.isRunning && Date() < deadline {
+            try? await Task.sleep(for: .milliseconds(50))
         }
 
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
-            Darwin._exit(0)
+        if MacVICEEngineSession.isRunning {
+            logger.warning("Emulator engine did not confirm quit before termination timeout")
+        } else {
+            logger.info("Emulator engine stopped before application termination")
         }
+        NSApp.reply(toApplicationShouldTerminate: true)
+    }
 
-        return .terminateLater
+    func applicationWillTerminate(_ notification: Notification) {
+        Self.logger.info("Application will terminate")
+        terminationTask?.cancel()
     }
 }
 
@@ -1011,6 +1041,7 @@ final class QLinkReloadedService: ObservableObject {
     @Published private(set) var configuredDiskTitle: String?
     @Published private(set) var configuredDiskVersionTitle: String?
     @Published private(set) var configuredDiskRegistrationProfiles: [QLinkReloadedRegistrationProfile] = []
+    @Published private(set) var configurationValidationStatus: QLinkReloadedConfigurationValidationStatus = .idle
     @Published private(set) var isConnecting = false
     @Published private(set) var registrationProfiles: [QLinkReloadedRegistrationProfile] = []
 
@@ -1020,10 +1051,13 @@ final class QLinkReloadedService: ObservableObject {
     private static let legacyLastRegistrationAccessNumberDefaultsKey = "vice.qlinkReloaded.lastRegistrationAccessNumber"
     private static let legacyLastRegistrationUsernameDefaultsKey = "vice.qlinkReloaded.lastRegistrationUsername"
     private static let defaults = UserDefaults.standard
+    private let configurationValidator: QLinkReloadedConfigurationValidator
     private let registrationStore: QLinkReloadedRegistrationStoring
 
-    init(registrationStore: QLinkReloadedRegistrationStoring = QLinkReloadedRegistrationKeychain()) {
+    init(registrationStore: QLinkReloadedRegistrationStoring = QLinkReloadedRegistrationKeychain(),
+         configurationValidator: QLinkReloadedConfigurationValidator = QLinkReloadedConfigurationValidator()) {
         self.registrationStore = registrationStore
+        self.configurationValidator = configurationValidator
         refreshRegistrationProfiles()
         refreshConfiguredDiskTitle()
         refreshConfiguredDiskRegistrationProfile()
@@ -1034,15 +1068,43 @@ final class QLinkReloadedService: ObservableObject {
     }
 
     func canConnect(machine: EmulatedMachine) -> Bool {
-        supports(machine: machine) && hasConfiguredDisk && !isConnecting
+        QLinkReloadedSupport.canConnect(machine: machine,
+                                        hasConfiguredDisk: hasConfiguredDisk,
+                                        isConnecting: isConnecting)
     }
 
     func supports(machine: EmulatedMachine) -> Bool {
-        switch machine.family {
-        case .c64, .c128:
-            return machine.capabilities.supportsNetworking
-        case .pet, .vic20, .ted:
-            return false
+        QLinkReloadedSupport.supports(machine: machine)
+    }
+
+    func resetConfigurationValidation() {
+        guard !configurationValidationStatus.isChecking else {
+            return
+        }
+
+        configurationValidationStatus = .idle
+    }
+
+    func validateConfiguration(emulator: EmulatorSession) {
+        guard !configurationValidationStatus.isChecking else {
+            return
+        }
+
+        guard supports(machine: emulator.machine) else {
+            configurationValidationStatus = .invalid("Q-Link Reloaded can only be validated from a C64 or C128 machine with networking support.")
+            return
+        }
+
+        configurationValidationStatus = .checking
+        let configuration = emulator.networkModem
+        let machine = emulator.machine
+        let storedProfileCount = registrationProfiles.count
+
+        Task { @MainActor in
+            let outcome = await configurationValidator.validate(configuration: configuration,
+                                                                machine: machine,
+                                                                storedProfileCount: storedProfileCount)
+            configurationValidationStatus = .status(for: outcome)
         }
     }
 
@@ -1204,7 +1266,8 @@ final class QLinkReloadedService: ObservableObject {
             // here and not before the machine starts.
             configureProtocolCapture(emulator: emulator)
 
-            emulator.statusText = "Q-Link Reloaded connecting through q-link.net:5190"
+            let modem = emulator.networkModem.normalized(for: emulator.machine)
+            emulator.statusText = "Q-Link Reloaded connecting through \(modem.defaultDialHost):\(modem.defaultDialPort)"
             if !noticeMessages.isEmpty {
                 presentNotice(title: "Q-Link Reloaded",
                               message: "VICE Mac \(noticeMessages.joined(separator: " and ")).")

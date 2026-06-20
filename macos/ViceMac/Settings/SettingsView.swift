@@ -1235,8 +1235,11 @@ private struct NetworkSettingsPane: View {
     var body: some View {
         SettingsPane {
             modemSection
-            dialingSection
-            qLinkReloadedSection
+            if supportsQLinkReloaded {
+                qLinkReloadedSection
+            } else {
+                dialingSection
+            }
             testLineSection
             incomingCallsSection
         }
@@ -1244,6 +1247,9 @@ private struct NetworkSettingsPane: View {
         .onAppear {
             qLinkReloaded.refreshRegistrationProfiles()
             qLinkReloaded.refreshConfiguredDiskRegistrationProfile()
+        }
+        .onChange(of: emulator.networkModem) { _, _ in
+            qLinkReloaded.resetConfigurationValidation()
         }
         .sheet(isPresented: $showsQLinkProfileManager) {
             QLinkProfileManagerSheet()
@@ -1335,25 +1341,8 @@ private struct NetworkSettingsPane: View {
     }
 
     private var dialingSection: some View {
-        Section("Dialing") {
-            LabeledContent("Default host") {
-                TextField("Host", text: $emulator.networkModem.defaultDialHost)
-                    .textFieldStyle(.roundedBorder)
-                    .disabled(!emulator.networkModem.isEnabled)
-            }
-
-            LabeledContent("Default port") {
-                TextField("Port",
-                          value: $emulator.networkModem.defaultDialPort,
-                          format: .number)
-                    .frame(width: 86)
-                    .disabled(!emulator.networkModem.isEnabled)
-            }
-
-            LabeledContent("Command") {
-                SettingsValueText(emulator.networkModem.dialCommandPreview)
-                    .font(.system(.body, design: .monospaced))
-            }
+        Section(NetworkSettingsPresentation.dialingSectionTitle(supportsQLinkReloaded: false)) {
+            dialingRows
         }
     }
 
@@ -1372,82 +1361,151 @@ private struct NetworkSettingsPane: View {
                 .disabled(!emulator.networkModem.isEnabled)
 
             LabeledContent("Port") {
-                TextField("Port",
-                          value: $emulator.networkModem.incomingPort,
-                          format: .number)
-                    .frame(width: 86)
+                portControl(value: incomingPortBinding)
                     .disabled(!emulator.networkModem.isEnabled
                               || !emulator.networkModem.acceptsIncomingCalls)
             }
 
-            Stepper(value: $emulator.networkModem.autoAnswerRings,
-                    in: 0...9) {
-                Text(autoAnswerTitle)
+            LabeledContent("Auto-answer") {
+                Picker("Auto-answer", selection: $emulator.networkModem.autoAnswerRings) {
+                    Text("Off").tag(0)
+                    ForEach(1...9, id: \.self) { rings in
+                        Text(NetworkSettingsPresentation.autoAnswerOptionTitle(for: rings)).tag(rings)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .disabled(!emulator.networkModem.isEnabled
+                          || !emulator.networkModem.acceptsIncomingCalls)
             }
-            .disabled(!emulator.networkModem.isEnabled
-                      || !emulator.networkModem.acceptsIncomingCalls)
         }
     }
 
     @ViewBuilder
     private var qLinkReloadedSection: some View {
-        if qLinkReloaded.supports(machine: emulator.machine) {
-            Section("Q-Link Reloaded") {
-                LabeledContent("Disk") {
-                    HStack(spacing: 8) {
-                        SettingsValueText(qLinkDiskTitle,
-                                          lineLimit: 2,
-                                          truncationMode: .middle)
-                        Button {
-                            qLinkReloaded.chooseDisk(for: emulator.machine)
-                        } label: {
-                            Label("Choose Disk", systemImage: "externaldrive")
-                        }
-                        .disabled(qLinkReloaded.isConnecting)
-                    }
-                }
+        Section(NetworkSettingsPresentation.dialingSectionTitle(supportsQLinkReloaded: true)) {
+            dialingRows
 
-                LabeledContent("Profiles") {
-                    HStack(spacing: 8) {
-                        SettingsValueText(qLinkProfileSummary)
+            LabeledContent("Validation") {
+                HStack(spacing: 8) {
+                    Label(qLinkReloaded.configurationValidationStatus.title,
+                          systemImage: qLinkReloaded.configurationValidationStatus.systemImage)
+                        .foregroundStyle(qLinkValidationColor)
+                        .lineLimit(4)
+                        .multilineTextAlignment(.leading)
+                        .help(qLinkReloaded.configurationValidationStatus.title)
 
-                        Button {
-                            showsQLinkProfileManager = true
-                        } label: {
-                            Label("Manage Profiles", systemImage: "person.crop.circle.badge.gearshape")
-                        }
-                    }
-                }
+                    Spacer(minLength: 8)
 
-                Toggle(isOn: $qlinkCaptureProtocol) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Capture protocol")
-                        Text("Write a decoded .log for the viewer and a raw direction-tagged .cap beside it.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    Button {
+                        qLinkReloaded.validateConfiguration(emulator: emulator)
+                    } label: {
+                        Label("Validate", systemImage: "checkmark.shield")
                     }
+                    .disabled(qLinkReloaded.configurationValidationStatus.isChecking
+                              || qLinkReloaded.isConnecting)
                 }
-                .disabled(qLinkReloaded.isConnecting)
             }
+
+            LabeledContent("Disk") {
+                HStack(spacing: 8) {
+                    SettingsValueText(qLinkDiskTitle,
+                                      lineLimit: 2,
+                                      truncationMode: .middle)
+                    Button {
+                        qLinkReloaded.chooseDisk(for: emulator.machine)
+                    } label: {
+                        Label("Choose Disk", systemImage: "externaldrive")
+                    }
+                    .disabled(qLinkReloaded.isConnecting)
+                }
+            }
+
+            LabeledContent("Profiles") {
+                HStack(spacing: 8) {
+                    SettingsValueText(qLinkProfileSummary)
+
+                    Button {
+                        showsQLinkProfileManager = true
+                    } label: {
+                        Label("Manage Profiles", systemImage: "person.crop.circle.badge.gearshape")
+                    }
+                }
+            }
+
+            Toggle(isOn: $qlinkCaptureProtocol) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Capture protocol")
+                    Text("Write a decoded .log for the viewer and a raw direction-tagged .cap beside it.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .disabled(qLinkReloaded.isConnecting)
+        }
+    }
+
+    @ViewBuilder
+    private var dialingRows: some View {
+        LabeledContent("Host") {
+            TextField("Host", text: $emulator.networkModem.defaultDialHost)
+                .labelsHidden()
+                .textFieldStyle(.roundedBorder)
+                .disabled(!emulator.networkModem.isEnabled)
+        }
+
+        LabeledContent("Port") {
+            portControl(value: defaultDialPortBinding)
+                .disabled(!emulator.networkModem.isEnabled)
+        }
+
+        LabeledContent("Command") {
+            SettingsValueText(emulator.networkModem.dialCommandPreview)
+                .font(.system(.body, design: .monospaced))
+        }
+    }
+
+    private func portControl(value: Binding<Int>) -> some View {
+        HStack(spacing: 6) {
+            TextField("Port",
+                      value: value,
+                      format: .number.grouping(.never))
+                .labelsHidden()
+                .multilineTextAlignment(.trailing)
+                .frame(width: 72)
+
+            Stepper("Port", value: value, in: NetworkModemConfiguration.tcpPortRange)
+                .labelsHidden()
         }
     }
 
     private var qLinkDiskTitle: String {
-        guard let configuredDiskTitle = qLinkReloaded.configuredDiskTitle else {
-            return "No disk selected"
-        }
-
-        if let configuredDiskVersionTitle = qLinkReloaded.configuredDiskVersionTitle {
-            return "\(configuredDiskTitle) (\(configuredDiskVersionTitle))"
-        }
-
-        return configuredDiskTitle
+        NetworkSettingsPresentation.qLinkDiskTitle(configuredDiskTitle: qLinkReloaded.configuredDiskTitle,
+                                                   configuredDiskVersionTitle: qLinkReloaded.configuredDiskVersionTitle)
     }
 
     private var qLinkProfileSummary: String {
-        let diskCount = qLinkReloaded.configuredDiskRegistrationProfiles.count
-        let keychainCount = qLinkReloaded.registrationProfiles.count
-        return "\(diskCount) on disk, \(keychainCount) in Keychain"
+        NetworkSettingsPresentation.qLinkProfileSummary(
+            diskProfileCount: qLinkReloaded.configuredDiskRegistrationProfiles.count,
+            keychainProfileCount: qLinkReloaded.registrationProfiles.count
+        )
+    }
+
+    private var supportsQLinkReloaded: Bool {
+        qLinkReloaded.supports(machine: emulator.machine)
+    }
+
+    private var qLinkValidationColor: Color {
+        switch qLinkReloaded.configurationValidationStatus {
+        case .valid:
+            return .green
+        case .invalid:
+            return .red
+        case .checking:
+            return .accentColor
+        case .idle:
+            return .secondary
+        }
     }
 
     private var modemEnabledBinding: Binding<Bool> {
@@ -1508,6 +1566,26 @@ private struct NetworkSettingsPane: View {
         }
     }
 
+    private var defaultDialPortBinding: Binding<Int> {
+        Binding {
+            emulator.networkModem.defaultDialPort
+        } set: { port in
+            var modem = emulator.networkModem
+            modem.defaultDialPort = NetworkModemConfiguration.clampedTCPPort(port)
+            emulator.networkModem = modem
+        }
+    }
+
+    private var incomingPortBinding: Binding<Int> {
+        Binding {
+            emulator.networkModem.incomingPort
+        } set: { port in
+            var modem = emulator.networkModem
+            modem.incomingPort = NetworkModemConfiguration.clampedTCPPort(port)
+            emulator.networkModem = modem
+        }
+    }
+
     private func confirmModemHardwareChange(title: String,
                                             message: String,
                                             restartButtonTitle: String,
@@ -1540,14 +1618,6 @@ private struct NetworkSettingsPane: View {
         }
     }
 
-    private var autoAnswerTitle: String {
-        let rings = emulator.networkModem.autoAnswerRings
-        guard rings > 0 else {
-            return "Auto-answer off"
-        }
-
-        return rings == 1 ? "Auto-answer after 1 ring" : "Auto-answer after \(rings) rings"
-    }
 }
 
 private struct QLinkProfileManagerSheet: View {
@@ -1896,34 +1966,31 @@ private struct QLinkProfileManagerSheet: View {
     }
 
     private var qLinkDiskTitle: String {
-        guard let configuredDiskTitle = qLinkReloaded.configuredDiskTitle else {
-            return "No Q-Link disk selected"
-        }
-
-        if let configuredDiskVersionTitle = qLinkReloaded.configuredDiskVersionTitle {
-            return "\(configuredDiskTitle) (\(configuredDiskVersionTitle))"
-        }
-
-        return configuredDiskTitle
+        QLinkProfileManagerPresentation.diskTitle(
+            configuredDiskTitle: qLinkReloaded.configuredDiskTitle,
+            configuredDiskVersionTitle: qLinkReloaded.configuredDiskVersionTitle
+        )
     }
 
     private var diskProfilesEmptyTitle: String {
-        qLinkReloaded.hasConfiguredDisk ? "No Profiles" : "No Q-Link Disk"
+        QLinkProfileManagerPresentation.diskProfilesEmptyTitle(hasConfiguredDisk: qLinkReloaded.hasConfiguredDisk)
     }
 
     private var diskProfilesEmptyDescription: String {
-        qLinkReloaded.hasConfiguredDisk
-            ? "This disk does not currently have saved Q-Link users."
-            : "Choose a validated Q-Link disk to manage its saved users."
+        QLinkProfileManagerPresentation.diskProfilesEmptyDescription(
+            hasConfiguredDisk: qLinkReloaded.hasConfiguredDisk
+        )
     }
 
     private var diskProfileCountTitle: String {
-        "\(qLinkReloaded.configuredDiskRegistrationProfiles.count)/\(QLinkReloadedDiskPatcher.maximumRegistrationProfileCount)"
+        QLinkProfileManagerPresentation.diskProfileCapacityTitle(
+            count: qLinkReloaded.configuredDiskRegistrationProfiles.count,
+            maximum: QLinkReloadedDiskPatcher.maximumRegistrationProfileCount
+        )
     }
 
     private var keychainProfileCountTitle: String {
-        let count = qLinkReloaded.registrationProfiles.count
-        return count == 1 ? "1 saved" : "\(count) saved"
+        QLinkProfileManagerPresentation.keychainProfileCountTitle(count: qLinkReloaded.registrationProfiles.count)
     }
 
     private var transferConfirmationTitle: String {

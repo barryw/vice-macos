@@ -10,6 +10,47 @@ import XCTest
 import zlib
 
 final class ModelConfigurationTests: XCTestCase {
+    func testTerminationPolicyTerminatesImmediatelyWhenEngineIsStopped() {
+        var policy = ViceMacTerminationPolicy()
+        var didRequestEngineQuit = false
+
+        let decision = policy.decision(isEngineRunning: false) {
+            didRequestEngineQuit = true
+            return true
+        }
+
+        XCTAssertEqual(decision, .terminateNow)
+        XCTAssertFalse(didRequestEngineQuit)
+    }
+
+    func testTerminationPolicyRequestsEngineQuitOnceWhenEngineIsRunning() {
+        var policy = ViceMacTerminationPolicy()
+        var requestCount = 0
+
+        let firstDecision = policy.decision(isEngineRunning: true) {
+            requestCount += 1
+            return true
+        }
+        let secondDecision = policy.decision(isEngineRunning: true) {
+            requestCount += 1
+            return true
+        }
+
+        XCTAssertEqual(firstDecision, .requestEngineQuitAndWait)
+        XCTAssertEqual(secondDecision, .keepWaitingForEngineQuit)
+        XCTAssertEqual(requestCount, 1)
+    }
+
+    func testTerminationPolicyFallsBackToNormalTerminationWhenQuitCannotBeQueued() {
+        var policy = ViceMacTerminationPolicy()
+
+        let decision = policy.decision(isEngineRunning: true) {
+            false
+        }
+
+        XCTAssertEqual(decision, .terminateNow)
+    }
+
     @MainActor
     func testAIDocumentLibraryImportsSearchablePDFAndReturnsContext() async throws {
         let rootURL = FileManager.default.temporaryDirectory
@@ -487,6 +528,238 @@ final class ModelConfigurationTests: XCTestCase {
         XCTAssertEqual(modem.baudRate, 2400)
     }
 
+    func testNetworkModemConfigurationFallsBackForInvalidPersistedPorts() {
+        let modem = NetworkModemConfiguration(isEnabled: true,
+                                              interface: .swiftLink,
+                                              baudRate: 9600,
+                                              transportMode: .raw,
+                                              acceptsIncomingCalls: true,
+                                              incomingPort: 0,
+                                              autoAnswerRings: 0,
+                                              echoCommands: true,
+                                              verboseResultCodes: true,
+                                              defaultDialPort: 70_000)
+
+        XCTAssertEqual(modem.incomingPort, 6400)
+        XCTAssertEqual(modem.defaultDialPort, 23)
+    }
+
+    func testNetworkModemConfigurationClampsInteractiveTCPPorts() {
+        XCTAssertEqual(NetworkModemConfiguration.clampedTCPPort(-1), 1)
+        XCTAssertEqual(NetworkModemConfiguration.clampedTCPPort(5190), 5190)
+        XCTAssertEqual(NetworkModemConfiguration.clampedTCPPort(70_000), 65_535)
+    }
+
+    func testNetworkSettingsPresentationChoosesDialingSectionTitle() {
+        XCTAssertEqual(NetworkSettingsPresentation.dialingSectionTitle(supportsQLinkReloaded: false),
+                       "Dialing")
+        XCTAssertEqual(NetworkSettingsPresentation.dialingSectionTitle(supportsQLinkReloaded: true),
+                       "Q-Link Reloaded")
+    }
+
+    func testNetworkSettingsPresentationFormatsAutoAnswerOptions() {
+        XCTAssertEqual(NetworkSettingsPresentation.autoAnswerOptionTitle(for: 0), "Off")
+        XCTAssertEqual(NetworkSettingsPresentation.autoAnswerOptionTitle(for: 1), "After 1 ring")
+        XCTAssertEqual(NetworkSettingsPresentation.autoAnswerOptionTitle(for: 2), "After 2 rings")
+        XCTAssertEqual(NetworkSettingsPresentation.autoAnswerOptionTitle(for: 9), "After 9 rings")
+    }
+
+    func testNetworkSettingsPresentationFormatsQLinkDiskTitle() {
+        XCTAssertEqual(NetworkSettingsPresentation.qLinkDiskTitle(configuredDiskTitle: nil,
+                                                                  configuredDiskVersionTitle: nil),
+                       "No disk selected")
+        XCTAssertEqual(NetworkSettingsPresentation.qLinkDiskTitle(configuredDiskTitle: "QuantumLink",
+                                                                  configuredDiskVersionTitle: nil),
+                       "QuantumLink")
+        XCTAssertEqual(NetworkSettingsPresentation.qLinkDiskTitle(configuredDiskTitle: "QuantumLink",
+                                                                  configuredDiskVersionTitle: "Q-Link Version 4"),
+                       "QuantumLink (Q-Link Version 4)")
+    }
+
+    func testNetworkSettingsPresentationFormatsQLinkProfileSummary() {
+        XCTAssertEqual(NetworkSettingsPresentation.qLinkProfileSummary(diskProfileCount: 0,
+                                                                       keychainProfileCount: 0),
+                       "0 on disk, 0 in Keychain")
+        XCTAssertEqual(NetworkSettingsPresentation.qLinkProfileSummary(diskProfileCount: 2,
+                                                                       keychainProfileCount: 1),
+                       "2 on disk, 1 in Keychain")
+    }
+
+    func testQLinkProfileManagerPresentationFormatsDiskTitle() {
+        XCTAssertEqual(QLinkProfileManagerPresentation.diskTitle(configuredDiskTitle: nil,
+                                                                 configuredDiskVersionTitle: nil),
+                       "No Q-Link disk selected")
+        XCTAssertEqual(QLinkProfileManagerPresentation.diskTitle(configuredDiskTitle: "QuantumLink",
+                                                                 configuredDiskVersionTitle: nil),
+                       "QuantumLink")
+        XCTAssertEqual(QLinkProfileManagerPresentation.diskTitle(configuredDiskTitle: "QuantumLink",
+                                                                 configuredDiskVersionTitle: "Q-Link Version 4"),
+                       "QuantumLink (Q-Link Version 4)")
+    }
+
+    func testQLinkProfileManagerPresentationFormatsEmptyDiskState() {
+        XCTAssertEqual(QLinkProfileManagerPresentation.diskProfilesEmptyTitle(hasConfiguredDisk: false),
+                       "No Q-Link Disk")
+        XCTAssertEqual(QLinkProfileManagerPresentation.diskProfilesEmptyDescription(hasConfiguredDisk: false),
+                       "Choose a validated Q-Link disk to manage its saved users.")
+
+        XCTAssertEqual(QLinkProfileManagerPresentation.diskProfilesEmptyTitle(hasConfiguredDisk: true),
+                       "No Profiles")
+        XCTAssertEqual(QLinkProfileManagerPresentation.diskProfilesEmptyDescription(hasConfiguredDisk: true),
+                       "This disk does not currently have saved Q-Link users.")
+    }
+
+    func testQLinkProfileManagerPresentationFormatsProfileCounts() {
+        XCTAssertEqual(QLinkProfileManagerPresentation.diskProfileCapacityTitle(count: 2, maximum: 10),
+                       "2/10")
+        XCTAssertEqual(QLinkProfileManagerPresentation.keychainProfileCountTitle(count: 0),
+                       "0 saved")
+        XCTAssertEqual(QLinkProfileManagerPresentation.keychainProfileCountTitle(count: 1),
+                       "1 saved")
+        XCTAssertEqual(QLinkProfileManagerPresentation.keychainProfileCountTitle(count: 2),
+                       "2 saved")
+    }
+
+    func testQLinkReloadedSupportAcceptsOnlyNetworkedC64AndC128Machines() {
+        XCTAssertTrue(QLinkReloadedSupport.supports(machine: .x64sc))
+        XCTAssertTrue(QLinkReloadedSupport.supports(machine: .x128))
+
+        XCTAssertFalse(QLinkReloadedSupport.supports(machine: .xvic))
+        XCTAssertFalse(QLinkReloadedSupport.supports(machine: .xpet))
+        XCTAssertFalse(QLinkReloadedSupport.supports(machine: .xplus4))
+        XCTAssertFalse(QLinkReloadedSupport.supports(machine: .xc16))
+        XCTAssertFalse(QLinkReloadedSupport.supports(machine: .xc232))
+        XCTAssertFalse(QLinkReloadedSupport.supports(machine: .xv364))
+    }
+
+    func testQLinkReloadedSupportRequiresSupportedMachineDiskAndIdleConnection() {
+        XCTAssertTrue(QLinkReloadedSupport.canConnect(machine: .x64sc,
+                                                      hasConfiguredDisk: true,
+                                                      isConnecting: false))
+
+        XCTAssertFalse(QLinkReloadedSupport.canConnect(machine: .x64sc,
+                                                       hasConfiguredDisk: false,
+                                                       isConnecting: false))
+        XCTAssertFalse(QLinkReloadedSupport.canConnect(machine: .x64sc,
+                                                       hasConfiguredDisk: true,
+                                                       isConnecting: true))
+        XCTAssertFalse(QLinkReloadedSupport.canConnect(machine: .xpet,
+                                                       hasConfiguredDisk: true,
+                                                       isConnecting: false))
+    }
+
+    func testQLinkReloadedProtocolProbeBuildsResetFrameForServerHandshake() {
+        let frame = Array(QLinkReloadedProtocolProbe.resetFrame())
+
+        XCTAssertEqual(frame.first, 0x5A)
+        XCTAssertEqual(frame.last, 0x0D)
+        XCTAssertEqual(frame[5], 0x7F)
+        XCTAssertEqual(frame[6], 0x7F)
+        XCTAssertEqual(frame[7], QLinkReloadedProtocolProbe.resetCommand)
+        XCTAssertEqual(frame[8], 5)
+        XCTAssertEqual(frame[9], 9)
+        XCTAssertTrue(QLinkReloadedProtocolProbe.isValidFrame(frame))
+    }
+
+    func testQLinkReloadedProtocolProbeRecognizesResetAckFrame() {
+        let ack = QLinkReloadedProtocolProbe.frame(command: QLinkReloadedProtocolProbe.resetAckCommand,
+                                                   sendSequence: 0x7F,
+                                                   receiveSequence: 0x7F,
+                                                   payload: [])
+
+        XCTAssertTrue(QLinkReloadedProtocolProbe.containsResetAck(in: Array(ack)))
+        XCTAssertFalse(QLinkReloadedProtocolProbe.containsResetAck(in: Array(QLinkReloadedProtocolProbe.resetFrame())))
+    }
+
+    func testQLinkServerConnectionCheckerCompletesTextAndResetHandshake() async throws {
+        let server = try QLinkValidationTestServer()
+        addTeardownBlock {
+            server.cancel()
+        }
+        server.start()
+
+        let checker = QLinkReloadedServerConnectionChecker(timeout: 2)
+        let result = await checker.validateQLinkServer(host: "127.0.0.1",
+                                                       port: Int(server.port.rawValue))
+
+        XCTAssertEqual(result, .success)
+        XCTAssertTrue(server.didReceiveResetFrame)
+    }
+
+    func testQLinkServerConnectionCheckerRejectsInvalidPort() async {
+        let checker = QLinkReloadedServerConnectionChecker(timeout: 2)
+
+        let result = await checker.validateQLinkServer(host: "127.0.0.1",
+                                                       port: 70_000)
+
+        XCTAssertEqual(result, .failure("Port 70000 is not valid."))
+    }
+
+    func testQLinkConfigurationValidatorRejectsIncompatibleSettingsBeforeNetworkCheck() async {
+        let checker = StubQLinkServerChecker(result: .success)
+        let validator = QLinkReloadedConfigurationValidator(connectionChecker: checker)
+
+        let outcome = await validator.validate(configuration: .standard,
+                                               machine: .x64sc,
+                                               storedProfileCount: 0)
+
+        XCTAssertEqual(outcome, .failure("Current modem settings are not compatible with Q-Link Reloaded:\n- Modem is off\n- Hardware is SwiftLink, not User Port\n- Speed is 9600 baud, not 1200 baud\n- Connection is Telnet, not Raw TCP\n- Dial host is blank\n- CONNECT response includes baud rate"))
+        XCTAssertFalse(checker.didValidate)
+    }
+
+    func testQLinkConfigurationValidatorReportsSuccessfulProtocolAndStoredProfiles() async {
+        let checker = StubQLinkServerChecker(result: .success)
+        let validator = QLinkReloadedConfigurationValidator(connectionChecker: checker)
+        let configuration = QLinkReloadedModemRequirements.preset(preservingValuesFrom: .standard)
+
+        let outcome = await validator.validate(configuration: configuration,
+                                               machine: .x64sc,
+                                               storedProfileCount: 2)
+
+        XCTAssertEqual(outcome, .success("Server responded correctly. 2 stored profiles are available locally."))
+        XCTAssertTrue(checker.didValidate)
+        XCTAssertEqual(checker.validatedHost, QLinkReloadedModemRequirements.serverHost)
+        XCTAssertEqual(checker.validatedPort, QLinkReloadedModemRequirements.serverPort)
+    }
+
+    func testQLinkConfigurationValidatorProbesConfiguredEndpointInsteadOfBlessedPort() async {
+        let checker = StubQLinkServerChecker(result: .success)
+        let validator = QLinkReloadedConfigurationValidator(connectionChecker: checker)
+        let configuration = NetworkModemConfiguration(isEnabled: true,
+                                                      interface: .userPort,
+                                                      baudRate: 1200,
+                                                      transportMode: .raw,
+                                                      acceptsIncomingCalls: false,
+                                                      incomingPort: 6400,
+                                                      autoAnswerRings: 0,
+                                                      echoCommands: true,
+                                                      verboseResultCodes: true,
+                                                      connectResultIncludesBaudRate: false,
+                                                      defaultDialPort: 5191,
+                                                      defaultDialHost: "q-link.net")
+
+        let outcome = await validator.validate(configuration: configuration,
+                                               machine: .x64sc,
+                                               storedProfileCount: 1)
+
+        XCTAssertEqual(outcome, .success("Server responded correctly. 1 stored profile is available locally."))
+        XCTAssertTrue(checker.didValidate)
+        XCTAssertEqual(checker.validatedHost, "q-link.net")
+        XCTAssertEqual(checker.validatedPort, 5191)
+    }
+
+    func testQLinkConfigurationValidatorReportsServerFailure() async {
+        let checker = StubQLinkServerChecker(result: .failure("Timed out waiting for Q-Link reset acknowledgment."))
+        let validator = QLinkReloadedConfigurationValidator(connectionChecker: checker)
+        let configuration = QLinkReloadedModemRequirements.preset(preservingValuesFrom: .standard)
+
+        let outcome = await validator.validate(configuration: configuration,
+                                               machine: .x64sc,
+                                               storedProfileCount: 1)
+
+        XCTAssertEqual(outcome, .failure("Timed out waiting for Q-Link reset acknowledgment."))
+    }
+
     func testQLinkReloadedModemRequirementsAcceptPreset() {
         let modem = QLinkReloadedModemRequirements.preset(preservingValuesFrom: .standard)
 
@@ -519,10 +792,48 @@ final class ModelConfigurationTests: XCTestCase {
         XCTAssertTrue(issues.contains("Hardware is SwiftLink, not User Port"))
         XCTAssertTrue(issues.contains("Speed is 9600 baud, not 1200 baud"))
         XCTAssertTrue(issues.contains("Connection is Telnet, not Raw TCP"))
-        XCTAssertTrue(issues.contains("Default host is bbs.example, not q-link.net"))
-        XCTAssertTrue(issues.contains("Default port is 23, not 5190"))
+        XCTAssertFalse(issues.contains { $0.contains(QLinkReloadedModemRequirements.serverHost) })
+        XCTAssertFalse(issues.contains { $0.contains(String(QLinkReloadedModemRequirements.serverPort)) })
         XCTAssertTrue(issues.contains("Verbose result codes are off"))
         XCTAssertTrue(issues.contains("CONNECT response includes baud rate"))
+        XCTAssertFalse(QLinkReloadedModemRequirements.isCompatible(modem, for: .x64sc))
+    }
+
+    func testQLinkReloadedModemRequirementsAllowCustomDialEndpoint() {
+        let modem = NetworkModemConfiguration(isEnabled: true,
+                                              interface: .userPort,
+                                              baudRate: 1200,
+                                              transportMode: .raw,
+                                              acceptsIncomingCalls: false,
+                                              incomingPort: 6400,
+                                              autoAnswerRings: 0,
+                                              echoCommands: true,
+                                              verboseResultCodes: true,
+                                              connectResultIncludesBaudRate: false,
+                                              defaultDialPort: 5191,
+                                              defaultDialHost: "q-link.net",
+                                              aciaBaseAddress: .de00)
+
+        XCTAssertTrue(QLinkReloadedModemRequirements.isCompatible(modem, for: .x64sc))
+    }
+
+    func testQLinkReloadedModemRequirementsRequireDialHost() {
+        let modem = NetworkModemConfiguration(isEnabled: true,
+                                              interface: .userPort,
+                                              baudRate: 1200,
+                                              transportMode: .raw,
+                                              acceptsIncomingCalls: false,
+                                              incomingPort: 6400,
+                                              autoAnswerRings: 0,
+                                              echoCommands: true,
+                                              verboseResultCodes: true,
+                                              connectResultIncludesBaudRate: false,
+                                              defaultDialPort: 5190,
+                                              defaultDialHost: "",
+                                              aciaBaseAddress: .de00)
+
+        XCTAssertEqual(QLinkReloadedModemRequirements.incompatibilities(in: modem, for: .x64sc),
+                       ["Dial host is blank"])
         XCTAssertFalse(QLinkReloadedModemRequirements.isCompatible(modem, for: .x64sc))
     }
 
@@ -3504,6 +3815,161 @@ private final class NetworkTestCapture: @unchecked Sendable {
         }
 
         return false
+    }
+}
+
+private final class QLinkValidationTestServer: @unchecked Sendable {
+    let port: NWEndpoint.Port
+
+    private let queue = DispatchQueue(label: "com.barrywalker.vicemac.tests.qlink-validation-server")
+    private let listener: NWListener
+    private var connections: [NWConnection] = []
+    private var receivedInitialCRCount = 0
+    private var receivedBinaryBytes: [UInt8] = []
+    private var receivedResetFrame = false
+
+    var didReceiveResetFrame: Bool {
+        queue.sync {
+            receivedResetFrame
+        }
+    }
+
+    init() throws {
+        port = try NetworkTestPort.reserveLoopbackPort()
+        listener = try NWListener(using: .tcp, on: port)
+        listener.newConnectionHandler = { [weak self] connection in
+            self?.accept(connection)
+        }
+    }
+
+    func start() {
+        listener.start(queue: queue)
+    }
+
+    func cancel() {
+        queue.sync {
+            listener.cancel()
+            for connection in connections {
+                connection.cancel()
+            }
+            connections.removeAll()
+        }
+    }
+
+    private func accept(_ connection: NWConnection) {
+        connections.append(connection)
+        connection.stateUpdateHandler = { [weak self, weak connection] state in
+            guard case .ready = state,
+                  let connection else {
+                return
+            }
+
+            self?.receiveInitialCRs(on: connection)
+        }
+        connection.start(queue: queue)
+    }
+
+    private func receiveInitialCRs(on connection: NWConnection) {
+        receive(on: connection) { data in
+            self.receivedInitialCRCount += data.filter { $0 == 0x0D }.count
+            guard self.receivedInitialCRCount >= 3 else {
+                self.receiveInitialCRs(on: connection)
+                return
+            }
+
+            self.sendText("TERMINAL=", on: connection)
+            self.receiveTerminalSelection(on: connection)
+        }
+    }
+
+    private func receiveTerminalSelection(on connection: NWConnection) {
+        receiveText(on: connection, containing: "D1") {
+            self.sendText("@", on: connection)
+            self.receiveConnect(on: connection)
+        }
+    }
+
+    private func receiveConnect(on connection: NWConnection) {
+        receiveText(on: connection, containing: "CONNECT") {
+            self.sendText("\r\rCONNECTED\r", on: connection)
+            self.receiveReset(on: connection)
+        }
+    }
+
+    private func receiveReset(on connection: NWConnection) {
+        receive(on: connection) { data in
+            self.receivedBinaryBytes.append(contentsOf: data)
+            guard QLinkReloadedProtocolProbe.isValidFrame(self.receivedBinaryBytes),
+                  self.receivedBinaryBytes.count > 7,
+                  self.receivedBinaryBytes[7] == QLinkReloadedProtocolProbe.resetCommand else {
+                self.receiveReset(on: connection)
+                return
+            }
+
+            self.receivedResetFrame = true
+            let ack = QLinkReloadedProtocolProbe.frame(command: QLinkReloadedProtocolProbe.resetAckCommand,
+                                                       sendSequence: QLinkReloadedProtocolProbe.defaultSequence,
+                                                       receiveSequence: QLinkReloadedProtocolProbe.defaultSequence,
+                                                       payload: [])
+            self.sendData(ack, on: connection)
+        }
+    }
+
+    private func receiveText(on connection: NWConnection,
+                             containing needle: String,
+                             then next: @escaping @Sendable () -> Void) {
+        receive(on: connection) { data in
+            let text = String(decoding: data, as: UTF8.self)
+            guard text.contains(needle) else {
+                self.receiveText(on: connection, containing: needle, then: next)
+                return
+            }
+
+            next()
+        }
+    }
+
+    private func receive(on connection: NWConnection,
+                         then next: @escaping @Sendable (Data) -> Void) {
+        connection.receive(minimumIncompleteLength: 1,
+                           maximumLength: 4096) { [weak self] data, _, _, _ in
+            guard let self,
+                  let data,
+                  !data.isEmpty else {
+                return
+            }
+
+            self.queue.async {
+                next(data)
+            }
+        }
+    }
+
+    private func sendText(_ text: String, on connection: NWConnection) {
+        sendData(Data(text.utf8), on: connection)
+    }
+
+    private func sendData(_ data: Data, on connection: NWConnection) {
+        connection.send(content: data,
+                        completion: .contentProcessed { _ in })
+    }
+}
+
+private final class StubQLinkServerChecker: QLinkReloadedConnectionChecking, @unchecked Sendable {
+    private let result: QLinkReloadedServerCheckResult
+    private(set) var didValidate = false
+    private(set) var validatedHost: String?
+    private(set) var validatedPort: Int?
+
+    init(result: QLinkReloadedServerCheckResult) {
+        self.result = result
+    }
+
+    func validateQLinkServer(host: String, port: Int) async -> QLinkReloadedServerCheckResult {
+        didValidate = true
+        validatedHost = host
+        validatedPort = port
+        return result
     }
 }
 
