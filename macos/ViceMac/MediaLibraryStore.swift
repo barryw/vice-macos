@@ -291,6 +291,86 @@ final class MediaLibraryStore {
     }
 
     @discardableResult
+    func refreshItemMetadata(id: UUID) throws -> MediaLibraryItem? {
+        guard let item = try items().first(where: { $0.id == id }) else {
+            return nil
+        }
+
+        let fileURL = primaryFileURL(for: item)
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            return item
+        }
+
+        guard let descriptor = Self.descriptor(for: fileURL) else {
+            throw MediaLibraryImportError.unsupportedMedia(fileURL.lastPathComponent)
+        }
+
+        let now = Date()
+        let sha256 = try Self.sha256Hex(for: fileURL)
+        let byteCount = try Self.byteCount(for: fileURL)
+        let entries = directoryEntries(itemID: item.id,
+                                       fileID: item.primaryFile.id,
+                                       url: fileURL,
+                                       descriptor: descriptor)
+
+        try beginTransaction()
+        do {
+            try execute("""
+            UPDATE media_files
+            SET media_kind = ?, media_type = ?, type_title = ?,
+                sha256 = ?, byte_count = ?
+            WHERE id = ?
+            """) { statement in
+                bind(descriptor.kind.rawValue, to: statement, at: 1)
+                bind(descriptor.mediaType, to: statement, at: 2)
+                bind(descriptor.typeTitle, to: statement, at: 3)
+                bind(sha256, to: statement, at: 4)
+                sqlite3_bind_int64(statement, 5, byteCount)
+                bind(item.primaryFile.id.uuidString, to: statement, at: 6)
+            }
+
+            try execute("""
+            UPDATE media_items
+            SET updated_at = ?
+            WHERE id = ?
+            """) { statement in
+                bind(now, to: statement, at: 1)
+                bind(item.id.uuidString, to: statement, at: 2)
+            }
+
+            try execute("DELETE FROM media_entries WHERE item_id = ?") { statement in
+                bind(item.id.uuidString, to: statement, at: 1)
+            }
+
+            for entry in entries {
+                try execute("""
+                INSERT INTO media_entries (
+                    item_id, file_id, name, type_text, blocks, sort_order
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """) { statement in
+                    bind(item.id.uuidString, to: statement, at: 1)
+                    bind(item.primaryFile.id.uuidString, to: statement, at: 2)
+                    bind(entry.name, to: statement, at: 3)
+                    bind(entry.typeText, to: statement, at: 4)
+                    sqlite3_bind_int(statement, 5, Int32(entry.blocks))
+                    sqlite3_bind_int(statement, 6, Int32(entry.sortOrder))
+                }
+            }
+
+            try commitTransaction()
+        } catch {
+            try? rollbackTransaction()
+            throw error
+        }
+
+        NotificationCenter.default.post(name: .mediaLibraryDidChange,
+                                        object: self,
+                                        userInfo: ["itemID": id])
+
+        return try items().first { $0.id == id }
+    }
+
+    @discardableResult
     func removeItem(id: UUID) throws -> Bool {
         guard let item = try items().first(where: { $0.id == id }) else {
             return false
@@ -736,6 +816,10 @@ private struct SQLiteError: Error, LocalizedError, Equatable {
 }
 
 private let sqliteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+
+extension Notification.Name {
+    static let mediaLibraryDidChange = Notification.Name("ViceMacMediaLibraryDidChange")
+}
 
 private func stringColumn(_ statement: OpaquePointer?, _ index: Int32) -> String? {
     guard sqlite3_column_type(statement, index) != SQLITE_NULL,

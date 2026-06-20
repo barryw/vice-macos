@@ -16,6 +16,7 @@ struct ViceMacApp: App {
     @StateObject private var aiDocumentLibrary = AIDocumentLibraryStore()
     @StateObject private var metadataSettings = MetadataIngestionSettings()
     @StateObject private var qLinkReloaded = QLinkReloadedService()
+    @StateObject private var diskImageManagerOpenRequests = DiskImageManagerOpenRequests()
     #if VICE_MAC_APP_VSID
     @StateObject private var vsid = VSIDSession()
     #endif
@@ -430,6 +431,7 @@ struct ViceMacApp: App {
 
         Window("Disk Image Manager", id: DiskImageManagerWindow.id) {
             DiskImageManagerView()
+                .environmentObject(diskImageManagerOpenRequests)
         }
         .defaultSize(width: DiskImageManagerWindow.size.width,
                      height: DiskImageManagerWindow.size.height)
@@ -438,6 +440,7 @@ struct ViceMacApp: App {
             MediaLibraryView()
                 .environmentObject(emulator)
                 .environmentObject(metadataSettings)
+                .environmentObject(diskImageManagerOpenRequests)
         }
         .defaultSize(width: MediaLibraryWindow.size.width,
                      height: MediaLibraryWindow.size.height)
@@ -826,7 +829,7 @@ private enum AboutWindow {
     static let size = CGSize(width: 680, height: 486)
 }
 
-private enum DiskImageManagerWindow {
+enum DiskImageManagerWindow {
     static let id = "disk-image-manager"
     static let size = CGSize(width: 1_180, height: 780)
 }

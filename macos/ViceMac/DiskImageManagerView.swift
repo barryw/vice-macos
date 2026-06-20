@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 
 struct DiskImageManagerView: View {
     @Environment(\.undoManager) private var undoManager
+    @EnvironmentObject private var openRequests: DiskImageManagerOpenRequests
     @StateObject private var model = DiskImageManagerModel()
 
     var body: some View {
@@ -168,6 +169,21 @@ struct DiskImageManagerView: View {
             model.openScreenshotImagesFromEnvironmentIfRequested()
         }
         #endif
+        .onAppear {
+            openPendingRequestIfNeeded(openRequests.pendingRequest)
+        }
+        .onChange(of: openRequests.pendingRequest) { _, request in
+            openPendingRequestIfNeeded(request)
+        }
+    }
+
+    private func openPendingRequestIfNeeded(_ request: DiskImageManagerOpenRequests.Request?) {
+        guard let request else {
+            return
+        }
+
+        model.openImage(request)
+        openRequests.clear(request)
     }
 }
 
@@ -1324,6 +1340,7 @@ private struct DirectoryBrowserView: View {
 
             SelectedFileInspectorView(model: model, pane: pane)
         }
+        .padding(10)
         .background(.background, in: RoundedRectangle(cornerRadius: 8))
         .overlay {
             RoundedRectangle(cornerRadius: 8)

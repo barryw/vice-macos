@@ -2213,6 +2213,69 @@ final class ModelConfigurationTests: XCTestCase {
         XCTAssertEqual(try store.items().count, 0)
     }
 
+    func testMediaLibraryRefreshUpdatesDiskDirectoryMetadata() throws {
+        let rootURL = temporaryDirectoryURL("MediaLibraryDiskRefresh")
+        let sourceDirectoryURL = temporaryDirectoryURL("MediaLibraryDiskRefreshSources")
+        let sourceURL = sourceDirectoryURL.appendingPathComponent("work_disk.d64")
+        defer {
+            try? FileManager.default.removeItem(at: rootURL)
+            try? FileManager.default.removeItem(at: sourceDirectoryURL)
+        }
+
+        try FileManager.default.createDirectory(at: sourceDirectoryURL,
+                                                withIntermediateDirectories: true)
+        _ = try DiskImageService.createBlankImage(at: sourceURL,
+                                                  format: .d64,
+                                                  diskName: "WORK DISK",
+                                                  diskID: "VM")
+
+        let store = try MediaLibraryStore(rootURL: rootURL)
+        let item = try XCTUnwrap(try store.importURLs([sourceURL]).first)
+        let managedURL = store.primaryFileURL(for: item)
+        let originalHash = item.primaryFile.sha256
+
+        XCTAssertTrue(item.entries.isEmpty)
+
+        var managedImage = try DiskImageService.openImage(url: managedURL)
+        try managedImage.importFile(named: "HELLO",
+                                    payload: Data([0x01, 0x08, 0x60]))
+        try managedImage.save()
+
+        let staleItem = try XCTUnwrap(try store.items().first { $0.id == item.id })
+        XCTAssertFalse(staleItem.entries.contains { $0.name.caseInsensitiveCompare("HELLO") == .orderedSame })
+
+        let refreshedItem = try XCTUnwrap(try store.refreshItemMetadata(id: item.id))
+
+        XCTAssertNotEqual(refreshedItem.primaryFile.sha256, originalHash)
+        XCTAssertTrue(refreshedItem.entries.contains { $0.name.caseInsensitiveCompare("HELLO") == .orderedSame })
+    }
+
+    @MainActor
+    func testDiskImageManagerOpenRequestsCarryMediaLibraryContext() throws {
+        let requests = DiskImageManagerOpenRequests()
+        let itemID = UUID()
+        let firstURL = URL(fileURLWithPath: "/tmp/first.d64")
+        let secondURL = URL(fileURLWithPath: "/tmp/second.d64")
+
+        requests.open(url: firstURL,
+                      in: .right,
+                      mediaLibraryItemID: itemID)
+
+        let firstRequest = requests.pendingRequest
+        XCTAssertEqual(firstRequest?.url, firstURL)
+        XCTAssertEqual(firstRequest?.pane, .right)
+        XCTAssertEqual(firstRequest?.mediaLibraryItemID, itemID)
+
+        requests.open(url: secondURL, in: .left)
+        requests.clear(try XCTUnwrap(firstRequest))
+
+        XCTAssertEqual(requests.pendingRequest?.url, secondURL)
+
+        requests.clear(try XCTUnwrap(requests.pendingRequest))
+
+        XCTAssertNil(requests.pendingRequest)
+    }
+
     func testQLinkReloadedDiskPatcherConfiguresConnectionAndPreservesAccountProfile() throws {
         var data = makeQLinkD64ProfileFixture()
         let originalProfile = try QLinkReloadedDiskPatcher.decryptedProfileSector(from: data)

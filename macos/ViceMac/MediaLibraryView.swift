@@ -3,7 +3,9 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct MediaLibraryView: View {
+    @Environment(\.openWindow) private var openWindow
     @EnvironmentObject private var emulator: EmulatorSession
+    @EnvironmentObject private var diskImageManagerOpenRequests: DiskImageManagerOpenRequests
     @StateObject private var model = MediaLibraryViewModel()
 
     var body: some View {
@@ -18,6 +20,9 @@ struct MediaLibraryView: View {
         }
         .frame(minWidth: 860, minHeight: 560)
         .onAppear {
+            model.reload()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .mediaLibraryDidChange)) { _ in
             model.reload()
         }
         .alert("Media Library", isPresented: model.errorPresentedBinding) {
@@ -113,6 +118,9 @@ struct MediaLibraryView: View {
                                    onToggleFavorite: { model.toggleFavorite(item) },
                                    onRemove: { model.confirmRemove(item) },
                                    onReveal: { model.reveal(item) },
+                                   onOpenDiskImageManager: item.primaryFile.kind == .disk ? {
+                                       openDiskImageManager(for: item)
+                                   } : nil,
                                    onLaunch: { behavior in
                                        model.launch(item, behavior: behavior, emulator: emulator)
                                    })
@@ -137,6 +145,16 @@ struct MediaLibraryView: View {
             model.launch(item, behavior: .attach, emulator: emulator)
         }
 
+        if item.primaryFile.kind == .disk {
+            Divider()
+
+            Button {
+                openDiskImageManager(for: item)
+            } label: {
+                Label("Open in Disk Image Manager", systemImage: "externaldrive")
+            }
+        }
+
         Divider()
 
         Button(item.isFavorite ? "Remove Favorite" : "Favorite") {
@@ -149,6 +167,13 @@ struct MediaLibraryView: View {
 
         Button("Remove from Library...", role: .destructive) {
             model.confirmRemove(item)
+        }
+    }
+
+    private func openDiskImageManager(for item: MediaLibraryItem) {
+        model.openInDiskImageManager(item,
+                                     requests: diskImageManagerOpenRequests) {
+            openWindow(id: DiskImageManagerWindow.id)
         }
     }
 }
@@ -306,6 +331,25 @@ private final class MediaLibraryViewModel: ObservableObject {
         NSWorkspace.shared.activateFileViewerSelecting([url])
     }
 
+    func openInDiskImageManager(_ item: MediaLibraryItem,
+                                requests: DiskImageManagerOpenRequests,
+                                openWindow: () -> Void) {
+        guard item.primaryFile.kind == .disk else {
+            return
+        }
+
+        do {
+            let url = try libraryStore().primaryFileURL(for: item)
+            selectedItemID = item.id
+            requests.open(url: url,
+                          in: .left,
+                          mediaLibraryItemID: item.id)
+            openWindow()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     func primaryFileURL(for item: MediaLibraryItem) -> URL? {
         do {
             return try libraryStore().primaryFileURL(for: item)
@@ -381,6 +425,7 @@ private struct MediaLibraryDetailView: View {
     let onToggleFavorite: () -> Void
     let onRemove: () -> Void
     let onReveal: () -> Void
+    let onOpenDiskImageManager: (() -> Void)?
     let onLaunch: (MediaOpenBehavior) -> Void
 
     var body: some View {
@@ -460,6 +505,14 @@ private struct MediaLibraryDetailView: View {
 
                 Button("Reveal in Finder") {
                     onReveal()
+                }
+
+                if let onOpenDiskImageManager {
+                    Button {
+                        onOpenDiskImageManager()
+                    } label: {
+                        Label("Open in Disk Image Manager", systemImage: "externaldrive")
+                    }
                 }
 
                 Button("Remove from Library...", role: .destructive) {

@@ -39,6 +39,34 @@ private final class WeakUndoManagerReference {
 }
 
 @MainActor
+final class DiskImageManagerOpenRequests: ObservableObject {
+    struct Request: Identifiable, Equatable {
+        let id = UUID()
+        var url: URL
+        var pane: DiskImageManagerModel.Pane
+        var mediaLibraryItemID: UUID?
+    }
+
+    @Published private(set) var pendingRequest: Request?
+
+    func open(url: URL,
+              in pane: DiskImageManagerModel.Pane = .left,
+              mediaLibraryItemID: UUID? = nil) {
+        pendingRequest = Request(url: url,
+                                 pane: pane,
+                                 mediaLibraryItemID: mediaLibraryItemID)
+    }
+
+    func clear(_ request: Request) {
+        guard pendingRequest?.id == request.id else {
+            return
+        }
+
+        pendingRequest = nil
+    }
+}
+
+@MainActor
 final class DiskImageManagerModel: ObservableObject {
     struct NewImageDraft: Identifiable {
         let id = UUID()
@@ -121,6 +149,7 @@ final class DiskImageManagerModel: ObservableObject {
         var searchText = ""
         var message: String?
         var errorMessage: String?
+        var mediaLibraryItemID: UUID?
 
         var selectedEntry: DiskImageDirectoryEntry? {
             entries.first { $0.id == selectedEntryID }
@@ -177,9 +206,26 @@ final class DiskImageManagerModel: ObservableObject {
     }
 
     func openImage(url: URL, in pane: Pane) throws {
+        try openImage(url: url, in: pane, mediaLibraryItemID: nil)
+    }
+
+    func openImage(_ request: DiskImageManagerOpenRequests.Request) {
+        do {
+            try openImage(url: request.url,
+                          in: request.pane,
+                          mediaLibraryItemID: request.mediaLibraryItemID)
+        } catch {
+            setError(error.localizedDescription, for: request.pane)
+        }
+    }
+
+    private func openImage(url: URL,
+                           in pane: Pane,
+                           mediaLibraryItemID: UUID?) throws {
         let image = try DiskImageService.openImage(url: url)
         setState(for: pane) { state in
             state.image = image
+            state.mediaLibraryItemID = mediaLibraryItemID
             state.message = "Opened \(image.displayName)"
             state.errorMessage = nil
             refresh(&state)
@@ -216,6 +262,7 @@ final class DiskImageManagerModel: ObservableObject {
                                                               diskID: draft.diskID)
             setState(for: draft.pane) { state in
                 state.image = image
+                state.mediaLibraryItemID = nil
                 state.message = "Created \(image.displayName)"
                 state.errorMessage = nil
                 refresh(&state)
@@ -227,11 +274,26 @@ final class DiskImageManagerModel: ObservableObject {
     }
 
     func saveImage(in pane: Pane) {
+        let mediaLibraryItemID = state(for: pane).mediaLibraryItemID
         do {
             try setImage(in: pane) { image in
                 try image.save()
             }
-            setMessage("Saved.", for: pane)
+
+            if let mediaLibraryItemID {
+                do {
+                    guard try MediaLibraryStore().refreshItemMetadata(id: mediaLibraryItemID) != nil else {
+                        setMessage("Saved. The media library item no longer exists.", for: pane)
+                        return
+                    }
+                } catch {
+                    setError("Saved, but the media library could not be refreshed: \(error.localizedDescription)",
+                             for: pane)
+                    return
+                }
+            }
+
+            setMessage(mediaLibraryItemID == nil ? "Saved." : "Saved to media library.", for: pane)
         } catch {
             setError(error.localizedDescription, for: pane)
         }
@@ -480,6 +542,7 @@ final class DiskImageManagerModel: ObservableObject {
             let rebuilt = try image.cloneOptimized(to: url)
             setState(for: pane) { state in
                 state.image = rebuilt
+                state.mediaLibraryItemID = nil
                 state.message = "Created optimized copy \(rebuilt.displayName)."
                 state.errorMessage = nil
                 refresh(&state)
@@ -771,6 +834,7 @@ final class DiskImageManagerModel: ObservableObject {
             state.geosStatus = nil
             state.selectedAddress = nil
             state.sectorEditorText = ""
+            state.mediaLibraryItemID = nil
             return
         }
 
