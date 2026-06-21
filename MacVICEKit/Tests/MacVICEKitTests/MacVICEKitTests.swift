@@ -35,7 +35,7 @@ final class MacVICEKitTests: XCTestCase {
     }
 
     func testMacVICEKitPackagePinsSwift6LanguageMode() throws {
-        let source = try repositorySourceText("MacVICEKit/Package.swift")
+        let source = try packageSourceText("Package.swift")
 
         XCTAssertTrue(source.contains("// swift-tools-version: 6.0"))
         XCTAssertTrue(source.contains("swiftLanguageModes: [.v6]"))
@@ -52,7 +52,7 @@ final class MacVICEKitTests: XCTestCase {
     }
 
     func testEngineSessionClearsNativeCallbacksBeforeDeinit() throws {
-        let source = try repositorySourceText("MacVICEKit/Sources/MacVICEKit/Engine/MacVICEEngineSession.swift")
+        let source = try packageSourceText("Sources/MacVICEKit/Engine/MacVICEEngineSession.swift")
 
         XCTAssertTrue(source.contains("deinit {"))
         XCTAssertTrue(source.contains("private var hasInstalledCallbacks = false"))
@@ -1006,10 +1006,21 @@ final class MacVICEKitTests: XCTestCase {
         return nil
     }
 
-    private func repositorySourceText(_ relativePath: String,
-                                      file: StaticString = #filePath,
-                                      line: UInt = #line) throws -> String {
-        let root = try XCTUnwrap(repositoryRoot(), "Could not locate repository root.", file: file, line: line)
+    private func packageRoot() -> URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+    }
+
+    private func packageSourceText(_ relativePath: String) throws -> String {
+        try String(contentsOf: packageRoot().appendingPathComponent(relativePath), encoding: .utf8)
+    }
+
+    private func repositorySourceText(_ relativePath: String) throws -> String {
+        guard let root = repositoryRoot() else {
+            throw XCTSkip("Source checkout unavailable; this test requires the full MacVICE repository.")
+        }
         return try String(contentsOf: root.appendingPathComponent(relativePath), encoding: .utf8)
     }
 
