@@ -70,19 +70,20 @@ enum MetadataCredentialField: String, CaseIterable, Codable, Identifiable, Hasha
 
 enum MetadataProviderID: String, CaseIterable, Codable, Identifiable, Hashable {
     case gameBase64
-    case mobyGames
     case igdb
     case theGamesDB
     case csdb
 
     var id: String { rawValue }
 
+    static var activeProviderIDs: [MetadataProviderID] {
+        [.gameBase64, .igdb, .theGamesDB, .csdb]
+    }
+
     var title: String {
         switch self {
         case .gameBase64:
             return "GameBase64"
-        case .mobyGames:
-            return "MobyGames"
         case .igdb:
             return "IGDB"
         case .theGamesDB:
@@ -96,8 +97,6 @@ enum MetadataProviderID: String, CaseIterable, Codable, Identifiable, Hashable {
         switch self {
         case .gameBase64:
             return "archivebox"
-        case .mobyGames:
-            return "books.vertical"
         case .igdb:
             return "globe"
         case .theGamesDB:
@@ -109,7 +108,7 @@ enum MetadataProviderID: String, CaseIterable, Codable, Identifiable, Hashable {
 
     var connectionKind: MetadataProviderConnectionKind {
         switch self {
-        case .mobyGames, .igdb, .theGamesDB:
+        case .igdb, .theGamesDB:
             return .documentedAPI
         case .gameBase64:
             return .importedDatabase
@@ -122,7 +121,7 @@ enum MetadataProviderID: String, CaseIterable, Codable, Identifiable, Hashable {
         switch self {
         case .gameBase64, .csdb:
             return "C64"
-        case .mobyGames, .igdb, .theGamesDB:
+        case .igdb, .theGamesDB:
             return "Multi-platform"
         }
     }
@@ -131,10 +130,8 @@ enum MetadataProviderID: String, CaseIterable, Codable, Identifiable, Hashable {
         switch self {
         case .gameBase64:
             return "Imports a user-provided MDB directly, or prepares a GB64 ZIP/installer without running Windows code"
-        case .mobyGames:
-            return "Game metadata API"
         case .igdb:
-            return "Game metadata API"
+            return "Game metadata API with cover and screenshot image fields"
         case .theGamesDB:
             return "Game metadata and artwork API"
         case .csdb:
@@ -150,7 +147,7 @@ enum MetadataProviderID: String, CaseIterable, Codable, Identifiable, Hashable {
         switch self {
         case .gameBase64:
             return ["mdb", "zip", "exe"]
-        case .mobyGames, .igdb, .theGamesDB, .csdb:
+        case .igdb, .theGamesDB, .csdb:
             return []
         }
     }
@@ -159,10 +156,38 @@ enum MetadataProviderID: String, CaseIterable, Codable, Identifiable, Hashable {
         switch self {
         case .gameBase64, .csdb:
             return []
-        case .mobyGames, .theGamesDB:
+        case .theGamesDB:
             return [.apiKey]
         case .igdb:
             return [.clientID, .accessToken]
+        }
+    }
+
+    var supportedArtworkPreferences: [MetadataArtworkPreference] {
+        switch self {
+        case .gameBase64, .csdb:
+            return []
+        case .igdb:
+            return [.boxFront, .screenshot]
+        case .theGamesDB:
+            return [.boxFront, .screenshot, .titleScreen]
+        }
+    }
+
+    var supportsArtwork: Bool {
+        !supportedArtworkPreferences.isEmpty
+    }
+
+    func supportsArtworkPreference(_ preference: MetadataArtworkPreference) -> Bool {
+        supportedArtworkPreferences.contains(preference)
+    }
+
+    var supportsMediaLibraryMetadataSearch: Bool {
+        switch self {
+        case .theGamesDB:
+            return true
+        case .gameBase64, .igdb, .csdb:
+            return false
         }
     }
 }
@@ -205,6 +230,328 @@ enum MetadataArtworkPreference: String, CaseIterable, Codable, Identifiable {
     }
 }
 
+struct MediaLibraryMetadataSearchResult: Identifiable, Equatable {
+    var id: String
+    var providerID: MetadataProviderID
+    var externalID: String
+    var title: String
+    var platformName: String?
+    var releaseDate: String?
+    var overview: String?
+    var artworkURL: URL?
+
+    var subtitle: String {
+        [platformName, releaseDate]
+            .compactMap { value -> String? in
+                let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed?.isEmpty == false ? trimmed : nil
+            }
+            .joined(separator: " - ")
+    }
+}
+
+struct MediaLibraryMetadataUpdate: Equatable {
+    var providerID: MetadataProviderID
+    var externalID: String
+    var title: String
+    var notes: String
+    var artworkKind: MetadataArtworkPreference?
+    var artworkSourceURL: URL?
+    var artworkData: Data?
+    var artworkFileExtension: String?
+}
+
+enum MetadataLookupError: Error, LocalizedError, Equatable {
+    case missingCredential(MetadataProviderID)
+    case unsupportedProvider(MetadataProviderID)
+    case invalidResponse(String)
+    case noResults
+
+    var errorDescription: String? {
+        switch self {
+        case .missingCredential(let providerID):
+            return "\(providerID.title) needs credentials before it can update metadata."
+        case .unsupportedProvider(let providerID):
+            return "\(providerID.title) does not support media library metadata search yet."
+        case .invalidResponse(let message):
+            return message
+        case .noResults:
+            return "No metadata matches were found."
+        }
+    }
+}
+
+final class TheGamesDBMetadataClient: Sendable {
+    private let apiKey: String
+    private let session: URLSession
+
+    init(apiKey: String,
+         session: URLSession = .shared) {
+        self.apiKey = apiKey
+        self.session = session
+    }
+
+    func searchGames(query: String,
+                     artworkPreference: MetadataArtworkPreference,
+                     limit: Int = 12) async throws -> [MediaLibraryMetadataSearchResult] {
+        let response: TheGamesDBGamesResponse = try await request(
+            path: "/v1.1/Games/ByGameName",
+            queryItems: [
+                URLQueryItem(name: "name", value: query),
+                URLQueryItem(name: "fields", value: "overview,platform,players,publishers,genres,alternates"),
+                URLQueryItem(name: "include", value: "boxart,platform")
+            ]
+        )
+
+        return Self.searchResults(from: response,
+                                  artworkPreference: artworkPreference,
+                                  limit: limit)
+    }
+
+    func metadataUpdate(for result: MediaLibraryMetadataSearchResult,
+                        artworkPreference: MetadataArtworkPreference) async throws -> MediaLibraryMetadataUpdate {
+        var artworkURL = result.artworkURL
+        if artworkURL == nil || artworkPreference != .boxFront {
+            artworkURL = try await imageURL(gameID: result.externalID,
+                                            artworkPreference: artworkPreference)
+        }
+
+        let artworkData: Data?
+        if let artworkURL {
+            artworkData = try await downloadArtwork(from: artworkURL)
+        } else {
+            artworkData = nil
+        }
+
+        return MediaLibraryMetadataUpdate(providerID: result.providerID,
+                                          externalID: result.externalID,
+                                          title: result.title,
+                                          notes: Self.notes(for: result),
+                                          artworkKind: artworkData == nil ? nil : artworkPreference,
+                                          artworkSourceURL: artworkURL,
+                                          artworkData: artworkData,
+                                          artworkFileExtension: artworkURL?.pathExtension)
+    }
+
+    func imageURL(gameID: String,
+                  artworkPreference: MetadataArtworkPreference) async throws -> URL? {
+        let response: TheGamesDBImagesResponse = try await request(
+            path: "/v1/Games/Images",
+            queryItems: [
+                URLQueryItem(name: "games_id", value: gameID),
+                URLQueryItem(name: "filter[type]", value: Self.theGamesDBImageType(for: artworkPreference))
+            ]
+        )
+
+        return Self.imageURL(for: gameID,
+                             preference: artworkPreference,
+                             baseURLs: response.data.baseURL,
+                             imagesByGameID: response.data.images)
+    }
+
+    func downloadArtwork(from url: URL) async throws -> Data {
+        let (data, response) = try await session.data(from: url)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw MetadataLookupError.invalidResponse("TheGamesDB artwork download failed.")
+        }
+
+        guard !data.isEmpty else {
+            throw MetadataLookupError.invalidResponse("TheGamesDB returned an empty artwork file.")
+        }
+
+        return data
+    }
+
+    static func searchResults(from data: Data,
+                              artworkPreference: MetadataArtworkPreference,
+                              limit: Int = 12) throws -> [MediaLibraryMetadataSearchResult] {
+        let response = try JSONDecoder().decode(TheGamesDBGamesResponse.self, from: data)
+        return searchResults(from: response,
+                             artworkPreference: artworkPreference,
+                             limit: limit)
+    }
+
+    static func searchResults(from response: TheGamesDBGamesResponse,
+                              artworkPreference: MetadataArtworkPreference,
+                              limit: Int = 12) -> [MediaLibraryMetadataSearchResult] {
+        let platformData = response.include?.platform?.data ?? [:]
+        let boxartData = response.include?.boxart
+        let games = response.data.games.prefix(max(0, limit))
+
+        return games.map { game in
+            let externalID = String(game.id)
+            let platformName = game.platform.flatMap { platformData[String($0)]?.name }
+            let artworkURL = imageURL(for: externalID,
+                                      preference: .boxFront,
+                                      baseURLs: boxartData?.baseURL,
+                                      imagesByGameID: boxartData?.data ?? [:])
+            return MediaLibraryMetadataSearchResult(id: "theGamesDB:\(externalID)",
+                                                    providerID: .theGamesDB,
+                                                    externalID: externalID,
+                                                    title: game.gameTitle,
+                                                    platformName: platformName,
+                                                    releaseDate: game.releaseDate,
+                                                    overview: game.overview,
+                                                    artworkURL: artworkURL)
+        }
+    }
+
+    private func request<T: Decodable>(path: String,
+                                       queryItems: [URLQueryItem]) async throws -> T {
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = "api.thegamesdb.net"
+        components.path = path
+        components.queryItems = [URLQueryItem(name: "apikey", value: apiKey)] + queryItems
+
+        guard let url = components.url else {
+            throw MetadataLookupError.invalidResponse("TheGamesDB request URL could not be built.")
+        }
+
+        let (data, response) = try await session.data(from: url)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw MetadataLookupError.invalidResponse("TheGamesDB request failed.")
+        }
+
+        return try JSONDecoder().decode(T.self, from: data)
+    }
+
+    private static func notes(for result: MediaLibraryMetadataSearchResult) -> String {
+        let source = "Metadata: TheGamesDB \(result.externalID)"
+        let overview = result.overview?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return overview.isEmpty ? source : "\(overview)\n\n\(source)"
+    }
+
+    private static func imageURL(for gameID: String,
+                                 preference: MetadataArtworkPreference,
+                                 baseURLs: TheGamesDBImageBaseURLs?,
+                                 imagesByGameID: [String: [TheGamesDBImage]]) -> URL? {
+        guard let baseURLs,
+              let images = imagesByGameID[gameID] else {
+            return nil
+        }
+
+        let imageType = theGamesDBImageType(for: preference)
+        let image = images.first { image in
+            image.type.caseInsensitiveCompare(imageType) == .orderedSame
+                && (preference != .boxFront || image.side?.caseInsensitiveCompare("front") == .orderedSame)
+        } ?? images.first { image in
+            image.type.caseInsensitiveCompare(imageType) == .orderedSame
+        }
+
+        guard let filename = image?.filename else {
+            return nil
+        }
+
+        if let absoluteURL = URL(string: filename),
+           absoluteURL.scheme != nil {
+            return absoluteURL
+        }
+
+        let baseURLString = baseURLs.large
+            ?? baseURLs.medium
+            ?? baseURLs.original
+            ?? baseURLs.small
+            ?? baseURLs.thumb
+        guard let baseURLString,
+              let baseURL = URL(string: baseURLString) else {
+            return nil
+        }
+
+        return baseURL.appendingPathComponent(filename)
+    }
+
+    private static func theGamesDBImageType(for preference: MetadataArtworkPreference) -> String {
+        switch preference {
+        case .boxFront:
+            return "boxart"
+        case .screenshot:
+            return "screenshot"
+        case .titleScreen:
+            return "titlescreen"
+        }
+    }
+}
+
+struct TheGamesDBGamesResponse: Decodable, Equatable {
+    var data: TheGamesDBGamesData
+    var include: TheGamesDBInclude?
+}
+
+struct TheGamesDBGamesData: Decodable, Equatable {
+    var games: [TheGamesDBGame]
+}
+
+struct TheGamesDBGame: Decodable, Equatable {
+    var id: Int
+    var gameTitle: String
+    var releaseDate: String?
+    var platform: Int?
+    var overview: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case gameTitle = "game_title"
+        case releaseDate = "release_date"
+        case platform
+        case overview
+    }
+}
+
+struct TheGamesDBInclude: Decodable, Equatable {
+    var boxart: TheGamesDBBoxartInclude?
+    var platform: TheGamesDBPlatformInclude?
+}
+
+struct TheGamesDBBoxartInclude: Decodable, Equatable {
+    var baseURL: TheGamesDBImageBaseURLs
+    var data: [String: [TheGamesDBImage]]
+
+    enum CodingKeys: String, CodingKey {
+        case baseURL = "base_url"
+        case data
+    }
+}
+
+struct TheGamesDBPlatformInclude: Decodable, Equatable {
+    var data: [String: TheGamesDBPlatform]
+}
+
+struct TheGamesDBPlatform: Decodable, Equatable {
+    var id: Int
+    var name: String
+}
+
+struct TheGamesDBImagesResponse: Decodable, Equatable {
+    var data: TheGamesDBImagesData
+}
+
+struct TheGamesDBImagesData: Decodable, Equatable {
+    var baseURL: TheGamesDBImageBaseURLs
+    var images: [String: [TheGamesDBImage]]
+
+    enum CodingKeys: String, CodingKey {
+        case baseURL = "base_url"
+        case images
+    }
+}
+
+struct TheGamesDBImageBaseURLs: Decodable, Equatable {
+    var original: String?
+    var small: String?
+    var thumb: String?
+    var medium: String?
+    var large: String?
+}
+
+struct TheGamesDBImage: Decodable, Equatable {
+    var type: String
+    var side: String?
+    var filename: String
+}
+
 struct MetadataProviderConfiguration: Codable, Equatable, Identifiable {
     let providerID: MetadataProviderID
     var isEnabled: Bool
@@ -239,6 +586,34 @@ struct MetadataProviderConfiguration: Codable, Equatable, Identifiable {
         }
 
         return configuration
+    }
+}
+
+private struct StoredMetadataProviderConfiguration: Decodable {
+    let configuration: MetadataProviderConfiguration?
+
+    private enum CodingKeys: String, CodingKey {
+        case providerID
+        case isEnabled
+        case databasePath
+        case lastImportedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let rawProviderID = try? container.decode(String.self, forKey: .providerID)
+        guard let rawProviderID,
+              let providerID = MetadataProviderID(rawValue: rawProviderID) else {
+            configuration = nil
+            return
+        }
+
+        configuration = MetadataProviderConfiguration(
+            providerID: providerID,
+            isEnabled: (try? container.decode(Bool.self, forKey: .isEnabled)) ?? false,
+            databasePath: try? container.decode(String.self, forKey: .databasePath),
+            lastImportedAt: try? container.decode(Date.self, forKey: .lastImportedAt)
+        )
     }
 }
 
@@ -340,7 +715,7 @@ final class MetadataIngestionSettings: ObservableObject {
     }
 
     var providerSnapshots: [MetadataProviderSnapshot] {
-        MetadataProviderID.allCases.map { providerID in
+        MetadataProviderID.activeProviderIDs.map { providerID in
             MetadataProviderSnapshot(providerID: providerID,
                                      configuration: configuration(for: providerID),
                                      configuredCredentialFields: credentialStatus[providerID] ?? [])
@@ -408,7 +783,7 @@ final class MetadataIngestionSettings: ObservableObject {
         case .gameBase64:
             result = try GameBase64MetadataImporter()
                 .importPackage(at: url, into: metadataSourceDirectoryURL)
-        case .mobyGames, .igdb, .theGamesDB, .csdb:
+        case .igdb, .theGamesDB, .csdb:
             throw GameBase64MetadataImportError.unsupportedPackage(url.lastPathComponent)
         }
 
@@ -468,7 +843,7 @@ final class MetadataIngestionSettings: ObservableObject {
     }
 
     private func saveConfigurations() {
-        let storedConfigurations = MetadataProviderID.allCases.map { providerID in
+        let storedConfigurations = MetadataProviderID.activeProviderIDs.map { providerID in
             configuration(for: providerID).normalized()
         }
 
@@ -482,13 +857,13 @@ final class MetadataIngestionSettings: ObservableObject {
     private static func loadConfigurations(from defaults: UserDefaults) -> [MetadataProviderID: MetadataProviderConfiguration] {
         let storedConfigurations: [MetadataProviderConfiguration]
         if let data = defaults.data(forKey: providerConfigurationsKey),
-           let decodedConfigurations = try? JSONDecoder().decode([MetadataProviderConfiguration].self, from: data) {
-            storedConfigurations = decodedConfigurations
+           let decodedConfigurations = try? JSONDecoder().decode([StoredMetadataProviderConfiguration].self, from: data) {
+            storedConfigurations = decodedConfigurations.compactMap(\.configuration)
         } else {
             storedConfigurations = []
         }
 
-        var configurations = Dictionary(uniqueKeysWithValues: MetadataProviderID.allCases.map { providerID in
+        var configurations = Dictionary(uniqueKeysWithValues: MetadataProviderID.activeProviderIDs.map { providerID in
             (providerID, MetadataProviderConfiguration(providerID: providerID).normalized())
         })
 
@@ -500,7 +875,7 @@ final class MetadataIngestionSettings: ObservableObject {
     }
 
     private static func loadCredentialStatus(using credentialStore: MetadataCredentialStoring) -> [MetadataProviderID: Set<MetadataCredentialField>] {
-        Dictionary(uniqueKeysWithValues: MetadataProviderID.allCases.map { providerID in
+        Dictionary(uniqueKeysWithValues: MetadataProviderID.activeProviderIDs.map { providerID in
             (providerID, configuredCredentialFields(for: providerID, using: credentialStore))
         })
     }

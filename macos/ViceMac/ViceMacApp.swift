@@ -826,7 +826,7 @@ private enum ReleaseSmokeFrameAnalyzer {
 
 private enum AboutWindow {
     static let id = "about-vice-mac"
-    static let size = CGSize(width: 680, height: 486)
+    static let size = CGSize(width: 720, height: 486)
 }
 
 enum DiskImageManagerWindow {
@@ -1314,6 +1314,13 @@ final class QLinkReloadedService: ObservableObject {
                 return
             }
 
+            let version = try QLinkReloadedDiskPatcher.knownVersion(for: url)
+            guard version.requiresLegacyPatch else {
+                configuredDiskRegistrationProfiles = []
+                configuredDiskVersionTitle = version.displayTitle
+                return
+            }
+
             let data = try Data(contentsOf: url)
             configuredDiskRegistrationProfiles = try QLinkReloadedDiskPatcher.registrationProfiles(from: data)
         } catch {
@@ -1496,6 +1503,12 @@ final class QLinkReloadedService: ObservableObject {
 
     private func configureManagedDisk(at url: URL,
                                       version: QLinkReloadedDiskVersion) throws -> QLinkReloadedDiskPatchResult {
+        guard version.requiresLegacyPatch else {
+            configuredDiskRegistrationProfiles = []
+            return QLinkReloadedDiskPatchResult(version: version,
+                                                changedDisk: false)
+        }
+
         var data = try Data(contentsOf: url)
         let diskRegistrations = try saveRegistrationsIfPresent(in: data)
         let changedDisk = try QLinkReloadedDiskPatcher.configureReloadedProfile(in: &data,
@@ -1852,15 +1865,16 @@ private struct AboutVICEView: View {
                 Divider()
                     .overlay(.white.opacity(0.12))
 
-                HStack(alignment: .bottom, spacing: 12) {
+                HStack(alignment: .bottom, spacing: 16) {
                     VStack(alignment: .leading, spacing: 8) {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Powered by the VICE project")
                                 .font(.system(size: 12, weight: .semibold))
 
-                            Text("VICE is free software distributed under the GNU General Public License.")
+                            Text("GPL-2.0-or-later. VICE engine: VICE team and contributors. Mac integration: Barry Walker and contributors, 2026.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
 
                         AboutBuildMetadataStrip(metadata: AppMetadata.buildMetadata)
@@ -1872,9 +1886,8 @@ private struct AboutVICEView: View {
                         AppMetadata.openVICEProject()
                     }
 
-                    Button("Copy Info") {
-                        AppMetadata.copyVersionSummary(machineName: emulator.machineDisplayName,
-                                                       viceTarget: emulator.machine.shortName)
+                    Button("License") {
+                        AppMetadata.openLicense()
                     }
 
                     Button("Done") {
@@ -1922,34 +1935,47 @@ private struct AboutBuildMetadataStrip: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            AboutBuildMetadataToken(label: "VICE", value: metadata.viceUpstreamSHA)
-            AboutBuildMetadataToken(label: "Mac", value: metadata.macSHA)
+            AboutBuildMetadataToken(label: "VICE",
+                                    value: metadata.viceUpstreamSHA,
+                                    help: "Copy VICE build identifier")
+            AboutBuildMetadataToken(label: "Mac",
+                                    value: metadata.macSHA,
+                                    help: "Copy mac VICE build identifier")
         }
-        .help("Build identifiers for bug reports")
     }
 }
 
 private struct AboutBuildMetadataToken: View {
     let label: String
     let value: String
+    let help: String
 
     var body: some View {
-        HStack(spacing: 5) {
-            Text(label)
-                .font(.system(size: 10.5, weight: .bold))
-                .foregroundStyle(.secondary)
+        Button {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(value, forType: .string)
+        } label: {
+            HStack(spacing: 5) {
+                Text(label)
+                    .font(.system(size: 10.5, weight: .bold))
+                    .foregroundStyle(.secondary)
 
-            Text(value)
-                .font(.system(size: 10.5, weight: .medium, design: .monospaced))
-                .textSelection(.enabled)
+                Text(value)
+                    .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.88)
+                    .allowsTightening(true)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(.black.opacity(0.16), in: Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(.white.opacity(0.08), lineWidth: 1)
+            }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(.black.opacity(0.16), in: Capsule())
-        .overlay {
-            Capsule()
-                .stroke(.white.opacity(0.08), lineWidth: 1)
-        }
+        .buttonStyle(.plain)
+        .help(help)
     }
 }
 
@@ -2196,22 +2222,16 @@ private enum AppMetadata {
                          viceUpstreamSHA: buildMetadataString(for: "VICEUpstreamGitSHA"))
     }
 
-    static func copyVersionSummary(machineName: String, viceTarget: String) {
-        let metadata = buildMetadata
-        let summary = """
-        \(brandDisplayName(viceTarget: viceTarget))
-        VICE \(viceVersion)
-        Machine \(machineName) / \(viceTarget)
-        VICE upstream \(metadata.viceUpstreamSHA)
-        Mac frontend \(metadata.macSHA)
-        """
-
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(summary, forType: .string)
-    }
-
     static func openVICEProject() {
         guard let url = URL(string: "https://vice-emu.sourceforge.io/") else {
+            return
+        }
+
+        NSWorkspace.shared.open(url)
+    }
+
+    static func openLicense() {
+        guard let url = URL(string: "https://github.com/barryw/vice-macos/blob/main/LICENSE") else {
             return
         }
 

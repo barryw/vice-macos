@@ -330,7 +330,7 @@ private struct MetadataImportedDatabaseSection: View {
         switch snapshot.providerID {
         case .gameBase64:
             return "Choose a GameBase64 MDB database, ZIP archive, or Inno Setup installer."
-        case .mobyGames, .igdb, .theGamesDB, .csdb:
+        case .igdb, .theGamesDB, .csdb:
             return "Choose a \(snapshot.providerID.title) database file."
         }
     }

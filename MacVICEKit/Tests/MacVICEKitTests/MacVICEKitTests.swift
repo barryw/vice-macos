@@ -1,8 +1,72 @@
+import Foundation
 import ImageIO
 import XCTest
 @testable import MacVICEKit
 
+private final class LiveRuntimeTestGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var didStartLiveRuntimeInProcess = false
+
+    func claim() throws {
+        lock.lock()
+        defer { lock.unlock() }
+
+        if didStartLiveRuntimeInProcess {
+            throw XCTSkip("VICE is not safely reentrant inside one XCTest host process.")
+        }
+
+        didStartLiveRuntimeInProcess = true
+    }
+}
+
 final class MacVICEKitTests: XCTestCase {
+    private static let liveRuntimeGate = LiveRuntimeTestGate()
+
+    private static func claimLiveRuntimeTest() throws {
+        try liveRuntimeGate.claim()
+    }
+
+    private static func stopRunningEngine(timeout: TimeInterval = 2) {
+        _ = MacVICEEngineSession.requestQuit()
+        let deadline = Date().addingTimeInterval(timeout)
+        while MacVICEEngineSession.isRunning && Date() < deadline {
+            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05))
+        }
+    }
+
+    func testMacVICEKitPackagePinsSwift6LanguageMode() throws {
+        let source = try repositorySourceText("MacVICEKit/Package.swift")
+
+        XCTAssertTrue(source.contains("// swift-tools-version: 6.0"))
+        XCTAssertTrue(source.contains("swiftLanguageModes: [.v6]"))
+    }
+
+    func testMacVICEKitSDKTemplatesPinSwift6LanguageMode() throws {
+        let packageScript = try repositorySourceText("macos/scripts/package-macvicekit-runtime.sh")
+        let smokeScript = try repositorySourceText("macos/scripts/smoke-test-macvicekit-sdk.sh")
+
+        XCTAssertTrue(packageScript.contains("// swift-tools-version: 6.0"))
+        XCTAssertTrue(packageScript.contains("swiftLanguageModes: [.v6]"))
+        XCTAssertTrue(smokeScript.contains("// swift-tools-version: 6.0"))
+        XCTAssertTrue(smokeScript.contains("swiftLanguageModes: [.v6]"))
+    }
+
+    func testEngineSessionClearsNativeCallbacksBeforeDeinit() throws {
+        let source = try repositorySourceText("MacVICEKit/Sources/MacVICEKit/Engine/MacVICEEngineSession.swift")
+
+        XCTAssertTrue(source.contains("deinit {"))
+        XCTAssertTrue(source.contains("private var hasInstalledCallbacks = false"))
+        XCTAssertTrue(source.contains("clearInstalledCallbacks()"))
+        XCTAssertTrue(source.contains("guard hasInstalledCallbacks else"))
+        XCTAssertTrue(source.contains("Self.clearCallbacks()"))
+        XCTAssertTrue(source.contains("ViceEngineSetVideoFrameCallback(nil, nil)"))
+        XCTAssertTrue(source.contains("ViceEngineSetAudioSamplesCallback(nil, nil)"))
+        XCTAssertTrue(source.contains("ViceEngineSetDriveStatusCallback(nil, nil)"))
+        XCTAssertTrue(source.contains("ViceEngineSetCartridgeStatusCallback(nil, nil)"))
+        XCTAssertTrue(source.contains("ViceEngineSetVSIDStateCallback(nil, nil)"))
+        XCTAssertTrue(source.contains("ViceEngineSetSIDVoiceSamplesCallback(nil, nil)"))
+    }
+
     func testDefaultConfigurationBuildsMinimalLaunchArguments() {
         let runtime = fakeRuntime()
         let configuration = MacVICEMachineConfiguration(machine: .c64sc)
@@ -613,10 +677,48 @@ final class MacVICEKitTests: XCTestCase {
         XCTAssertTrue(runtimeSource.contains("int vicemac_queue_drive_attach_disk_v2(uint32_t unit,"))
     }
 
+    func testNativeBridgeQuitCommandShutsDownVICEThreadBeforeProcessExitFallback() throws {
+        let runtimeSource = try sourceText(at: "vice/src/arch/macos/vicemacbridge.c")
+        XCTAssertTrue(runtimeSource.contains("#include \"mainlock.h\""))
+        XCTAssertTrue(runtimeSource.contains("#include \"main.h\""))
+
+        let quitCaseRange = try XCTUnwrap(runtimeSource.range(of: "case VICEMAC_MACHINE_COMMAND_QUIT:"))
+        let quitCase = runtimeSource[quitCaseRange.lowerBound...]
+        let breakRange = try XCTUnwrap(quitCase.range(of: "break;"))
+        let quitBlock = String(quitCase[..<breakRange.upperBound])
+
+        XCTAssertTrue(quitBlock.contains("#ifdef USE_VICE_THREAD"))
+        XCTAssertTrue(quitBlock.contains("mainlock_initiate_shutdown();"))
+        XCTAssertTrue(quitBlock.contains("#else"))
+        XCTAssertTrue(quitBlock.contains("main_exit();"))
+        XCTAssertTrue(quitBlock.contains("pthread_exit(NULL);"))
+        XCTAssertFalse(quitBlock.contains("archdep_vice_exit(0);"))
+    }
+
+    func testHostBridgeCleansEngineStateWhenVICEExitsThreadDirectly() throws {
+        let bridgeSource = try sourceText(at: "MacVICEKit/Sources/CMacVICEEngineBridge/ViceEngineBridge.c")
+
+        XCTAssertTrue(bridgeSource.contains("static void cleanupEngineThread(void *opaque)"))
+        XCTAssertTrue(bridgeSource.contains("atomic_store(&engineRunning, false);"))
+        XCTAssertTrue(bridgeSource.contains("freeStartArguments(arguments);"))
+        XCTAssertTrue(bridgeSource.contains("pthread_cleanup_push(cleanupEngineThread, arguments);"))
+        XCTAssertTrue(bridgeSource.contains("pthread_cleanup_pop(1);"))
+    }
+
+    func testRuntimeResourceCopiesUseChecksumSyncToAvoidStaleVICEData() throws {
+        let prepareScript = try sourceText(at: "macos/scripts/prepare-vicemac-runtime.sh")
+        let packageScript = try sourceText(at: "macos/scripts/package-macvicekit-runtime.sh")
+        let expectedCommand = "rsync -a --delete --checksum \"$VICE_SRC/data/\" \"$resources_dir/VICEData/\""
+
+        XCTAssertTrue(prepareScript.contains(expectedCommand))
+        XCTAssertTrue(packageScript.contains(expectedCommand))
+    }
+
     func testRuntimeDiskAttachPublishesAttachedImagePath() throws {
         guard !MacVICEEngineSession.isRunning else {
             throw XCTSkip("A VICE engine is already running in this process.")
         }
+        try Self.claimLiveRuntimeTest()
 
         let runtime = try builtRuntime()
         let diskURL = try temporaryBlankD64(named: "macvice-attach-\(UUID().uuidString).d64")
@@ -648,11 +750,7 @@ final class MacVICEKitTests: XCTestCase {
                           dynamicLibraryURL: runtime.dynamicLibraryURL(for: .c64sc),
                           arguments: configuration.launchArguments(runtime: runtime))
         addTeardownBlock {
-            _ = session.requestQuit()
-            let deadline = Date().addingTimeInterval(2)
-            while MacVICEEngineSession.isRunning && Date() < deadline {
-                RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05))
-            }
+            Self.stopRunningEngine()
         }
 
         XCTAssertTrue(session.attachDisk(unit: 8, drive: 0, url: diskURL))
@@ -666,6 +764,7 @@ final class MacVICEKitTests: XCTestCase {
         guard !MacVICEEngineSession.isRunning else {
             throw XCTSkip("A VICE engine is already running in this process.")
         }
+        try Self.claimLiveRuntimeTest()
 
         let runtime = try builtRuntime()
         let missingDiskURL = FileManager.default.temporaryDirectory
@@ -686,11 +785,7 @@ final class MacVICEKitTests: XCTestCase {
                           dynamicLibraryURL: runtime.dynamicLibraryURL(for: .c64sc),
                           arguments: configuration.launchArguments(runtime: runtime))
         addTeardownBlock {
-            _ = session.requestQuit()
-            let deadline = Date().addingTimeInterval(2)
-            while MacVICEEngineSession.isRunning && Date() < deadline {
-                RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05))
-            }
+            Self.stopRunningEngine()
         }
 
         XCTAssertFalse(session.attachDisk(unit: 8, drive: 0, url: missingDiskURL))
@@ -700,6 +795,7 @@ final class MacVICEKitTests: XCTestCase {
         guard !MacVICEEngineSession.isRunning else {
             throw XCTSkip("A VICE engine is already running in this process.")
         }
+        try Self.claimLiveRuntimeTest()
 
         let runtime = try builtRuntime()
         let diskTitle = "MACVICE TEST"
@@ -721,11 +817,7 @@ final class MacVICEKitTests: XCTestCase {
                           dynamicLibraryURL: runtime.dynamicLibraryURL(for: .c64sc),
                           arguments: configuration.launchArguments(runtime: runtime))
         addTeardownBlock {
-            _ = session.requestQuit()
-            let deadline = Date().addingTimeInterval(2)
-            while MacVICEEngineSession.isRunning && Date() < deadline {
-                RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05))
-            }
+            Self.stopRunningEngine()
         }
 
         XCTAssertTrue(session.attachDisk(unit: 8, drive: 0, url: diskURL))
@@ -912,6 +1004,13 @@ final class MacVICEKitTests: XCTestCase {
             url.deleteLastPathComponent()
         }
         return nil
+    }
+
+    private func repositorySourceText(_ relativePath: String,
+                                      file: StaticString = #filePath,
+                                      line: UInt = #line) throws -> String {
+        let root = try XCTUnwrap(repositoryRoot(), "Could not locate repository root.", file: file, line: line)
+        return try String(contentsOf: root.appendingPathComponent(relativePath), encoding: .utf8)
     }
 
     private func createRuntimeDirectory(for machines: MacVICEMachine...) throws -> URL {

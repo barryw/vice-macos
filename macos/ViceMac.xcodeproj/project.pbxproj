@@ -393,6 +393,16 @@
 		AC0608000000000000000000 /* CommonUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1006000000000000000000 /* CommonUI.swift */; };
 		AC0609000000000000000000 /* CommonUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1006000000000000000000 /* CommonUI.swift */; };
 		AC060A000000000000000000 /* CommonUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1006000000000000000000 /* CommonUI.swift */; };
+		AC1101000000000000000000 /* VMCFeatureFlags.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1100000000000000000000 /* VMCFeatureFlags.swift */; };
+		AC1102000000000000000000 /* VMCFeatureFlags.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1100000000000000000000 /* VMCFeatureFlags.swift */; };
+		AC1103000000000000000000 /* VMCFeatureFlags.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1100000000000000000000 /* VMCFeatureFlags.swift */; };
+		AC1104000000000000000000 /* VMCFeatureFlags.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1100000000000000000000 /* VMCFeatureFlags.swift */; };
+		AC1105000000000000000000 /* VMCFeatureFlags.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1100000000000000000000 /* VMCFeatureFlags.swift */; };
+		AC1106000000000000000000 /* VMCFeatureFlags.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1100000000000000000000 /* VMCFeatureFlags.swift */; };
+		AC1107000000000000000000 /* VMCFeatureFlags.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1100000000000000000000 /* VMCFeatureFlags.swift */; };
+		AC1108000000000000000000 /* VMCFeatureFlags.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1100000000000000000000 /* VMCFeatureFlags.swift */; };
+		AC1109000000000000000000 /* VMCFeatureFlags.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1100000000000000000000 /* VMCFeatureFlags.swift */; };
+		AC110A000000000000000000 /* VMCFeatureFlags.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1100000000000000000000 /* VMCFeatureFlags.swift */; };
 		AC0701000000000000000000 /* EmulatorSession+State.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1007000000000000000000 /* EmulatorSession+State.swift */; };
 		AC0702000000000000000000 /* EmulatorSession+State.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1007000000000000000000 /* EmulatorSession+State.swift */; };
 		AC0703000000000000000000 /* EmulatorSession+State.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1007000000000000000000 /* EmulatorSession+State.swift */; };
@@ -525,6 +535,7 @@
 		AC100B000000000000000000 /* EmulatorSession+RuntimeConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EmulatorSession+RuntimeConfiguration.swift"; sourceTree = "<group>"; };
 		AC100C000000000000000000 /* DebuggerModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DebuggerModels.swift"; sourceTree = "<group>"; };
 		AC100D000000000000000000 /* SettingsCommonUI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SettingsCommonUI.swift"; sourceTree = "<group>"; };
+		AC1100000000000000000000 /* VMCFeatureFlags.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VMCFeatureFlags.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -783,6 +794,7 @@
 			isa = PBXGroup;
 			children = (
 				AC1006000000000000000000 /* CommonUI.swift */,
+				AC1100000000000000000000 /* VMCFeatureFlags.swift */,
 			);
 			name = "Shared UI";
 			sourceTree = "<group>";
@@ -1441,9 +1453,10 @@
 				AC0401000000000000000000 /* ContentView+DriveIndicators.swift in Sources */,
 				AC0501000000000000000000 /* KeyboardSettingsPane.swift in Sources */,
 				AC0D01000000000000000000 /* SettingsCommonUI.swift in Sources */,
-				A10000000000000000000011 /* EmulatorSession.swift in Sources */,
-				AC0601000000000000000000 /* CommonUI.swift in Sources */,
-				AC0701000000000000000000 /* EmulatorSession+State.swift in Sources */,
+					A10000000000000000000011 /* EmulatorSession.swift in Sources */,
+					AC0601000000000000000000 /* CommonUI.swift in Sources */,
+					AC1101000000000000000000 /* VMCFeatureFlags.swift in Sources */,
+					AC0701000000000000000000 /* EmulatorSession+State.swift in Sources */,
 				AC0801000000000000000000 /* EmulatorSession+InputControl.swift in Sources */,
 				AC0901000000000000000000 /* EmulatorSession+Lifecycle.swift in Sources */,
 				AC0A01000000000000000000 /* EmulatorSession+Media.swift in Sources */,
@@ -1491,9 +1504,10 @@
 				AC0402000000000000000000 /* ContentView+DriveIndicators.swift in Sources */,
 				AC0502000000000000000000 /* KeyboardSettingsPane.swift in Sources */,
 				AC0D02000000000000000000 /* SettingsCommonUI.swift in Sources */,
-				B20000000000000000000011 /* EmulatorSession.swift in Sources */,
-				AC0602000000000000000000 /* CommonUI.swift in Sources */,
-				AC0702000000000000000000 /* EmulatorSession+State.swift in Sources */,
+					B20000000000000000000011 /* EmulatorSession.swift in Sources */,
+					AC0602000000000000000000 /* CommonUI.swift in Sources */,
+					AC1102000000000000000000 /* VMCFeatureFlags.swift in Sources */,
+					AC0702000000000000000000 /* EmulatorSession+State.swift in Sources */,
 				AC0802000000000000000000 /* EmulatorSession+InputControl.swift in Sources */,
 				AC0902000000000000000000 /* EmulatorSession+Lifecycle.swift in Sources */,
 				AC0A02000000000000000000 /* EmulatorSession+Media.swift in Sources */,
@@ -1541,9 +1555,10 @@
 				AC0403000000000000000000 /* ContentView+DriveIndicators.swift in Sources */,
 				AC0503000000000000000000 /* KeyboardSettingsPane.swift in Sources */,
 				AC0D03000000000000000000 /* SettingsCommonUI.swift in Sources */,
-				C30000000000000000000011 /* EmulatorSession.swift in Sources */,
-				AC0603000000000000000000 /* CommonUI.swift in Sources */,
-				AC0703000000000000000000 /* EmulatorSession+State.swift in Sources */,
+					C30000000000000000000011 /* EmulatorSession.swift in Sources */,
+					AC0603000000000000000000 /* CommonUI.swift in Sources */,
+					AC1103000000000000000000 /* VMCFeatureFlags.swift in Sources */,
+					AC0703000000000000000000 /* EmulatorSession+State.swift in Sources */,
 				AC0803000000000000000000 /* EmulatorSession+InputControl.swift in Sources */,
 				AC0903000000000000000000 /* EmulatorSession+Lifecycle.swift in Sources */,
 				AC0A03000000000000000000 /* EmulatorSession+Media.swift in Sources */,
@@ -1591,9 +1606,10 @@
 				AC0404000000000000000000 /* ContentView+DriveIndicators.swift in Sources */,
 				AC0504000000000000000000 /* KeyboardSettingsPane.swift in Sources */,
 				AC0D04000000000000000000 /* SettingsCommonUI.swift in Sources */,
-				D40000000000000000000011 /* EmulatorSession.swift in Sources */,
-				AC0604000000000000000000 /* CommonUI.swift in Sources */,
-				AC0704000000000000000000 /* EmulatorSession+State.swift in Sources */,
+					D40000000000000000000011 /* EmulatorSession.swift in Sources */,
+					AC0604000000000000000000 /* CommonUI.swift in Sources */,
+					AC1104000000000000000000 /* VMCFeatureFlags.swift in Sources */,
+					AC0704000000000000000000 /* EmulatorSession+State.swift in Sources */,
 				AC0804000000000000000000 /* EmulatorSession+InputControl.swift in Sources */,
 				AC0904000000000000000000 /* EmulatorSession+Lifecycle.swift in Sources */,
 				AC0A04000000000000000000 /* EmulatorSession+Media.swift in Sources */,
@@ -1641,9 +1657,10 @@
 				AC0405000000000000000000 /* ContentView+DriveIndicators.swift in Sources */,
 				AC0505000000000000000000 /* KeyboardSettingsPane.swift in Sources */,
 				AC0D05000000000000000000 /* SettingsCommonUI.swift in Sources */,
-				E50000000000000000000011 /* EmulatorSession.swift in Sources */,
-				AC0605000000000000000000 /* CommonUI.swift in Sources */,
-				AC0705000000000000000000 /* EmulatorSession+State.swift in Sources */,
+					E50000000000000000000011 /* EmulatorSession.swift in Sources */,
+					AC0605000000000000000000 /* CommonUI.swift in Sources */,
+					AC1105000000000000000000 /* VMCFeatureFlags.swift in Sources */,
+					AC0705000000000000000000 /* EmulatorSession+State.swift in Sources */,
 				AC0805000000000000000000 /* EmulatorSession+InputControl.swift in Sources */,
 				AC0905000000000000000000 /* EmulatorSession+Lifecycle.swift in Sources */,
 				AC0A05000000000000000000 /* EmulatorSession+Media.swift in Sources */,
@@ -1691,9 +1708,10 @@
 				AC0406000000000000000000 /* ContentView+DriveIndicators.swift in Sources */,
 				AC0506000000000000000000 /* KeyboardSettingsPane.swift in Sources */,
 				AC0D06000000000000000000 /* SettingsCommonUI.swift in Sources */,
-				170000000000000000000011 /* EmulatorSession.swift in Sources */,
-				AC0606000000000000000000 /* CommonUI.swift in Sources */,
-				AC0706000000000000000000 /* EmulatorSession+State.swift in Sources */,
+					170000000000000000000011 /* EmulatorSession.swift in Sources */,
+					AC0606000000000000000000 /* CommonUI.swift in Sources */,
+					AC1106000000000000000000 /* VMCFeatureFlags.swift in Sources */,
+					AC0706000000000000000000 /* EmulatorSession+State.swift in Sources */,
 				AC0806000000000000000000 /* EmulatorSession+InputControl.swift in Sources */,
 				AC0906000000000000000000 /* EmulatorSession+Lifecycle.swift in Sources */,
 				AC0A06000000000000000000 /* EmulatorSession+Media.swift in Sources */,
@@ -1741,9 +1759,10 @@
 				AC0407000000000000000000 /* ContentView+DriveIndicators.swift in Sources */,
 				AC0507000000000000000000 /* KeyboardSettingsPane.swift in Sources */,
 				AC0D07000000000000000000 /* SettingsCommonUI.swift in Sources */,
-				180000000000000000000011 /* EmulatorSession.swift in Sources */,
-				AC0607000000000000000000 /* CommonUI.swift in Sources */,
-				AC0707000000000000000000 /* EmulatorSession+State.swift in Sources */,
+					180000000000000000000011 /* EmulatorSession.swift in Sources */,
+					AC0607000000000000000000 /* CommonUI.swift in Sources */,
+					AC1107000000000000000000 /* VMCFeatureFlags.swift in Sources */,
+					AC0707000000000000000000 /* EmulatorSession+State.swift in Sources */,
 				AC0807000000000000000000 /* EmulatorSession+InputControl.swift in Sources */,
 				AC0907000000000000000000 /* EmulatorSession+Lifecycle.swift in Sources */,
 				AC0A07000000000000000000 /* EmulatorSession+Media.swift in Sources */,
@@ -1791,9 +1810,10 @@
 				AC0408000000000000000000 /* ContentView+DriveIndicators.swift in Sources */,
 				AC0508000000000000000000 /* KeyboardSettingsPane.swift in Sources */,
 				AC0D08000000000000000000 /* SettingsCommonUI.swift in Sources */,
-				190000000000000000000011 /* EmulatorSession.swift in Sources */,
-				AC0608000000000000000000 /* CommonUI.swift in Sources */,
-				AC0708000000000000000000 /* EmulatorSession+State.swift in Sources */,
+					190000000000000000000011 /* EmulatorSession.swift in Sources */,
+					AC0608000000000000000000 /* CommonUI.swift in Sources */,
+					AC1108000000000000000000 /* VMCFeatureFlags.swift in Sources */,
+					AC0708000000000000000000 /* EmulatorSession+State.swift in Sources */,
 				AC0808000000000000000000 /* EmulatorSession+InputControl.swift in Sources */,
 				AC0908000000000000000000 /* EmulatorSession+Lifecycle.swift in Sources */,
 				AC0A08000000000000000000 /* EmulatorSession+Media.swift in Sources */,
@@ -1843,9 +1863,10 @@
 				AC0D09000000000000000000 /* SettingsCommonUI.swift in Sources */,
 				1A0000000000000000000073 /* SIDFile.swift in Sources */,
 				1A0000000000000000000074 /* VSIDPlayerView.swift in Sources */,
-				1A0000000000000000000011 /* EmulatorSession.swift in Sources */,
-				AC0609000000000000000000 /* CommonUI.swift in Sources */,
-				AC0709000000000000000000 /* EmulatorSession+State.swift in Sources */,
+					1A0000000000000000000011 /* EmulatorSession.swift in Sources */,
+					AC0609000000000000000000 /* CommonUI.swift in Sources */,
+					AC1109000000000000000000 /* VMCFeatureFlags.swift in Sources */,
+					AC0709000000000000000000 /* EmulatorSession+State.swift in Sources */,
 				AC0809000000000000000000 /* EmulatorSession+InputControl.swift in Sources */,
 				AC0909000000000000000000 /* EmulatorSession+Lifecycle.swift in Sources */,
 				AC0A09000000000000000000 /* EmulatorSession+Media.swift in Sources */,
@@ -1890,9 +1911,10 @@
 				AC040A000000000000000000 /* ContentView+DriveIndicators.swift in Sources */,
 				AC050A000000000000000000 /* KeyboardSettingsPane.swift in Sources */,
 				AC0D0A000000000000000000 /* SettingsCommonUI.swift in Sources */,
-				F60000000000000000000011 /* EmulatorSession.swift in Sources */,
-				AC060A000000000000000000 /* CommonUI.swift in Sources */,
-				AC070A000000000000000000 /* EmulatorSession+State.swift in Sources */,
+					F60000000000000000000011 /* EmulatorSession.swift in Sources */,
+					AC060A000000000000000000 /* CommonUI.swift in Sources */,
+					AC110A000000000000000000 /* VMCFeatureFlags.swift in Sources */,
+					AC070A000000000000000000 /* EmulatorSession+State.swift in Sources */,
 				AC080A000000000000000000 /* EmulatorSession+InputControl.swift in Sources */,
 				AC090A000000000000000000 /* EmulatorSession+Lifecycle.swift in Sources */,
 				AC0A0A000000000000000000 /* EmulatorSession+Media.swift in Sources */,

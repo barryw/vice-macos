@@ -40,10 +40,20 @@ if [[ ! -d "$SDK_DIR/Runtime/MacVICERuntime.xcframework" ]]; then
     exit 1
 fi
 
+if [[ ! -f "$SDK_DIR/LICENSE" ]]; then
+    echo "MacVICEKit SDK is missing LICENSE." >&2
+    exit 1
+fi
+
+if [[ ! -f "$SDK_DIR/NOTICE" ]]; then
+    echo "MacVICEKit SDK is missing NOTICE." >&2
+    exit 1
+fi
+
 swift test --package-path "$SDK_DIR"
 
 cat > "$CONSUMER_DIR/Package.swift" <<EOF
-// swift-tools-version: 5.9
+// swift-tools-version: 6.0
 
 import PackageDescription
 
@@ -62,7 +72,8 @@ let package = Package(
                 .product(name: "MacVICEKit", package: "$SDK_PACKAGE_BASENAME")
             ]
         )
-    ]
+    ],
+    swiftLanguageModes: [.v6]
 )
 EOF
 

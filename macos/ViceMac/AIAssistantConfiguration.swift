@@ -340,6 +340,21 @@ final class AIAssistantSettings: ObservableObject {
     init() {
         let credentialStore = AIAssistantKeychain()
         self.credentialStore = credentialStore
+
+        guard VMCFeatureFlags.aiAssistant else {
+            availability = .unavailable(.deviceNotEligible)
+            modelBackend = .openAICompatible
+            remoteProvider = .local
+            remoteBaseURLString = AIAssistantRemoteProvider.local.defaultBaseURLString
+            selectedRemoteModelID = ""
+            remoteModels = []
+            remoteCredentialProviders = []
+            remoteConnectionStatus = .idle
+            isFetchingRemoteModels = false
+            isEnabled = false
+            return
+        }
+
         let currentAvailability = Self.currentAvailability()
         let storedBackend = Self.defaults.string(forKey: Self.modelBackendKey)
             .flatMap(AIAssistantModelBackend.init(rawValue:)) ?? .openAICompatible

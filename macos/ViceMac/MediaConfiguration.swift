@@ -8,6 +8,7 @@ enum QLinkReloadedServiceError: LocalizedError, Equatable {
     case unsupportedDisk
     case unknownVersion
     case unsupportedDiskLayout
+    case legacyProfileStorageUnavailable
     case diskProfileLimitReached
     case incompatibleSettings(modemIssues: [String], driveIssues: [String])
 
@@ -19,6 +20,8 @@ enum QLinkReloadedServiceError: LocalizedError, Equatable {
             return "Sorry - unknown version"
         case .unsupportedDiskLayout:
             return "This Q-Link disk image is not in a patchable D64 layout."
+        case .legacyProfileStorageUnavailable:
+            return "This Q-Link disk does not use legacy on-disk profile storage."
         case .diskProfileLimitReached:
             return "Q-Link disks can store up to 10 saved user profiles. Remove one from the managed disk before adding another."
         case let .incompatibleSettings(modemIssues, driveIssues):
@@ -33,7 +36,7 @@ enum QLinkReloadedServiceError: LocalizedError, Equatable {
             return """
             Some current settings are not compatible with Q-Link Reloaded. VICE Mac did not change them.
 
-            Q-Link Reloaded needs a User Port modem at 1200 baud using Raw TCP with a dial host configured, plus a writable disk image in drive 8 so the client can validate and update its disk.
+            Q-Link Reloaded needs a supported modem interface using Raw TCP with a dial host configured, plus a writable disk image in drive 8 so the client can validate and update its disk.
 
             Current differences:
             \(issueText)
@@ -468,6 +471,7 @@ struct QLinkReloadedDiskPatchResult {
 struct QLinkReloadedDiskVersion: Equatable {
     var profileAgnosticSHA256: String
     var displayTitle: String
+    var requiresLegacyPatch = true
 }
 
 struct QLinkReloadedRegistrationProfile: Codable, Equatable, Identifiable {
@@ -836,6 +840,11 @@ enum QLinkReloadedDiskPatcher {
         registrationProfileStorageRange,
         userRecordBlockRange
     ]
+    private static let developmentNGVersion = QLinkReloadedDiskVersion(profileAgnosticSHA256: "development-ng",
+                                                                       displayTitle: "Q-Link NG Development",
+                                                                       requiresLegacyPatch: false)
+    private static let legacyBootProgramNames: Set<String> = ["BOOT64", "BOOT128"]
+    private static let developmentNGMarkerNames: Set<String> = ["MODBOOT", "NGBOOT"]
 
     private static let knownVersions: [QLinkReloadedDiskVersion] = [
         QLinkReloadedDiskVersion(profileAgnosticSHA256: "0a82272d2bee8d91c891090cfca8f1dc63d116678cfabf6c084900886f45348b",
@@ -856,21 +865,28 @@ enum QLinkReloadedDiskPatcher {
     }
 
     static func knownVersion(for data: Data) throws -> QLinkReloadedDiskVersion {
-        guard data.count == d64ByteCount else {
-            throw QLinkReloadedServiceError.unknownVersion
+        if data.count == d64ByteCount {
+            let profileAgnosticHash = try profileAgnosticSHA256Hex(for: data)
+            if let version = knownVersions.first(where: { $0.profileAgnosticSHA256 == profileAgnosticHash }) {
+                return version
+            }
         }
 
-        let profileAgnosticHash = try profileAgnosticSHA256Hex(for: data)
-        guard let version = knownVersions.first(where: { $0.profileAgnosticSHA256 == profileAgnosticHash }) else {
-            throw QLinkReloadedServiceError.unknownVersion
+        if isDevelopmentNGDisk(data) {
+            return developmentNGVersion
         }
 
-        return version
+        throw QLinkReloadedServiceError.unknownVersion
     }
 
     static func configureReloadedProfile(at url: URL,
                                          version: QLinkReloadedDiskVersion,
                                          restoring registration: QLinkReloadedRegistrationProfile? = nil) throws -> QLinkReloadedDiskPatchResult {
+        guard version.requiresLegacyPatch else {
+            return QLinkReloadedDiskPatchResult(version: version,
+                                                changedDisk: false)
+        }
+
         var data = try Data(contentsOf: url)
         let changedDisk = try configureReloadedProfile(in: &data,
                                                        restoring: registration)
@@ -882,8 +898,20 @@ enum QLinkReloadedDiskPatcher {
                                             changedDisk: changedDisk)
     }
 
+    static func isDevelopmentNGDisk(_ data: Data) -> Bool {
+        guard isSupportedDevelopmentD64ByteCount(data.count),
+              let directoryNames = try? directoryNames(in: data) else {
+            return false
+        }
+
+        return !directoryNames.isDisjoint(with: legacyBootProgramNames)
+            && !directoryNames.isDisjoint(with: developmentNGMarkerNames)
+    }
+
     static func removeRegistrationProfile(at url: URL,
                                           version: QLinkReloadedDiskVersion) throws -> QLinkReloadedDiskPatchResult {
+        try requireLegacyProfileStorage(for: version)
+
         var data = try Data(contentsOf: url)
         let changedDisk = try removeRegistrationProfile(in: &data)
         if changedDisk {
@@ -897,6 +925,8 @@ enum QLinkReloadedDiskPatcher {
     static func addRegistrationProfile(_ registration: QLinkReloadedRegistrationProfile,
                                        at url: URL,
                                        version: QLinkReloadedDiskVersion) throws -> QLinkReloadedDiskPatchResult {
+        try requireLegacyProfileStorage(for: version)
+
         var data = try Data(contentsOf: url)
         let changedDisk = try addRegistrationProfile(registration,
                                                      in: &data)
@@ -911,6 +941,8 @@ enum QLinkReloadedDiskPatcher {
     static func removeRegistrationProfile(id: String,
                                           at url: URL,
                                           version: QLinkReloadedDiskVersion) throws -> QLinkReloadedDiskPatchResult {
+        try requireLegacyProfileStorage(for: version)
+
         var data = try Data(contentsOf: url)
         let changedDisk = try removeRegistrationProfile(id: id,
                                                         in: &data)
@@ -920,6 +952,12 @@ enum QLinkReloadedDiskPatcher {
 
         return QLinkReloadedDiskPatchResult(version: version,
                                             changedDisk: changedDisk)
+    }
+
+    private static func requireLegacyProfileStorage(for version: QLinkReloadedDiskVersion) throws {
+        guard version.requiresLegacyPatch else {
+            throw QLinkReloadedServiceError.legacyProfileStorageUnavailable
+        }
     }
 
     @discardableResult
@@ -1018,6 +1056,68 @@ enum QLinkReloadedDiskPatcher {
         let profileRange = try sectorRange(track: profileSectorTrack, sector: profileSector)
         fingerprintData.replaceSubrange(profileRange, with: Data(repeating: 0, count: profileRange.count))
         return sha256Hex(for: fingerprintData)
+    }
+
+    private static func directoryNames(in data: Data) throws -> Set<String> {
+        var names: Set<String> = []
+        var track = 18
+        var sector = 1
+        var visited = Set<String>()
+
+        while track != 0 {
+            let key = "\(track):\(sector)"
+            guard !visited.contains(key) else {
+                throw QLinkReloadedServiceError.unsupportedDiskLayout
+            }
+            visited.insert(key)
+
+            let directorySectorRange = try sectorRange(track: track, sector: sector)
+            guard directorySectorRange.upperBound <= data.count else {
+                throw QLinkReloadedServiceError.unsupportedDiskLayout
+            }
+
+            let directorySector = Array(data[directorySectorRange])
+            for slot in 0..<8 {
+                let base = slot * 32
+                guard directorySector[base + 2] != 0 else {
+                    continue
+                }
+
+                let rawName = Array(directorySector[(base + 5)..<(base + 21)])
+                let name = decodedDirectoryName(rawName)
+                if !name.isEmpty {
+                    names.insert(name)
+                }
+            }
+
+            track = Int(directorySector[0])
+            sector = Int(directorySector[1])
+        }
+
+        return names
+    }
+
+    private static func decodedDirectoryName(_ rawName: [UInt8]) -> String {
+        let bytes = rawName.prefix { byte in
+            byte != 0 && byte != 0xa0
+        }
+        return String(bytes: bytes, encoding: .isoLatin1)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased() ?? ""
+    }
+
+    private static func isSupportedDevelopmentD64ByteCount(_ byteCount: Int) -> Bool {
+        for trackCount in 35...42 {
+            let sectorCount = (1...trackCount)
+                .map(sectors(onTrack:))
+                .reduce(0, +)
+            let imageByteCount = sectorCount * 256
+            if byteCount == imageByteCount || byteCount == imageByteCount + sectorCount {
+                return true
+            }
+        }
+
+        return false
     }
 
     private static func registrationAccessCode(in profile: [UInt8]) -> String? {
@@ -1864,24 +1964,26 @@ struct NetworkModemRuntimeStatus: Equatable {
 enum QLinkReloadedModemRequirements {
     static let serverHost = "q-link.net"
     static let serverPort = 5190
-    static let baudRate = 1200
-    static let interface = NetworkModemInterface.userPort
+    static let preferredInterface = NetworkModemInterface.swiftLink
+    static let preferredBaudRate = 38400
+    static let supportedInterfaces: [NetworkModemInterface] = [.userPort, .swiftLink, .turbo232]
     static let transportMode = NetworkTransportMode.raw
 
     static func preset(preservingValuesFrom configuration: NetworkModemConfiguration) -> NetworkModemConfiguration {
-        NetworkModemConfiguration(isEnabled: true,
-                                  interface: interface,
-                                  baudRate: baudRate,
-                                  transportMode: transportMode,
-                                  acceptsIncomingCalls: false,
-                                  incomingPort: configuration.incomingPort,
-                                  autoAnswerRings: 0,
-                                  echoCommands: true,
-                                  verboseResultCodes: true,
-                                  connectResultIncludesBaudRate: false,
-                                  defaultDialPort: serverPort,
-                                  defaultDialHost: serverHost,
-                                  aciaBaseAddress: configuration.aciaBaseAddress)
+        let interface = presetInterface(preserving: configuration.interface)
+        return NetworkModemConfiguration(isEnabled: true,
+                                         interface: interface,
+                                         baudRate: preferredBaudRate(for: interface),
+                                         transportMode: transportMode,
+                                         acceptsIncomingCalls: false,
+                                         incomingPort: configuration.incomingPort,
+                                         autoAnswerRings: 0,
+                                         echoCommands: true,
+                                         verboseResultCodes: true,
+                                         connectResultIncludesBaudRate: false,
+                                         defaultDialPort: serverPort,
+                                         defaultDialHost: serverHost,
+                                         aciaBaseAddress: configuration.aciaBaseAddress)
     }
 
     static func incompatibilities(in configuration: NetworkModemConfiguration,
@@ -1893,12 +1995,8 @@ enum QLinkReloadedModemRequirements {
             issues.append("Modem is off")
         }
 
-        if modem.interface != interface {
-            issues.append("Hardware is \(modem.interface.title), not User Port")
-        }
-
-        if modem.baudRate != baudRate {
-            issues.append("Speed is \(modem.baudRate) baud, not \(baudRate) baud")
+        if !supportedInterfaces.contains(modem.interface) {
+            issues.append("Hardware is \(modem.interface.title), not \(supportedInterfaceTitle)")
         }
 
         if modem.transportMode != transportMode {
@@ -1926,7 +2024,24 @@ enum QLinkReloadedModemRequirements {
     }
 
     static var summary: String {
-        "User Port, \(baudRate) baud, Raw TCP, \(serverHost):\(serverPort), plain CONNECT response"
+        "\(preferredInterface.title), \(preferredBaudRate) baud, Raw TCP, \(serverHost):\(serverPort), plain CONNECT response"
+    }
+
+    private static func presetInterface(preserving interface: NetworkModemInterface) -> NetworkModemInterface {
+        switch interface {
+        case .swiftLink, .turbo232:
+            return interface
+        case .userPort:
+            return preferredInterface
+        }
+    }
+
+    private static func preferredBaudRate(for interface: NetworkModemInterface) -> Int {
+        interface.supportedBaudRates.contains(preferredBaudRate) ? preferredBaudRate : interface.supportedBaudRates.last ?? preferredBaudRate
+    }
+
+    private static var supportedInterfaceTitle: String {
+        supportedInterfaces.map(\.title).joined(separator: ", ")
     }
 }
 

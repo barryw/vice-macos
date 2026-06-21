@@ -432,6 +432,7 @@ public final class MacVICEEngineSession {
     public lazy var debugger = MacVICEDebugger(session: self)
 
     private var launchPlan: MacVICELaunchPlan?
+    private var hasInstalledCallbacks = false
 
     /// Creates a session from a machine configuration.
     public init(configuration: MacVICEMachineConfiguration,
@@ -442,6 +443,10 @@ public final class MacVICEEngineSession {
         self.videoSource = videoSource ?? MacVICEFrameSource(displayProfile: configuration.machine.displayProfile)
         self.audioSource = audioSource
         self.callbacks = callbacks
+    }
+
+    deinit {
+        clearInstalledCallbacks()
     }
 
     /// Whether any VICE machine is currently running in the process.
@@ -490,6 +495,10 @@ public final class MacVICEEngineSession {
     public func start(machineID: String,
                       dynamicLibraryURL: URL,
                       arguments: [String]) throws -> MacVICEEngineStartResult {
+        guard !Self.isRunning else {
+            return .alreadyRunning
+        }
+
         installCallbacks()
         let started = arguments.withMacVICECStringArray { argc, argv in
             machineID.withCString { machineIDPointer in
@@ -506,6 +515,8 @@ public final class MacVICEEngineSession {
             return .started
         }
 
+        clearInstalledCallbacks()
+
         guard Self.isRunning else {
             throw MacVICEError.engineFailure(Self.lastErrorMessage)
         }
@@ -521,6 +532,25 @@ public final class MacVICEEngineSession {
         ViceEngineSetCartridgeStatusCallback(macVICECartridgeStatusCallback, context)
         ViceEngineSetVSIDStateCallback(macVICEVSIDStateCallback, context)
         ViceEngineSetSIDVoiceSamplesCallback(macVICESIDVoiceSamplesCallback, context)
+        hasInstalledCallbacks = true
+    }
+
+    private func clearInstalledCallbacks() {
+        guard hasInstalledCallbacks else {
+            return
+        }
+
+        Self.clearCallbacks()
+        hasInstalledCallbacks = false
+    }
+
+    private static func clearCallbacks() {
+        ViceEngineSetVideoFrameCallback(nil, nil)
+        ViceEngineSetAudioSamplesCallback(nil, nil)
+        ViceEngineSetDriveStatusCallback(nil, nil)
+        ViceEngineSetCartridgeStatusCallback(nil, nil)
+        ViceEngineSetVSIDStateCallback(nil, nil)
+        ViceEngineSetSIDVoiceSamplesCallback(nil, nil)
     }
 
     /// Requests the running VICE engine to quit.
@@ -628,7 +658,13 @@ public final class MacVICEEngineSession {
                                                    UInt32(pointer.count))
             }
         }
-        return didRead ? String(cString: buffer) : nil
+        guard didRead else {
+            return nil
+        }
+
+        let length = buffer.firstIndex(of: 0) ?? buffer.count
+        let bytes = buffer.prefix(length).map { UInt8(bitPattern: $0) }
+        return String(decoding: bytes, as: UTF8.self)
     }
 
     /// Autostarts media in the running machine.

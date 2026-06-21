@@ -763,6 +763,15 @@ struct CommodoreDiskImage: Identifiable, Equatable {
         return GEOSDiskStatus(inputDrivers: drivers)
     }
 
+    var geosBootProgramName: String? {
+        guard let entries = try? directoryEntries(),
+              Self.looksLikeGEOSSystemDisk(entries) else {
+            return nil
+        }
+
+        return Self.geosBootEntry(in: entries)?.name
+    }
+
     mutating func copyFile(_ entry: CommodoreDiskDirectoryEntry,
                            from source: CommodoreDiskImage) throws {
         let payload = try source.fileData(for: entry)
@@ -1198,15 +1207,22 @@ struct CommodoreDiskImage: Identifiable, Equatable {
 
     private static func looksLikeGEOSSystemDisk(_ entries: [CommodoreDiskDirectoryEntry]) -> Bool {
         let names = Set(entries.map { normalizedGEOSName($0.name) })
-        let hasBoot = names.contains("GEOS")
-            || names.contains("GEOS128")
-            || names.contains("GEOBOOT")
-            || names.contains("GEOBOOT128")
+        let hasBoot = geosBootEntry(in: entries) != nil
         let hasDesktop = names.contains("DESK TOP")
             || names.contains("DESKTOP")
             || names.contains("128 DESKTOP")
 
         return hasBoot && hasDesktop
+    }
+
+    private static func geosBootEntry(in entries: [CommodoreDiskDirectoryEntry]) -> CommodoreDiskDirectoryEntry? {
+        for bootName in ["GEOS128", "GEOS", "GEOBOOT128", "GEOBOOT"] {
+            if let entry = entries.first(where: { normalizedGEOSName($0.name) == bootName }) {
+                return entry
+            }
+        }
+
+        return nil
     }
 
     private static func geosInputDevice(for name: String) -> GEOSInputDeviceKind? {

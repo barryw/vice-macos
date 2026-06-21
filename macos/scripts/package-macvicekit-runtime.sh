@@ -198,7 +198,7 @@ copy_runtime_payload() {
         fi
     done
 
-    rsync -a --delete "$VICE_SRC/data/" "$resources_dir/VICEData/"
+    rsync -a --delete --checksum "$VICE_SRC/data/" "$resources_dir/VICEData/"
 }
 
 copy_sdk_payload() {
@@ -207,7 +207,7 @@ copy_sdk_payload() {
     mkdir -p "$SDK_DIR/Sources" "$SDK_DIR/Tests" "$SDK_DIR/Runtime" "$docs_dir"
 
     cat > "$SDK_DIR/Package.swift" <<EOF
-// swift-tools-version: 5.9
+// swift-tools-version: 6.0
 
 import PackageDescription
 
@@ -241,7 +241,8 @@ let package = Package(
             name: "MacVICEKitTests",
             dependencies: ["MacVICEKit"]
         )
-    ]
+    ],
+    swiftLanguageModes: [.v6]
 )
 EOF
 
@@ -258,6 +259,8 @@ EOF
         "$REPO_ROOT/MacVICEKit/Tests/" "$SDK_DIR/Tests/"
 
     cp "$REPO_ROOT/MacVICEKit/README.md" "$SDK_DIR/README.md"
+    cp "$REPO_ROOT/LICENSE" "$SDK_DIR/LICENSE"
+    cp "$REPO_ROOT/NOTICE" "$SDK_DIR/NOTICE"
     copy_docc_documentation "$docs_dir"
 }
 
@@ -304,6 +307,8 @@ Contents:
 - Tests/
 - Runtime/MacVICERuntime.xcframework
 - Documentation/MacVICEKit.doccarchive
+- LICENSE
+- NOTICE
 
 Use it from Xcode:
 
@@ -313,6 +318,10 @@ Use it from Xcode:
 
 Users of apps built with this SDK do not need Homebrew, command-line VICE
 binaries, or local VICE build tools.
+
+MacVICEKit is free software distributed under the GNU General Public License,
+version 2 or later, because it ships with and links against the VICE runtime.
+See LICENSE and NOTICE.
 EOF
 }
 

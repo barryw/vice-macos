@@ -84,7 +84,7 @@ struct ContentView: View {
                 }
             }
 
-            if aiSettings.isConfigured {
+            if VMCFeatureFlags.aiAssistant && aiSettings.isConfigured {
                 ToolbarItem {
                     AIAssistantToolbarButton(isVisible: $isAssistantVisible)
                 }
@@ -130,7 +130,7 @@ struct ContentView: View {
     }
 
     private var showsAssistantSidebar: Bool {
-        isAssistantVisible && aiSettings.isConfigured
+        VMCFeatureFlags.aiAssistant && isAssistantVisible && aiSettings.isConfigured
     }
 
     private var assistantSidebarReservedWidth: CGFloat {

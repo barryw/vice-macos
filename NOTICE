@@ -1,0 +1,27 @@
+MacVICE Licensing Notice
+
+MacVICE is free software distributed under the GNU General Public License,
+version 2 or later. See LICENSE for the license text.
+
+MacVICE includes and links against VICE, the Versatile Commodore Emulator.
+VICE is copyright the VICE team and contributors and is distributed under the
+GNU General Public License, version 2 or later. The bundled VICE source tree
+and its upstream license notice live in vice/.
+
+Original MacVICE application code, native macOS integration, Metal rendering
+integration, MacVICEKit, packaging, website, and other Mac-specific work added
+in this repository are Copyright (C) 2026 Barry Walker and contributors, and
+are licensed under the GNU General Public License, version 2 or later, unless a
+file explicitly states otherwise.
+
+Third-party components inside the bundled VICE source tree keep their own
+copyright and license notices. See the corresponding files under vice/ for
+those notices.
+
+Commodore is an active company and brand. Commodore, Quantum Link, Q-Link, and
+other product or service names referenced by this project are names or marks of
+their respective owners. MacVICE is not affiliated with those owners.
+
+MacVICE is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See LICENSE for details.

@@ -3,6 +3,125 @@ import CoreGraphics
 import Foundation
 import MacVICEKit
 
+struct DiskImageLaunchPlan: Equatable {
+    var runMode: MacVICEMediaRunMode
+    var programName: String?
+    var keyboardText: String?
+    var statusMessage: String?
+
+    static func plan(for url: URL,
+                     machine: EmulatedMachine,
+                     unit: Int,
+                     driveNumber: Int,
+                     driveType: DriveType,
+                     behavior: MediaOpenBehavior,
+                     explicitProgramName: String? = nil) -> DiskImageLaunchPlan {
+        let trimmedProgramName = explicitProgramName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let selectedProgramName = trimmedProgramName?.isEmpty == false ? trimmedProgramName : nil
+        let geosBootProgramName: String?
+        if behavior == .attach {
+            geosBootProgramName = nil
+        } else {
+            geosBootProgramName = (try? CommodoreDiskImage(url: url))?.geosBootProgramName
+        }
+
+        if let geosBootProgramName,
+           selectedProgramName == nil || normalizedProgramName(selectedProgramName ?? "") == normalizedProgramName(geosBootProgramName) {
+            if requiresC128(programName: geosBootProgramName),
+               machine.family != .c128 {
+                return DiskImageLaunchPlan(runMode: .attach,
+                                           programName: nil,
+                                           keyboardText: nil,
+                                           statusMessage: "\(geosBootProgramName) requires a Commodore 128")
+            }
+
+            return DiskImageLaunchPlan(runMode: .attach,
+                                       programName: nil,
+                                       keyboardText: geosBootCommand(programName: geosBootProgramName,
+                                                                     machine: machine,
+                                                                     unit: unit,
+                                                                     driveNumber: driveNumber,
+                                                                     driveType: driveType,
+                                                                     behavior: behavior),
+                                       statusMessage: nil)
+        }
+
+        if let explicitProgramName = selectedProgramName,
+           !explicitProgramName.isEmpty {
+            return DiskImageLaunchPlan(runMode: behavior.macVICERunMode,
+                                       programName: explicitProgramName,
+                                       keyboardText: nil,
+                                       statusMessage: nil)
+        }
+
+        return DiskImageLaunchPlan(runMode: behavior.macVICERunMode,
+                                   programName: nil,
+                                   keyboardText: nil,
+                                   statusMessage: nil)
+    }
+
+    private static func geosBootCommand(programName: String,
+                                        machine: EmulatedMachine,
+                                        unit: Int,
+                                        driveNumber: Int,
+                                        driveType: DriveType,
+                                        behavior: MediaOpenBehavior) -> String? {
+        switch behavior {
+        case .attach:
+            return nil
+        case .load:
+            return loadCommand(programName: programName,
+                               unit: unit,
+                               driveNumber: driveNumber,
+                               driveType: driveType,
+                               shouldRun: false)
+        case .run:
+            if usesC128RunCommand(programName: programName,
+                                  machine: machine,
+                                  unit: unit,
+                                  driveNumber: driveNumber) {
+                return "RUN\"\(programName)\"\r"
+            }
+
+            return loadCommand(programName: programName,
+                               unit: unit,
+                               driveNumber: driveNumber,
+                               driveType: driveType,
+                               shouldRun: true)
+        }
+    }
+
+    private static func usesC128RunCommand(programName: String,
+                                           machine: EmulatedMachine,
+                                           unit: Int,
+                                           driveNumber: Int) -> Bool {
+        machine.family == .c128
+            && unit == 8
+            && driveNumber == 0
+            && requiresC128(programName: programName)
+    }
+
+    private static func requiresC128(programName: String) -> Bool {
+        normalizedProgramName(programName).contains("128")
+    }
+
+    private static func loadCommand(programName: String,
+                                    unit: Int,
+                                    driveNumber: Int,
+                                    driveType: DriveType,
+                                    shouldRun: Bool) -> String {
+        let drivePrefix = driveType.slotCount > 1 ? "\(driveNumber):" : ""
+        let runSuffix = shouldRun ? "RUN\r" : ""
+        return "LOAD\"\(drivePrefix)\(programName)\",\(unit),1\r\(runSuffix)"
+    }
+
+    private static func normalizedProgramName(_ name: String) -> String {
+        name.uppercased()
+            .replacingOccurrences(of: "  ", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
 extension EmulatorSession {
     func handleDriveStatus(_ status: MacVICEDriveStatus) {
         guard let driveType = DriveType(rawValue: status.driveType) else {
@@ -162,15 +281,34 @@ extension EmulatorSession {
         applyDriveConfigurations(updateStatus: false)
         applyMediaBehavior(updateStatus: false)
 
+        let launchPlan = DiskImageLaunchPlan.plan(for: url,
+                                                  machine: machine,
+                                                  unit: unit,
+                                                  driveNumber: driveNumber,
+                                                  driveType: configuration.driveType,
+                                                  behavior: behavior,
+                                                  explicitProgramName: programName)
+
         let didAttach = engine.attachDisk(unit: UInt32(unit),
                                           drive: UInt32(driveNumber),
                                           url: url,
-                                          programName: programName,
-                                          runMode: behavior.macVICERunMode)
+                                          programName: launchPlan.programName,
+                                          runMode: launchPlan.runMode)
 
         if didAttach {
+            if let keyboardText = launchPlan.keyboardText,
+               !typeText(keyboardText) {
+                statusText = "Unable to type GEOS boot command"
+                return false
+            }
+
             rememberMedia(url)
-            statusText = "\(url.lastPathComponent) \(behavior.statusVerb) on \(driveAddress(unit: unit, driveNumber: driveNumber))"
+            let attachedStatus = "\(url.lastPathComponent) \(behavior.statusVerb) on \(driveAddress(unit: unit, driveNumber: driveNumber))"
+            if let statusMessage = launchPlan.statusMessage {
+                statusText = "\(statusMessage). \(attachedStatus)"
+            } else {
+                statusText = attachedStatus
+            }
         } else {
             statusText = "Unable to attach \(url.lastPathComponent)"
         }

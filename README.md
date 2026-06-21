@@ -13,6 +13,7 @@
   <a href="https://github.com/barryw/vice-macos/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/barryw/vice-macos?label=release&sort=semver"></a>
   <a href="https://ci.barrywalker.io/repos/barryw/vice-macos"><img alt="Pipeline status" src="https://ci.barrywalker.io/api/badges/barryw/vice-macos/status.svg?branch=main"></a>
   <img alt="macOS 26.5+" src="https://img.shields.io/badge/macOS-26.5%2B-111111?logo=apple&logoColor=white">
+  <a href="LICENSE"><img alt="License GPL-2.0-or-later" src="https://img.shields.io/badge/license-GPL--2.0--or--later-blue"></a>
   <a href="https://github.com/barryw/vice-macos/releases/latest/download/coverage.json"><img alt="Test coverage" src="https://img.shields.io/endpoint?url=https%3A%2F%2Fgithub.com%2Fbarryw%2Fvice-macos%2Freleases%2Flatest%2Fdownload%2Fcoverage.json"></a>
 </p>
 
@@ -134,13 +135,6 @@ Build the utility payload with:
 ```sh
 make -C commodore-utils/geos-rtc
 ```
-
-### Optional AI Assistant
-
-The app includes an optional assistant panel that can use local Foundation
-Models where available or an OpenAI-compatible provider. The assistant talks to
-the emulator through the app's internal tool surface, so it can inspect state
-and batch machine changes instead of pretending it changed something.
 
 ## MacVICEKit
 
@@ -278,6 +272,19 @@ https://vice-emu.sourceforge.io/
 This repository tracks VICE upstream directly. Local product work lives on
 `main`; `git pull` merges `VICE-Team/svn-mirror` `main`, and `git push` pushes
 this Mac product repo.
+
+## License
+
+MacVICE is free software distributed under the GNU General Public License,
+version 2 or later. See [LICENSE](LICENSE) for the GPL text and
+[NOTICE](NOTICE) for project-specific copyright and attribution.
+
+The VICE emulator engine remains copyright the VICE team and contributors.
+Mac-specific application code, native macOS integration, Metal rendering
+integration, MacVICEKit, packaging, website, and other original work added in
+this repository are Copyright (C) 2026 Barry Walker and contributors and are
+licensed under the GNU General Public License, version 2 or later, unless a file
+explicitly states otherwise.
 
 ## Credits
 

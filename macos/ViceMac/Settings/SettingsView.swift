@@ -8,78 +8,17 @@ struct SettingsView: View {
     @AppStorage("vice.settings.selectedPane") private var selectedPaneID = SettingsPaneID.machine.rawValue
 
     var body: some View {
-        TabView(selection: $selectedPaneID) {
-            MachineSettingsPane()
-                .tabItem {
-                    Label("Machine", systemImage: "cpu")
-                }
-                .tag(SettingsPaneID.machine.rawValue)
+        HStack(spacing: 0) {
+            SettingsSidebar(panes: availablePanes,
+                            selection: $selectedPaneID)
 
-            MediaSettingsPane()
-                .tabItem {
-                    Label("Media", systemImage: "externaldrive.badge.plus")
-                }
-                .tag(SettingsPaneID.media.rawValue)
+            Divider()
 
-            MetadataSettingsPane()
-                .tabItem {
-                    Label("Metadata", systemImage: "tag")
-                }
-                .tag(SettingsPaneID.metadata.rawValue)
-
-            SoundSettingsPane()
-                .tabItem {
-                    Label("Sound", systemImage: "speaker.wave.2")
-                }
-                .tag(SettingsPaneID.sound.rawValue)
-
-            if showsControlSettings {
-                ControlSettingsPane()
-                    .tabItem {
-                        Label("Controls", systemImage: "gamecontroller")
-                    }
-                    .tag(SettingsPaneID.controls.rawValue)
-            }
-
-            KeyboardSettingsPane()
-                .tabItem {
-                    Label("Keyboard", systemImage: "keyboard")
-                }
-                .tag(SettingsPaneID.keyboard.rawValue)
-
-            DriveSettingsPane()
-                .tabItem {
-                    Label("Storage", systemImage: "externaldrive")
-                }
-                .tag(SettingsPaneID.drives.rawValue)
-
-            PrintingSettingsPane()
-                .tabItem {
-                    Label("Printing", systemImage: "printer")
-                }
-                .tag(SettingsPaneID.printing.rawValue)
-
-            if showsNetworkSettings {
-                NetworkSettingsPane()
-                    .tabItem {
-                        Label("Network", systemImage: "network")
-                    }
-                    .tag(SettingsPaneID.network.rawValue)
-            }
-
-            DisplaySettingsPane()
-                .tabItem {
-                    Label("Display", systemImage: "display")
-                }
-                .tag(SettingsPaneID.display.rawValue)
-
-            AIAssistantSettingsPane()
-                .tabItem {
-                    Label("AI", systemImage: "sparkles")
-                }
-                .tag(SettingsPaneID.ai.rawValue)
+            selectedPaneContent
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(width: 900, height: 700)
+        .frame(width: 980, height: 700)
+        .background(.regularMaterial)
         .navigationTitle(selectedPane.title)
         .background(SettingsWindowConfigurator(title: selectedPane.title))
         .onAppear(perform: normalizeSelectedPane)
@@ -99,63 +38,133 @@ struct SettingsView: View {
         emulator.machine.capabilities.supportsNetworking
     }
 
+    private var availablePanes: [SettingsPaneID] {
+        SettingsPaneCatalog.availablePanes(showsControlSettings: showsControlSettings,
+                                           showsNetworkSettings: showsNetworkSettings,
+                                           aiAssistantEnabled: VMCFeatureFlags.aiAssistant)
+    }
+
     private var selectedPane: SettingsPaneID {
-        SettingsPaneID(rawValue: selectedPaneID) ?? .machine
+        SettingsPaneCatalog.normalizedSelection(for: selectedPaneID,
+                                                showsControlSettings: showsControlSettings,
+                                                showsNetworkSettings: showsNetworkSettings,
+                                                aiAssistantEnabled: VMCFeatureFlags.aiAssistant)
+    }
+
+    @ViewBuilder
+    private var selectedPaneContent: some View {
+        switch selectedPane {
+        case .machine:
+            MachineSettingsPane()
+        case .media:
+            MediaSettingsPane()
+        case .metadata:
+            MetadataSettingsPane()
+        case .sound:
+            SoundSettingsPane()
+        case .controls:
+            if showsControlSettings {
+                ControlSettingsPane()
+            } else {
+                KeyboardSettingsPane()
+            }
+        case .keyboard:
+            KeyboardSettingsPane()
+        case .drives:
+            DriveSettingsPane()
+        case .printing:
+            PrintingSettingsPane()
+        case .network:
+            if showsNetworkSettings {
+                NetworkSettingsPane()
+            } else {
+                MediaSettingsPane()
+            }
+        case .display:
+            DisplaySettingsPane()
+        case .ai:
+            if VMCFeatureFlags.aiAssistant {
+                AIAssistantSettingsPane()
+            } else {
+                MachineSettingsPane()
+            }
+        }
     }
 
     private func normalizeSelectedPane() {
-        if selectedPane == .controls,
-           !showsControlSettings {
-            selectedPaneID = SettingsPaneID.keyboard.rawValue
+        let normalizedPane = SettingsPaneCatalog.normalizedSelection(for: selectedPaneID,
+                                                                     showsControlSettings: showsControlSettings,
+                                                                     showsNetworkSettings: showsNetworkSettings,
+                                                                     aiAssistantEnabled: VMCFeatureFlags.aiAssistant)
+        if selectedPaneID != normalizedPane.rawValue {
+            selectedPaneID = normalizedPane.rawValue
         }
-
-        guard selectedPane == .network,
-              !showsNetworkSettings else {
-            return
-        }
-
-        selectedPaneID = SettingsPaneID.media.rawValue
     }
 }
 
-private enum SettingsPaneID: String {
-    case machine
-    case media
-    case metadata
-    case sound
-    case controls
-    case keyboard
-    case drives
-    case printing
-    case network
-    case display
-    case ai
+private struct SettingsSidebar: View {
+    let panes: [SettingsPaneID]
+    @Binding var selection: String
 
-    var title: String {
-        switch self {
-        case .machine:
-            return "Machine"
-        case .media:
-            return "Media"
-        case .metadata:
-            return "Metadata"
-        case .sound:
-            return "Sound"
-        case .controls:
-            return "Controls"
-        case .keyboard:
-            return "Keyboard"
-        case .drives:
-            return "Storage"
-        case .printing:
-            return "Printing"
-        case .network:
-            return "Network"
-        case .display:
-            return "Display"
-        case .ai:
-            return "AI"
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 4) {
+                ForEach(panes) { pane in
+                    SettingsSidebarRow(pane: pane,
+                                       isSelected: selection == pane.rawValue) {
+                        selection = pane.rawValue
+                    }
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 12)
         }
+        .frame(width: 206)
+        .background(.bar)
+    }
+}
+
+private struct SettingsSidebarRow: View {
+    let pane: SettingsPaneID
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: pane.systemImage)
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(isSelected ? .white : .secondary)
+                    .frame(width: 22, height: 22)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(pane.title)
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(isSelected ? .white : .primary)
+                        .lineLimit(1)
+
+                    Text(pane.subtitle)
+                        .font(.caption)
+                        .foregroundStyle(isSelected ? .white.opacity(0.78) : .secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .background {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(Color.accentColor)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(pane.title)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
@@ -214,53 +223,6 @@ private struct SettingsWindowConfigurator: NSViewRepresentable {
             window.title = title
             window.standardWindowButton(.miniaturizeButton)?.isEnabled = false
             window.standardWindowButton(.zoomButton)?.isEnabled = false
-        }
-    }
-}
-
-private struct SettingsSliderControl: View {
-    @Binding var value: Double
-    let range: ClosedRange<Double>
-    let valueTitle: String
-    var isEnabled = true
-    var valueWidth: CGFloat = 48
-    var onEditingChanged: (Bool) -> Void = { _ in }
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Slider(value: $value,
-                   in: range,
-                   onEditingChanged: onEditingChanged)
-                .disabled(!isEnabled)
-
-            Text(valueTitle)
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
-                .frame(width: valueWidth, alignment: .trailing)
-        }
-    }
-}
-
-private struct SettingsPercentSlider: View {
-    @Binding var value: Int
-    var isEnabled = true
-    var valueWidth: CGFloat = 44
-    var onEditingChanged: (Bool) -> Void = { _ in }
-
-    var body: some View {
-        SettingsSliderControl(value: doubleBinding,
-                              range: 0...100,
-                              valueTitle: "\(value)%",
-                              isEnabled: isEnabled,
-                              valueWidth: valueWidth,
-                              onEditingChanged: onEditingChanged)
-    }
-
-    private var doubleBinding: Binding<Double> {
-        Binding {
-            Double(value)
-        } set: { newValue in
-            value = min(max(Int(newValue.rounded()), 0), 100)
         }
     }
 }
@@ -478,8 +440,8 @@ private struct AIAssistantSettingsPane: View {
                         .listStyle(.inset)
                         .overlay {
                             if filteredDocuments.isEmpty {
-                                ContentUnavailableView("No Books",
-                                                       systemImage: "book.closed")
+                                VMCEmptyState("No Books",
+                                              systemImage: "book.closed")
                             }
                         }
                     } footer: {
@@ -1361,7 +1323,8 @@ private struct NetworkSettingsPane: View {
                 .disabled(!emulator.networkModem.isEnabled)
 
             LabeledContent("Port") {
-                portControl(value: incomingPortBinding)
+                SettingsPortField(value: incomingPortBinding,
+                                  range: NetworkModemConfiguration.tcpPortRange)
                     .disabled(!emulator.networkModem.isEnabled
                               || !emulator.networkModem.acceptsIncomingCalls)
             }
@@ -1455,27 +1418,14 @@ private struct NetworkSettingsPane: View {
         }
 
         LabeledContent("Port") {
-            portControl(value: defaultDialPortBinding)
+            SettingsPortField(value: defaultDialPortBinding,
+                              range: NetworkModemConfiguration.tcpPortRange)
                 .disabled(!emulator.networkModem.isEnabled)
         }
 
         LabeledContent("Command") {
             SettingsValueText(emulator.networkModem.dialCommandPreview)
                 .font(.system(.body, design: .monospaced))
-        }
-    }
-
-    private func portControl(value: Binding<Int>) -> some View {
-        HStack(spacing: 6) {
-            TextField("Port",
-                      value: value,
-                      format: .number.grouping(.never))
-                .labelsHidden()
-                .multilineTextAlignment(.trailing)
-                .frame(width: 72)
-
-            Stepper("Port", value: value, in: NetworkModemConfiguration.tcpPortRange)
-                .labelsHidden()
         }
     }
 
@@ -1767,9 +1717,9 @@ private struct QLinkProfileManagerSheet: View {
                     }
 
                     if qLinkReloaded.configuredDiskRegistrationProfiles.isEmpty {
-                        ContentUnavailableView(diskProfilesEmptyTitle,
-                                               systemImage: "person.crop.circle.badge.questionmark",
-                                               description: Text(diskProfilesEmptyDescription))
+                        VMCEmptyState(diskProfilesEmptyTitle,
+                                      systemImage: "person.crop.circle.badge.questionmark",
+                                      description: diskProfilesEmptyDescription)
                     }
                 }
             } footer: {
@@ -1779,28 +1729,26 @@ private struct QLinkProfileManagerSheet: View {
 
                     Spacer()
 
-                    Button {
+                    VMCIconButton("info.circle",
+                                  help: "Show selected disk profile",
+                                  width: 18,
+                                  height: 18) {
                         inspectSelectedDiskProfile()
-                    } label: {
-                        Image(systemName: "info.circle")
-                            .frame(width: 18, height: 18)
                     }
                     .disabled(selectedDiskProfile == nil)
-                    .help("Show selected disk profile")
 
-                    Button(role: .destructive) {
+                    VMCIconButton("trash",
+                                  help: "Remove selected profile from the Q-Link disk",
+                                  role: .destructive,
+                                  width: 18,
+                                  height: 18) {
                         if let selectedDiskProfile {
                             pendingDeletion = QLinkProfileDeletionConfirmation(location: .disk,
                                                                                profile: selectedDiskProfile)
                         }
-                    } label: {
-                        Image(systemName: "trash")
-                            .frame(width: 18, height: 18)
                     }
                     .disabled(selectedDiskProfile == nil)
-                    .help("Remove selected profile from the Q-Link disk")
                 }
-                .buttonStyle(.borderless)
             }
         }
         .frame(maxWidth: .infinity)
@@ -1821,9 +1769,9 @@ private struct QLinkProfileManagerSheet: View {
                     }
 
                     if qLinkReloaded.registrationProfiles.isEmpty {
-                        ContentUnavailableView("No Profiles",
-                                               systemImage: "key",
-                                               description: Text("Saved Q-Link profiles will appear here."))
+                        VMCEmptyState("No Profiles",
+                                      systemImage: "key",
+                                      description: "Saved Q-Link profiles will appear here.")
                     }
                 }
             } footer: {
@@ -1833,28 +1781,26 @@ private struct QLinkProfileManagerSheet: View {
 
                     Spacer()
 
-                    Button {
+                    VMCIconButton("info.circle",
+                                  help: "Show selected Keychain profile",
+                                  width: 18,
+                                  height: 18) {
                         inspectSelectedKeychainProfile()
-                    } label: {
-                        Image(systemName: "info.circle")
-                            .frame(width: 18, height: 18)
                     }
                     .disabled(selectedKeychainProfile == nil)
-                    .help("Show selected Keychain profile")
 
-                    Button(role: .destructive) {
+                    VMCIconButton("trash",
+                                  help: "Delete selected profile from Keychain",
+                                  role: .destructive,
+                                  width: 18,
+                                  height: 18) {
                         if let selectedKeychainProfile {
                             pendingDeletion = QLinkProfileDeletionConfirmation(location: .keychain,
                                                                                profile: selectedKeychainProfile)
                         }
-                    } label: {
-                        Image(systemName: "trash")
-                            .frame(width: 18, height: 18)
                     }
                     .disabled(selectedKeychainProfile == nil)
-                    .help("Delete selected profile from Keychain")
                 }
-                .buttonStyle(.borderless)
             }
         }
         .frame(maxWidth: .infinity)
@@ -3458,23 +3404,6 @@ private struct DriveSettingsSection: View {
         }
 
         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
-    }
-}
-
-private struct SettingsPane<Content: View>: View {
-    private let content: Content
-
-    init(@ViewBuilder content: () -> Content) {
-        self.content = content()
-    }
-
-    var body: some View {
-        SettingsCustomPane {
-            Form {
-                content
-            }
-            .formStyle(.grouped)
-        }
     }
 }
 

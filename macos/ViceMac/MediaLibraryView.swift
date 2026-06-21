@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 struct MediaLibraryView: View {
     @Environment(\.openWindow) private var openWindow
     @EnvironmentObject private var emulator: EmulatorSession
+    @EnvironmentObject private var metadataSettings: MetadataIngestionSettings
     @EnvironmentObject private var diskImageManagerOpenRequests: DiskImageManagerOpenRequests
     @StateObject private var model = MediaLibraryViewModel()
 
@@ -46,6 +47,14 @@ struct MediaLibraryView: View {
         } message: { item in
             Text("Remove \(item.title) and its managed library copy? The original source file is not changed.")
         }
+        .sheet(item: $model.metadataUpdateItem) { item in
+            MediaLibraryMetadataUpdateSheet(item: item,
+                                            snapshots: metadataSettings.providerSnapshots,
+                                            artworkPreference: metadataSettings.artworkPreference,
+                                            credential: metadataSettings.credential(providerID:field:)) { update in
+                try model.applyMetadataUpdate(update, to: item.id)
+            }
+        }
     }
 
     private var libraryList: some View {
@@ -56,16 +65,14 @@ struct MediaLibraryView: View {
                     .foregroundStyle(.secondary)
                     .frame(width: 24)
 
-                TextField("Search Library", text: $model.searchText)
-                    .textFieldStyle(.roundedBorder)
+                VMCSearchField("Search Library", text: $model.searchText)
 
-                Button {
+                VMCIconButton("square.and.arrow.down",
+                              help: "Import media",
+                              width: 30,
+                              height: 28) {
                     model.importMedia()
-                } label: {
-                    Image(systemName: "square.and.arrow.down")
-                        .frame(width: 18, height: 18)
                 }
-                .help("Import media")
             }
             .padding(12)
 
@@ -75,6 +82,11 @@ struct MediaLibraryView: View {
                 MediaLibraryEmptyListView {
                     model.importMedia()
                 }
+            } else if model.filteredItems.isEmpty {
+                VMCEmptyState("No Matches",
+                              systemImage: "magnifyingglass",
+                              description: "Try a different title, file name, or disk entry.")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List(selection: $model.selectedItemID) {
                     ForEach(model.filteredItems) { item in
@@ -114,10 +126,12 @@ struct MediaLibraryView: View {
         if let item = model.selectedItem {
             MediaLibraryDetailView(item: item,
                                    fileURL: model.primaryFileURL(for: item),
+                                   artworkURL: model.primaryArtworkURL(for: item),
                                    onImport: model.importMedia,
                                    onToggleFavorite: { model.toggleFavorite(item) },
                                    onRemove: { model.confirmRemove(item) },
                                    onReveal: { model.reveal(item) },
+                                   onUpdateMetadata: metadataUpdateAction(for: item),
                                    onOpenDiskImageManager: item.primaryFile.kind == .disk ? {
                                        openDiskImageManager(for: item)
                                    } : nil,
@@ -149,6 +163,13 @@ struct MediaLibraryView: View {
             Divider()
 
             Button {
+                model.beginMetadataUpdate(item)
+            } label: {
+                Label("Update Metadata...", systemImage: "sparkle.magnifyingglass")
+            }
+            .disabled(!canUpdateMetadata)
+
+            Button {
                 openDiskImageManager(for: item)
             } label: {
                 Label("Open in Disk Image Manager", systemImage: "externaldrive")
@@ -176,6 +197,25 @@ struct MediaLibraryView: View {
             openWindow(id: DiskImageManagerWindow.id)
         }
     }
+
+    private var canUpdateMetadata: Bool {
+        metadataSettings.providerSnapshots.contains { snapshot in
+            snapshot.configuration.isEnabled
+                && snapshot.isReady
+                && snapshot.providerID.supportsMediaLibraryMetadataSearch
+        }
+    }
+
+    private func metadataUpdateAction(for item: MediaLibraryItem) -> (() -> Void)? {
+        guard item.primaryFile.kind == .disk,
+              canUpdateMetadata else {
+            return nil
+        }
+
+        return {
+            model.beginMetadataUpdate(item)
+        }
+    }
 }
 
 @MainActor
@@ -185,6 +225,7 @@ private final class MediaLibraryViewModel: ObservableObject {
     @Published var searchText = ""
     @Published var errorMessage: String?
     @Published var removalCandidate: MediaLibraryItem?
+    @Published var metadataUpdateItem: MediaLibraryItem?
 
     private var store: MediaLibraryStore?
 
@@ -309,6 +350,35 @@ private final class MediaLibraryViewModel: ObservableObject {
         removalCandidate = item
     }
 
+    func beginMetadataUpdate(_ item: MediaLibraryItem) {
+        guard item.primaryFile.kind == .disk else {
+            return
+        }
+
+        metadataUpdateItem = item
+    }
+
+    func applyMetadataUpdate(_ update: MediaLibraryMetadataUpdate,
+                             to itemID: UUID) throws {
+        let store = try libraryStore()
+        try store.updateMetadata(itemID: itemID,
+                                 title: update.title,
+                                 notes: update.notes)
+
+        if let artworkData = update.artworkData,
+           let artworkKind = update.artworkKind {
+            try store.cacheArtwork(artworkData,
+                                   kind: artworkKind,
+                                   itemID: itemID,
+                                   sourceURL: update.artworkSourceURL,
+                                   fileExtension: update.artworkFileExtension)
+        }
+
+        metadataUpdateItem = nil
+        reload()
+        selectedItemID = itemID
+    }
+
     func remove(_ item: MediaLibraryItem) {
         do {
             let store = try libraryStore()
@@ -359,6 +429,24 @@ private final class MediaLibraryViewModel: ObservableObject {
         }
     }
 
+    func primaryArtworkURL(for item: MediaLibraryItem) -> URL? {
+        guard let artwork = Self.preferredArtwork(in: item) else {
+            return nil
+        }
+
+        do {
+            let url = try libraryStore().artworkURL(for: artwork)
+            guard FileManager.default.fileExists(atPath: url.path) else {
+                return nil
+            }
+
+            return url
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
     private func libraryStore() throws -> MediaLibraryStore {
         if let store {
             return store
@@ -373,6 +461,16 @@ private final class MediaLibraryViewModel: ObservableObject {
         MediaLibraryStore.supportedFilenameExtensions.compactMap { extensionName in
             UTType(filenameExtension: extensionName)
         }
+    }
+
+    private static func preferredArtwork(in item: MediaLibraryItem) -> MediaLibraryArtwork? {
+        for kind in [MetadataArtworkPreference.boxFront, .titleScreen, .screenshot] {
+            if let artwork = item.artwork.first(where: { $0.kind == kind }) {
+                return artwork
+            }
+        }
+
+        return item.artwork.first
     }
 }
 
@@ -418,13 +516,415 @@ private struct MediaLibraryItemRow: View {
     }
 }
 
+private struct MediaLibraryArtworkThumbnail: View {
+    let url: URL?
+    let fallbackSystemImage: String
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Image(systemName: fallbackSystemImage)
+                    .font(.system(size: 32, weight: .semibold))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(width: 54, height: 54)
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 7))
+        .clipShape(RoundedRectangle(cornerRadius: 7))
+        .overlay {
+            RoundedRectangle(cornerRadius: 7)
+                .strokeBorder(.separator.opacity(0.45))
+        }
+    }
+
+    private var image: NSImage? {
+        guard let url else {
+            return nil
+        }
+
+        return NSImage(contentsOf: url)
+    }
+}
+
+private struct MediaLibraryMetadataSearchRequest: Equatable {
+    var providerID: MetadataProviderID?
+    var query: String
+
+    var canSearch: Bool {
+        providerID != nil && !query.isEmpty
+    }
+}
+
+private struct MediaLibraryMetadataUpdateSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let item: MediaLibraryItem
+    let snapshots: [MetadataProviderSnapshot]
+    let artworkPreference: MetadataArtworkPreference
+    let credential: (MetadataProviderID, MetadataCredentialField) -> String
+    let onApply: (MediaLibraryMetadataUpdate) throws -> Void
+
+    @State private var selectedProviderID: MetadataProviderID?
+    @State private var query: String
+    @State private var results: [MediaLibraryMetadataSearchResult] = []
+    @State private var selectedResultID: MediaLibraryMetadataSearchResult.ID?
+    @State private var isSearching = false
+    @State private var isApplying = false
+    @State private var statusText = ""
+    @State private var errorText: String?
+
+    init(item: MediaLibraryItem,
+         snapshots: [MetadataProviderSnapshot],
+         artworkPreference: MetadataArtworkPreference,
+         credential: @escaping (MetadataProviderID, MetadataCredentialField) -> String,
+         onApply: @escaping (MediaLibraryMetadataUpdate) throws -> Void) {
+        self.item = item
+        self.snapshots = snapshots
+        self.artworkPreference = artworkPreference
+        self.credential = credential
+        self.onApply = onApply
+
+        let availableProviderID = snapshots.first { snapshot in
+            snapshot.configuration.isEnabled
+                && snapshot.isReady
+                && snapshot.providerID.supportsMediaLibraryMetadataSearch
+        }?.providerID
+        _selectedProviderID = State(initialValue: availableProviderID)
+        _query = State(initialValue: item.title)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            header
+
+            if availableSnapshots.isEmpty {
+                VMCEmptyState("No Metadata Provider",
+                              systemImage: "network.slash",
+                              description: "Enable TheGamesDB in Metadata settings before updating library metadata.")
+                    .frame(width: 620, height: 300)
+            } else {
+                searchControls
+                resultsList
+                footer
+            }
+        }
+        .padding(20)
+        .frame(width: 680)
+        .frame(minHeight: 500)
+        .task(id: searchRequest) {
+            await debouncedSearch(for: searchRequest)
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "sparkle.magnifyingglass")
+                .font(.title2.weight(.semibold))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Update Metadata")
+                    .font(.title3.weight(.semibold))
+
+                Text(item.title)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+        }
+    }
+
+    private var searchControls: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Picker("Provider", selection: providerBinding) {
+                    ForEach(availableSnapshots) { snapshot in
+                        Label(snapshot.providerID.title, systemImage: snapshot.providerID.systemImage)
+                            .tag(Optional(snapshot.providerID))
+                    }
+                }
+                .frame(width: 210)
+
+                VMCSearchField("Search", text: $query)
+                    .disabled(isApplying)
+            }
+
+            if let errorText {
+                Label(errorText, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            } else if !statusText.isEmpty {
+                Text(statusText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var resultsList: some View {
+        Group {
+            if isSearching {
+                ProgressView("Searching...")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if results.isEmpty {
+                VMCEmptyState("No Matches",
+                              systemImage: "magnifyingglass",
+                              description: "Try a different title or remove extra filename text.")
+            } else {
+                List(selection: $selectedResultID) {
+                    ForEach(results) { result in
+                        MediaLibraryMetadataResultRow(result: result)
+                            .tag(Optional(result.id))
+                            .contentShape(Rectangle())
+                            .onTapGesture(count: 2) {
+                                Task {
+                                    await applySelectedResult(result)
+                                }
+                            }
+                    }
+                }
+                .listStyle(.inset)
+            }
+        }
+        .frame(minHeight: 300)
+        .frame(maxWidth: .infinity)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(.separator.opacity(0.55))
+        }
+    }
+
+    private var footer: some View {
+        HStack(spacing: 10) {
+            Text("Artwork: \(artworkPreference.title)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Spacer()
+
+            Button("Cancel", role: .cancel) {
+                dismiss()
+            }
+            .keyboardShortcut(.cancelAction)
+
+            Button {
+                Task {
+                    await applySelectedResult(nil)
+                }
+            } label: {
+                if isApplying {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Text("Apply")
+                }
+            }
+            .keyboardShortcut(.defaultAction)
+            .disabled(selectedResult == nil || isSearching || isApplying)
+        }
+    }
+
+    private var availableSnapshots: [MetadataProviderSnapshot] {
+        snapshots.filter { snapshot in
+            snapshot.configuration.isEnabled
+                && snapshot.isReady
+                && snapshot.providerID.supportsMediaLibraryMetadataSearch
+        }
+    }
+
+    private var providerBinding: Binding<MetadataProviderID?> {
+        Binding {
+            selectedProviderID
+        } set: { providerID in
+            selectedProviderID = providerID
+            results = []
+            selectedResultID = nil
+            errorText = nil
+            statusText = ""
+        }
+    }
+
+    private var selectedResult: MediaLibraryMetadataSearchResult? {
+        guard let selectedResultID else {
+            return nil
+        }
+
+        return results.first { $0.id == selectedResultID }
+    }
+
+    private var searchRequest: MediaLibraryMetadataSearchRequest {
+        MediaLibraryMetadataSearchRequest(providerID: selectedProviderID,
+                                          query: query.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    private var canSearch: Bool {
+        searchRequest.canSearch
+    }
+
+    @MainActor
+    private func debouncedSearch(for request: MediaLibraryMetadataSearchRequest) async {
+        guard request.canSearch else {
+            results = []
+            selectedResultID = nil
+            isSearching = false
+            errorText = nil
+            statusText = ""
+            return
+        }
+
+        results = []
+        selectedResultID = nil
+        isSearching = false
+        errorText = nil
+        statusText = ""
+
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        guard !Task.isCancelled else {
+            return
+        }
+
+        await search(for: request)
+    }
+
+    @MainActor
+    private func search(for request: MediaLibraryMetadataSearchRequest) async {
+        guard let providerID = request.providerID else {
+            return
+        }
+
+        isSearching = true
+        errorText = nil
+        statusText = ""
+        selectedResultID = nil
+
+        do {
+            let client = try metadataClient(for: providerID)
+            let matches = try await client.searchGames(query: request.query,
+                                                       artworkPreference: artworkPreference)
+            guard request == searchRequest,
+                  !Task.isCancelled else {
+                return
+            }
+
+            results = matches
+            selectedResultID = matches.first?.id
+            statusText = matches.isEmpty ? "No matches found." : "\(matches.count) matches"
+        } catch is CancellationError {
+            guard request == searchRequest else {
+                return
+            }
+
+            statusText = ""
+        } catch {
+            guard request == searchRequest else {
+                return
+            }
+
+            results = []
+            errorText = error.localizedDescription
+        }
+
+        if request == searchRequest {
+            isSearching = false
+        }
+    }
+
+    @MainActor
+    private func applySelectedResult(_ explicitResult: MediaLibraryMetadataSearchResult?) async {
+        guard let result = explicitResult ?? selectedResult,
+              !isApplying else {
+            return
+        }
+
+        isApplying = true
+        errorText = nil
+        statusText = "Applying metadata..."
+
+        do {
+            let client = try metadataClient(for: result.providerID)
+            let update = try await client.metadataUpdate(for: result,
+                                                         artworkPreference: artworkPreference)
+            try onApply(update)
+            dismiss()
+        } catch {
+            errorText = error.localizedDescription
+            statusText = ""
+        }
+
+        isApplying = false
+    }
+
+    private func metadataClient(for providerID: MetadataProviderID) throws -> TheGamesDBMetadataClient {
+        guard providerID == .theGamesDB else {
+            throw MetadataLookupError.unsupportedProvider(providerID)
+        }
+
+        let apiKey = credential(.theGamesDB, .apiKey)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !apiKey.isEmpty else {
+            throw MetadataLookupError.missingCredential(.theGamesDB)
+        }
+
+        return TheGamesDBMetadataClient(apiKey: apiKey)
+    }
+}
+
+private struct MediaLibraryMetadataResultRow: View {
+    let result: MediaLibraryMetadataSearchResult
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: result.artworkURL == nil ? "photo" : "photo.fill")
+                .font(.system(size: 16, weight: .semibold))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(.secondary)
+                .frame(width: 22, height: 22)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(result.title)
+                    .font(.callout.weight(.medium))
+                    .lineLimit(1)
+
+                if !result.subtitle.isEmpty {
+                    Text(result.subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                if let overview = result.overview,
+                   !overview.isEmpty {
+                    Text(overview)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+            }
+
+            Spacer(minLength: 8)
+        }
+        .padding(.vertical, 4)
+    }
+}
+
 private struct MediaLibraryDetailView: View {
     let item: MediaLibraryItem
     let fileURL: URL?
+    let artworkURL: URL?
     let onImport: () -> Void
     let onToggleFavorite: () -> Void
     let onRemove: () -> Void
     let onReveal: () -> Void
+    let onUpdateMetadata: (() -> Void)?
     let onOpenDiskImageManager: (() -> Void)?
     let onLaunch: (MediaOpenBehavior) -> Void
 
@@ -450,11 +950,8 @@ private struct MediaLibraryDetailView: View {
 
     private var header: some View {
         HStack(alignment: .center, spacing: 14) {
-            Image(systemName: item.primaryFile.kind.systemImage)
-                .font(.system(size: 32, weight: .semibold))
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(.secondary)
-                .frame(width: 44, height: 44)
+            MediaLibraryArtworkThumbnail(url: artworkURL,
+                                         fallbackSystemImage: item.primaryFile.kind.systemImage)
 
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 7) {
@@ -505,6 +1002,14 @@ private struct MediaLibraryDetailView: View {
 
                 Button("Reveal in Finder") {
                     onReveal()
+                }
+
+                if let onUpdateMetadata {
+                    Button {
+                        onUpdateMetadata()
+                    } label: {
+                        Label("Update Metadata...", systemImage: "sparkle.magnifyingglass")
+                    }
                 }
 
                 if let onOpenDiskImageManager {
@@ -580,6 +1085,13 @@ private struct MediaLibraryMetadataSection: View {
                         Text(originalPath)
                             .lineLimit(1)
                             .truncationMode(.middle)
+                    }
+                }
+
+                if !item.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    VMCInfoRow("Notes", labelWidth: 86) {
+                        Text(item.notes)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
             }

@@ -782,7 +782,12 @@ VICE Mac $VICE_VERSION
 Drag the machine apps you want to use into Applications.
 
 These apps are built for Apple Silicon Macs and use the upstream VICE engine.
+MacVICE is free software distributed under the GNU General Public License,
+version 2 or later. See LICENSE.txt and NOTICE.txt.
 EOF
+
+cp "$REPO_ROOT/LICENSE" "$STAGE_DIR/LICENSE.txt"
+cp "$REPO_ROOT/NOTICE" "$STAGE_DIR/NOTICE.txt"
 
 create_dmg "$STAGE_DIR" "$VOLUME_NAME" "$DMG_PATH"
 sign_dmg "$DMG_PATH"

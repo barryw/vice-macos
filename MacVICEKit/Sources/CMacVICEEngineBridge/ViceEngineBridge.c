@@ -1129,15 +1129,23 @@ static ViceEngineStartArguments *copyStartArguments(const char *machineID,
     return arguments;
 }
 
+static void cleanupEngineThread(void *opaque)
+{
+    ViceEngineStartArguments *arguments = (ViceEngineStartArguments *)opaque;
+
+    atomic_store(&engineRunning, false);
+    freeStartArguments(arguments);
+}
+
 static void *engineThreadMain(void *opaque)
 {
     ViceEngineStartArguments *arguments = (ViceEngineStartArguments *)opaque;
 
+    pthread_cleanup_push(cleanupEngineThread, arguments);
     runtimeSymbols.archdepProgramPathSetArgv0(arguments->argv[0]);
     (void)runtimeSymbols.mainProgram(arguments->argc, arguments->argv);
+    pthread_cleanup_pop(1);
 
-    atomic_store(&engineRunning, false);
-    freeStartArguments(arguments);
     return NULL;
 }
 

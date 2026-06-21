@@ -156,3 +156,11 @@ website/tools/build-macvicekit-docs.sh
 
 The release SDK includes `Documentation/MacVICEKit.doccarchive` for local
 Xcode-style API browsing.
+
+## License
+
+MacVICEKit is distributed under the GNU General Public License, version 2 or
+later, because it ships with and links against the VICE runtime. See
+[`../LICENSE`](../LICENSE) and [`../NOTICE`](../NOTICE) in the source tree.
+
+Release SDK zips include `LICENSE` and `NOTICE` at the package root.

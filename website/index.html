@@ -6,7 +6,7 @@
     <title>mac VICE - Native Commodore emulation for macOS</title>
     <meta
       name="description"
-      content="mac VICE packages the VICE emulator as native Apple Silicon Mac apps with Metal display output, media library, disk tools, controller setup, Q-Link Reloaded setup, optional AI tools, and signed DMG releases."
+      content="mac VICE packages the VICE emulator as native Apple Silicon Mac apps with Metal display output, media library, disk tools, controller setup, Q-Link Reloaded setup, and signed DMG releases."
     >
     <meta property="og:title" content="mac VICE">
     <meta property="og:description" content="VICE emulator apps for Apple Silicon Macs.">
@@ -40,7 +40,7 @@
           <p class="hero-subtitle">
             Current VICE, packaged for Apple Silicon Macs with Metal display
             output, Mac settings, media tools, controller setup, Q-Link
-            Reloaded help, optional AI, and signed DMG releases.
+            Reloaded help, and signed DMG releases.
           </p>
           <div class="hero-actions">
             <a
@@ -319,37 +319,6 @@
         </div>
       </section>
 
-      <section class="section assistant-section" id="assistant" aria-labelledby="assistant-title">
-        <div class="section-heading">
-          <p class="eyebrow">Optional AI tools</p>
-          <h2 id="assistant-title">A chat sidebar that can inspect the running machine.</h2>
-        </div>
-
-        <div class="assistant-layout">
-          <div class="assistant-copy">
-            <p>
-              The assistant is off until configured. When enabled, it uses an
-              OpenAI-compatible provider, including local servers, and exposes
-              focused emulator tools for machine context, debugger snapshots,
-              memory reads and writes, display color changes, VICE resources,
-              typing, and BASIC line submission.
-            </p>
-            <p>
-              Searchable PDFs can be added per current machine. Text-only PDFs
-              are chunked into SQLite FTS5 so the assistant can search uploaded
-              manuals and then read nearby context without loading entire books.
-            </p>
-          </div>
-
-          <div class="assistant-panel" aria-label="Assistant capabilities">
-            <div class="assistant-row user-row">Change border and background to black.</div>
-            <div class="assistant-row tool-row">apply_changes: display style, resources, memory</div>
-            <div class="assistant-row reply-row">Done. Used 1 tool.</div>
-            <div class="assistant-status" aria-hidden="true"></div>
-          </div>
-        </div>
-      </section>
-
       <section class="section qlink-section" id="qlink" aria-labelledby="qlink-title">
         <div class="section-heading">
           <p class="eyebrow">Q-Link Reloaded</p>
@@ -431,20 +400,24 @@
         <div class="notices-copy">
           <p>
             Original mac VICE website, macOS integration, packaging, and native
-            UI work © 2026 Barry Walker.
+            UI work © 2026 Barry Walker and contributors, licensed under the
+            GNU GPL version 2 or later.
           </p>
           <p>
             VICE, the Versatile Commodore Emulator, is the work of the VICE
             Team and contributors and is distributed under the GNU General
-            Public License. mac VICE exists because of that project.
+            Public License, version 2 or later. mac VICE exists because of that
+            project.
           </p>
           <p>
-            Commodore, Quantum Link, Q-Link, and other product or service names
-            are historical names or marks of their respective owners. mac VICE
-            is not affiliated with those owners.
+            Commodore is an active company and brand. Commodore, Quantum Link,
+            Q-Link, and other product or service names are names or marks of
+            their respective owners. mac VICE is not affiliated with those
+            owners.
           </p>
           <div class="notices-links" aria-label="Notice links">
             <a href="https://vice-emu.sourceforge.io/">VICE project</a>
+            <a href="https://github.com/barryw/vice-macos/blob/main/LICENSE">GPL license</a>
             <a href="https://quantumlink.net/">Q-Link Reloaded</a>
             <a href="https://github.com/barryw/vice-macos">Source code</a>
           </div>
@@ -453,9 +426,10 @@
     </main>
 
     <footer class="site-footer">
-      <span>© 2026 Barry Walker for original mac VICE work. Built on VICE.</span>
+      <span>© 2026 Barry Walker for original mac VICE work. GPL-2.0-or-later. Built on VICE.</span>
       <div class="footer-links">
         <a href="#notices">Notices</a>
+        <a href="https://github.com/barryw/vice-macos/blob/main/LICENSE">License</a>
         <a href="https://github.com/barryw/vice-macos">GitHub</a>
       </div>
     </footer>

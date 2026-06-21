@@ -1265,7 +1265,7 @@ private struct DirectoryBrowserView: View {
 
                 Spacer()
 
-                SearchField(text: model.bindingForSearch(in: pane))
+                VMCSearchField("Filter", text: model.bindingForSearch(in: pane))
                     .frame(width: 170)
 
                 Button {
@@ -1285,57 +1285,64 @@ private struct DirectoryBrowserView: View {
                 .help("Create a validated GEOS resource header")
             }
 
-            Table(entries, selection: model.bindingForSelection(in: pane)) {
-                TableColumn("Name") { entry in
-                    HStack(spacing: 6) {
-                        Text(entry.name.isEmpty ? "<unnamed>" : entry.name)
-                            .font(.system(size: 12.5, weight: .medium, design: .monospaced))
-                            .lineLimit(1)
+            if entries.isEmpty && !state.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                VMCEmptyState("No Matches",
+                              systemImage: "magnifyingglass",
+                              description: "No directory entries match this filter.")
+                    .frame(maxWidth: .infinity, minHeight: 180)
+            } else {
+                Table(entries, selection: model.bindingForSelection(in: pane)) {
+                    TableColumn("Name") { entry in
+                        HStack(spacing: 6) {
+                            Text(entry.name.isEmpty ? "<unnamed>" : entry.name)
+                                .font(.system(size: 12.5, weight: .medium, design: .monospaced))
+                                .lineLimit(1)
 
-                        ForEach(entry.statusBadges) { badge in
-                            VMCStatusBadge(badge.rawValue)
+                            ForEach(entry.statusBadges) { badge in
+                                VMCStatusBadge(badge.rawValue)
+                            }
                         }
                     }
-                }
 
-                TableColumn("Type") { entry in
-                    Text(entry.typeText)
-                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                }
-                .width(54)
+                    TableColumn("Type") { entry in
+                        Text(entry.typeText)
+                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                    }
+                    .width(54)
 
-                TableColumn("Start") { entry in
-                    Text(entry.startText)
-                        .font(.system(size: 12, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                }
-                .width(58)
+                    TableColumn("Start") { entry in
+                        Text(entry.startText)
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                    }
+                    .width(58)
 
-                TableColumn("Blocks") { entry in
-                    Text("\(entry.blocks)")
-                        .font(.system(size: 12, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .trailing)
+                    TableColumn("Blocks") { entry in
+                        Text("\(entry.blocks)")
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                    }
+                    .width(54)
                 }
-                .width(54)
-            }
-            .contextMenu {
-                Button("Export File...") {
-                    model.exportSelectedFile(from: pane)
-                }
-                .disabled(state.selectedEntry == nil)
+                .contextMenu {
+                    Button("Export File...") {
+                        model.exportSelectedFile(from: pane)
+                    }
+                    .disabled(state.selectedEntry == nil)
 
-                Button("Rename File...") {
-                    model.presentRenameSelectedFile(in: pane)
-                }
-                .disabled(state.selectedEntry == nil || state.image?.supportsFileWrites != true)
+                    Button("Rename File...") {
+                        model.presentRenameSelectedFile(in: pane)
+                    }
+                    .disabled(state.selectedEntry == nil || state.image?.supportsFileWrites != true)
 
-                Divider()
+                    Divider()
 
-                Button("Delete File", role: .destructive) {
-                    model.deleteSelectedFile(in: pane, undoManager: undoManager)
+                    Button("Delete File", role: .destructive) {
+                        model.deleteSelectedFile(in: pane, undoManager: undoManager)
+                    }
+                    .disabled(state.selectedEntry == nil || state.image?.supportsFileWrites != true)
                 }
-                .disabled(state.selectedEntry == nil || state.image?.supportsFileWrites != true)
             }
 
             SelectedFileInspectorView(model: model, pane: pane)
@@ -1349,35 +1356,6 @@ private struct DirectoryBrowserView: View {
         .onTapGesture {
             model.activePane = pane
         }
-    }
-}
-
-private struct SearchField: View {
-    @Binding var text: String
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
-
-            TextField("Filter", text: $text)
-                .textFieldStyle(.plain)
-
-            if !text.isEmpty {
-                Button {
-                    text = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.tertiary)
-                }
-                .buttonStyle(.plain)
-                .help("Clear filter")
-            }
-        }
-        .font(.system(size: 12))
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .background(.quaternary.opacity(0.55), in: RoundedRectangle(cornerRadius: 7))
     }
 }
 

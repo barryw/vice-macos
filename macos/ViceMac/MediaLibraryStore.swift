@@ -70,6 +70,24 @@ struct MediaLibraryEntry: Identifiable, Equatable {
     var sortOrder: Int
 }
 
+struct MediaLibraryArtwork: Identifiable, Equatable {
+    let id: Int64
+    var itemID: UUID
+    var kind: MetadataArtworkPreference
+    var relativePath: String
+    var sourceURL: String?
+    var sha256: String
+    var byteCount: Int64
+    var width: Int?
+    var height: Int?
+    var createdAt: Date
+    var updatedAt: Date
+
+    func url(in libraryRootURL: URL) -> URL {
+        libraryRootURL.appendingPathComponent(relativePath)
+    }
+}
+
 struct MediaLibraryItem: Identifiable, Equatable {
     let id: UUID
     var title: String
@@ -81,6 +99,7 @@ struct MediaLibraryItem: Identifiable, Equatable {
     var lastPlayedAt: Date?
     var primaryFile: MediaLibraryFile
     var entries: [MediaLibraryEntry]
+    var artwork: [MediaLibraryArtwork]
 
     var searchableText: String {
         ([title, primaryFile.originalFilename, primaryFile.typeTitle] + entries.map(\.name))
@@ -99,6 +118,20 @@ enum MediaLibraryImportError: Error, LocalizedError, Equatable {
             return "\(filename) is not a supported media file."
         case .noSupportedMedia:
             return "No supported media files were found."
+        }
+    }
+}
+
+enum MediaLibraryArtworkError: Error, LocalizedError, Equatable {
+    case itemNotFound
+    case emptyArtworkData
+
+    var errorDescription: String? {
+        switch self {
+        case .itemNotFound:
+            return "The media library item could not be found."
+        case .emptyArtworkData:
+            return "Artwork data is empty."
         }
     }
 }
@@ -234,13 +267,15 @@ final class MediaLibraryStore {
                     updatedAt: dateColumn(statement, 6) ?? Date(timeIntervalSince1970: 0),
                     lastPlayedAt: dateColumn(statement, 7),
                     primaryFile: file,
-                    entries: []
+                    entries: [],
+                    artwork: []
                 ))
             }
 
             return try items.map { item in
                 var item = item
                 item.entries = try entries(for: item.id)
+                item.artwork = try artwork(for: item.id)
                 return item
             }
         }
@@ -288,6 +323,112 @@ final class MediaLibraryStore {
 
     func primaryFileURL(for item: MediaLibraryItem) -> URL {
         item.primaryFile.url(in: rootURL)
+    }
+
+    func artworkURL(for artwork: MediaLibraryArtwork) -> URL {
+        artwork.url(in: rootURL)
+    }
+
+    @discardableResult
+    func updateMetadata(itemID: UUID,
+                        title: String,
+                        notes: String) throws -> Bool {
+        let normalizedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedTitle.isEmpty else {
+            return false
+        }
+
+        let now = Date()
+        let didUpdate = try executeUpdate("""
+        UPDATE media_items
+        SET title = ?, notes = ?, updated_at = ?
+        WHERE id = ?
+        """) { statement in
+            bind(normalizedTitle, to: statement, at: 1)
+            bind(notes, to: statement, at: 2)
+            bind(now, to: statement, at: 3)
+            bind(itemID.uuidString, to: statement, at: 4)
+        }
+
+        if didUpdate {
+            NotificationCenter.default.post(name: .mediaLibraryDidChange,
+                                            object: self,
+                                            userInfo: ["itemID": itemID])
+        }
+
+        return didUpdate
+    }
+
+    @discardableResult
+    func cacheArtwork(_ data: Data,
+                      kind: MetadataArtworkPreference,
+                      itemID: UUID,
+                      sourceURL: URL? = nil,
+                      fileExtension: String? = nil,
+                      width: Int? = nil,
+                      height: Int? = nil) throws -> MediaLibraryArtwork {
+        guard !data.isEmpty else {
+            throw MediaLibraryArtworkError.emptyArtworkData
+        }
+
+        guard try itemExists(id: itemID) else {
+            throw MediaLibraryArtworkError.itemNotFound
+        }
+
+        let existingArtwork = try artwork(for: itemID).first { $0.kind == kind }
+        let artworkDirectoryURL = managedArtworkDirectoryURL(itemID: itemID)
+        let resolvedExtension = Self.sanitizedArtworkExtension(fileExtension ?? sourceURL?.pathExtension)
+        let destinationURL = artworkDirectoryURL.appendingPathComponent("\(kind.rawValue).\(resolvedExtension)")
+        let relativePath = relativePath(for: destinationURL)
+        let now = Date()
+
+        try FileManager.default.createDirectory(at: artworkDirectoryURL,
+                                                withIntermediateDirectories: true)
+        try data.write(to: destinationURL, options: .atomic)
+
+        try execute("""
+        INSERT INTO media_artwork (
+            item_id, kind, relative_path, source_url, sha256, byte_count,
+            width, height, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(item_id, kind) DO UPDATE SET
+            relative_path = excluded.relative_path,
+            source_url = excluded.source_url,
+            sha256 = excluded.sha256,
+            byte_count = excluded.byte_count,
+            width = excluded.width,
+            height = excluded.height,
+            updated_at = excluded.updated_at
+        """) { statement in
+            bind(itemID.uuidString, to: statement, at: 1)
+            bind(kind.rawValue, to: statement, at: 2)
+            bind(relativePath, to: statement, at: 3)
+            bind(sourceURL?.absoluteString, to: statement, at: 4)
+            bind(Self.sha256Hex(for: data), to: statement, at: 5)
+            sqlite3_bind_int64(statement, 6, Int64(data.count))
+            bind(width, to: statement, at: 7)
+            bind(height, to: statement, at: 8)
+            bind(existingArtwork?.createdAt ?? now, to: statement, at: 9)
+            bind(now, to: statement, at: 10)
+        }
+
+        if let existingArtwork,
+           existingArtwork.relativePath != relativePath {
+            let oldURL = artworkURL(for: existingArtwork)
+            if FileManager.default.fileExists(atPath: oldURL.path) {
+                try FileManager.default.removeItem(at: oldURL)
+            }
+        }
+
+        guard let cachedArtwork = try artwork(for: itemID).first(where: { $0.kind == kind }) else {
+            throw MediaLibraryArtworkError.itemNotFound
+        }
+
+        NotificationCenter.default.post(name: .mediaLibraryDidChange,
+                                        object: self,
+                                        userInfo: ["itemID": itemID])
+
+        return cachedArtwork
     }
 
     @discardableResult
@@ -388,6 +529,11 @@ final class MediaLibraryStore {
             try FileManager.default.removeItem(at: itemDirectoryURL)
         }
 
+        let itemArtworkDirectoryURL = managedArtworkDirectoryURL(itemID: item.id)
+        if FileManager.default.fileExists(atPath: itemArtworkDirectoryURL.path) {
+            try FileManager.default.removeItem(at: itemArtworkDirectoryURL)
+        }
+
         return true
     }
 
@@ -451,7 +597,8 @@ final class MediaLibraryStore {
                                         updatedAt: now,
                                         lastPlayedAt: nil,
                                         primaryFile: file,
-                                        entries: entries)
+                                        entries: entries,
+                                        artwork: [])
 
             try insert(item)
             return item
@@ -463,6 +610,13 @@ final class MediaLibraryStore {
 
     private func item(matchingSHA256 sha256: String) throws -> MediaLibraryItem? {
         try items().first { $0.primaryFile.sha256 == sha256 }
+    }
+
+    private func itemExists(id: UUID) throws -> Bool {
+        try withStatement("SELECT 1 FROM media_items WHERE id = ? LIMIT 1") { statement in
+            bind(id.uuidString, to: statement, at: 1)
+            return sqlite3_step(statement) == SQLITE_ROW
+        }
     }
 
     private func restoreManagedFileIfNeeded(for item: MediaLibraryItem,
@@ -582,6 +736,44 @@ final class MediaLibraryStore {
         }
     }
 
+    func artwork(for itemID: UUID) throws -> [MediaLibraryArtwork] {
+        let sql = """
+        SELECT id, item_id, kind, relative_path, source_url, sha256, byte_count,
+               width, height, created_at, updated_at
+        FROM media_artwork
+        WHERE item_id = ?
+        ORDER BY kind COLLATE NOCASE
+        """
+
+        return try withStatement(sql) { statement in
+            bind(itemID.uuidString, to: statement, at: 1)
+
+            var artwork: [MediaLibraryArtwork] = []
+            while sqlite3_step(statement) == SQLITE_ROW {
+                guard let itemID = uuidColumn(statement, 1),
+                      let kind = MetadataArtworkPreference(rawValue: stringColumn(statement, 2) ?? "") else {
+                    continue
+                }
+
+                artwork.append(MediaLibraryArtwork(
+                    id: sqlite3_column_int64(statement, 0),
+                    itemID: itemID,
+                    kind: kind,
+                    relativePath: stringColumn(statement, 3) ?? "",
+                    sourceURL: stringColumn(statement, 4),
+                    sha256: stringColumn(statement, 5) ?? "",
+                    byteCount: sqlite3_column_int64(statement, 6),
+                    width: optionalIntColumn(statement, 7),
+                    height: optionalIntColumn(statement, 8),
+                    createdAt: dateColumn(statement, 9) ?? Date(timeIntervalSince1970: 0),
+                    updatedAt: dateColumn(statement, 10) ?? Date(timeIntervalSince1970: 0)
+                ))
+            }
+
+            return artwork
+        }
+    }
+
     private func directoryEntries(itemID: UUID,
                                   fileID: UUID,
                                   url: URL,
@@ -664,6 +856,24 @@ final class MediaLibraryStore {
 
         CREATE INDEX IF NOT EXISTS media_entries_item_id_index
             ON media_entries(item_id);
+
+        CREATE TABLE IF NOT EXISTS media_artwork (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_id TEXT NOT NULL REFERENCES media_items(id) ON DELETE CASCADE,
+            kind TEXT NOT NULL,
+            relative_path TEXT NOT NULL,
+            source_url TEXT,
+            sha256 TEXT NOT NULL,
+            byte_count INTEGER NOT NULL,
+            width INTEGER,
+            height INTEGER,
+            created_at REAL NOT NULL,
+            updated_at REAL NOT NULL,
+            UNIQUE(item_id, kind)
+        );
+
+        CREATE INDEX IF NOT EXISTS media_artwork_item_id_index
+            ON media_artwork(item_id);
         """)
     }
 
@@ -750,6 +960,10 @@ final class MediaLibraryStore {
         mediaDirectoryURL.appendingPathComponent(item.id.uuidString, isDirectory: true)
     }
 
+    private func managedArtworkDirectoryURL(itemID: UUID) -> URL {
+        artworkDirectoryURL.appendingPathComponent(itemID.uuidString, isDirectory: true)
+    }
+
     private func isDirectory(_ url: URL) -> Bool {
         (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
     }
@@ -775,6 +989,14 @@ final class MediaLibraryStore {
             : sanitized
     }
 
+    private static func sanitizedArtworkExtension(_ fileExtension: String?) -> String {
+        let normalized = (fileExtension ?? "")
+            .lowercased()
+            .filter { $0.isLetter || $0.isNumber }
+
+        return normalized.isEmpty ? "img" : String(normalized.prefix(12))
+    }
+
     private static func byteCount(for url: URL) throws -> Int64 {
         let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
         return (attributes[.size] as? NSNumber)?.int64Value ?? 0
@@ -782,6 +1004,10 @@ final class MediaLibraryStore {
 
     private static func sha256Hex(for url: URL) throws -> String {
         let data = try Data(contentsOf: url)
+        return sha256Hex(for: data)
+    }
+
+    private static func sha256Hex(for data: Data) -> String {
         let digest = SHA256.hash(data: data)
         return digest.map { String(format: "%02x", $0) }.joined()
     }
@@ -802,6 +1028,15 @@ final class MediaLibraryStore {
         }
 
         sqlite3_bind_double(statement, index, value.timeIntervalSince1970)
+    }
+
+    private func bind(_ value: Int?, to statement: OpaquePointer?, at index: Int32) {
+        guard let value else {
+            sqlite3_bind_null(statement, index)
+            return
+        }
+
+        sqlite3_bind_int(statement, index, Int32(value))
     }
 }
 
@@ -840,4 +1075,12 @@ private func dateColumn(_ statement: OpaquePointer?, _ index: Int32) -> Date? {
     }
 
     return Date(timeIntervalSince1970: sqlite3_column_double(statement, index))
+}
+
+private func optionalIntColumn(_ statement: OpaquePointer?, _ index: Int32) -> Int? {
+    guard sqlite3_column_type(statement, index) != SQLITE_NULL else {
+        return nil
+    }
+
+    return Int(sqlite3_column_int(statement, index))
 }

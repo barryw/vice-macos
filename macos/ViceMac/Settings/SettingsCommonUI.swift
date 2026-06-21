@@ -1,5 +1,149 @@
-import AppKit
 import SwiftUI
+
+enum SettingsPaneID: String, CaseIterable, Identifiable {
+    case machine
+    case media
+    case metadata
+    case sound
+    case controls
+    case keyboard
+    case drives
+    case printing
+    case network
+    case display
+    case ai
+
+    var id: String {
+        rawValue
+    }
+
+    var title: String {
+        switch self {
+        case .machine:
+            return "Machine"
+        case .media:
+            return "Media"
+        case .metadata:
+            return "Metadata"
+        case .sound:
+            return "Sound"
+        case .controls:
+            return "Controls"
+        case .keyboard:
+            return "Keyboard"
+        case .drives:
+            return "Storage"
+        case .printing:
+            return "Printing"
+        case .network:
+            return "Network"
+        case .display:
+            return "Display"
+        case .ai:
+            return "AI"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .machine:
+            return "Model, ROMs, memory"
+        case .media:
+            return "Library, files, tape"
+        case .metadata:
+            return "Database imports, APIs"
+        case .sound:
+            return "SID and audio output"
+        case .controls:
+            return "Joysticks and mice"
+        case .keyboard:
+            return "Keymaps and bindings"
+        case .drives:
+            return "Drives and storage"
+        case .printing:
+            return "Printers and queue"
+        case .network:
+            return "Modem and Q-Link"
+        case .display:
+            return "Video and filters"
+        case .ai:
+            return "Assistant settings"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .machine:
+            return "cpu"
+        case .media:
+            return "externaldrive.badge.plus"
+        case .metadata:
+            return "tag"
+        case .sound:
+            return "speaker.wave.2"
+        case .controls:
+            return "gamecontroller"
+        case .keyboard:
+            return "keyboard"
+        case .drives:
+            return "externaldrive"
+        case .printing:
+            return "printer"
+        case .network:
+            return "network"
+        case .display:
+            return "display"
+        case .ai:
+            return "sparkles"
+        }
+    }
+}
+
+enum SettingsPaneCatalog {
+    static func availablePanes(showsControlSettings: Bool,
+                               showsNetworkSettings: Bool,
+                               aiAssistantEnabled: Bool) -> [SettingsPaneID] {
+        SettingsPaneID.allCases.filter { pane in
+            switch pane {
+            case .controls:
+                return showsControlSettings
+            case .network:
+                return showsNetworkSettings
+            case .ai:
+                return aiAssistantEnabled
+            default:
+                return true
+            }
+        }
+    }
+
+    static func normalizedSelection(for rawSelection: String,
+                                    showsControlSettings: Bool,
+                                    showsNetworkSettings: Bool,
+                                    aiAssistantEnabled: Bool) -> SettingsPaneID {
+        let selectedPane = SettingsPaneID(rawValue: rawSelection) ?? .machine
+
+        if selectedPane == .controls,
+           !showsControlSettings {
+            return .keyboard
+        }
+
+        if selectedPane == .network,
+           !showsNetworkSettings {
+            return .media
+        }
+
+        if selectedPane == .ai,
+           !aiAssistantEnabled {
+            return .machine
+        }
+
+        let panes = availablePanes(showsControlSettings: showsControlSettings,
+                                   showsNetworkSettings: showsNetworkSettings,
+                                   aiAssistantEnabled: aiAssistantEnabled)
+        return panes.contains(selectedPane) ? selectedPane : panes.first ?? .machine
+    }
+}
 
 struct SettingsCustomPane<Content: View>: View {
     private let content: Content
@@ -12,6 +156,23 @@ struct SettingsCustomPane<Content: View>: View {
         content
             .padding(.horizontal, 22)
             .padding(.vertical, 18)
+    }
+}
+
+struct SettingsPane<Content: View>: View {
+    private let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        SettingsCustomPane {
+            Form {
+                content
+            }
+            .formStyle(.grouped)
+        }
     }
 }
 
@@ -112,45 +273,79 @@ struct SettingsValueText: View {
     }
 }
 
-struct SettingsSearchField: NSViewRepresentable {
-    @Binding var text: String
-    let placeholder: String
+struct SettingsSliderControl: View {
+    @Binding var value: Double
+    let range: ClosedRange<Double>
+    let valueTitle: String
+    var isEnabled = true
+    var valueWidth: CGFloat = 48
+    var onEditingChanged: (Bool) -> Void = { _ in }
 
-    func makeCoordinator() -> Coordinator {
-        Coordinator(text: $text)
-    }
+    var body: some View {
+        HStack(spacing: 10) {
+            Slider(value: $value,
+                   in: range,
+                   onEditingChanged: onEditingChanged)
+                .disabled(!isEnabled)
 
-    func makeNSView(context: Context) -> NSSearchField {
-        let searchField = NSSearchField(frame: .zero)
-        searchField.placeholderString = placeholder
-        searchField.sendsSearchStringImmediately = true
-        searchField.delegate = context.coordinator
-        return searchField
-    }
-
-    func updateNSView(_ searchField: NSSearchField, context: Context) {
-        if searchField.stringValue != text {
-            searchField.stringValue = text
-        }
-
-        if searchField.placeholderString != placeholder {
-            searchField.placeholderString = placeholder
-        }
-    }
-
-    final class Coordinator: NSObject, NSSearchFieldDelegate {
-        private var text: Binding<String>
-
-        init(text: Binding<String>) {
-            self.text = text
-        }
-
-        func controlTextDidChange(_ notification: Notification) {
-            guard let searchField = notification.object as? NSSearchField else {
-                return
-            }
-
-            text.wrappedValue = searchField.stringValue
+            Text(valueTitle)
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+                .frame(width: valueWidth, alignment: .trailing)
         }
     }
 }
+
+struct SettingsPercentSlider: View {
+    @Binding var value: Int
+    var isEnabled = true
+    var valueWidth: CGFloat = 44
+    var onEditingChanged: (Bool) -> Void = { _ in }
+
+    var body: some View {
+        SettingsSliderControl(value: doubleBinding,
+                              range: 0...100,
+                              valueTitle: "\(value)%",
+                              isEnabled: isEnabled,
+                              valueWidth: valueWidth,
+                              onEditingChanged: onEditingChanged)
+    }
+
+    private var doubleBinding: Binding<Double> {
+        Binding {
+            Double(value)
+        } set: { newValue in
+            value = min(max(Int(newValue.rounded()), 0), 100)
+        }
+    }
+}
+
+struct SettingsPortField: View {
+    @Binding var value: Int
+    let range: ClosedRange<Int>
+    var width: CGFloat = 72
+
+    var body: some View {
+        HStack(spacing: 6) {
+            TextField("Port",
+                      value: boundedValue,
+                      format: .number.grouping(.never))
+                .labelsHidden()
+                .multilineTextAlignment(.trailing)
+                .frame(width: width)
+
+            Stepper("Port", value: boundedValue, in: range)
+                .labelsHidden()
+        }
+    }
+
+    private var boundedValue: Binding<Int> {
+        Binding {
+            value
+        } set: { newValue in
+            value = min(max(newValue, range.lowerBound), range.upperBound)
+        }
+    }
+}
+
+typealias SettingsSearchField = VMCSearchField

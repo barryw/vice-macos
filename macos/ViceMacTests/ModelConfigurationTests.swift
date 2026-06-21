@@ -10,6 +10,117 @@ import XCTest
 import zlib
 
 final class ModelConfigurationTests: XCTestCase {
+    func testAIAssistantFeatureFlagIsPaused() {
+        XCTAssertFalse(VMCFeatureFlags.aiAssistant)
+    }
+
+    @MainActor
+    func testAIAssistantSettingsAreRuntimeDisabledWhenFeatureIsPaused() {
+        let settings = AIAssistantSettings()
+
+        XCTAssertFalse(settings.isEnabled)
+        XCTAssertFalse(settings.isConfigured)
+        XCTAssertEqual(settings.assistantSummary, "Disabled")
+        XCTAssertTrue(settings.remoteCredentialProviders.isEmpty)
+    }
+
+    func testSettingsPaneCatalogHidesAIAssistantWhenFeatureIsPaused() {
+        let panes = SettingsPaneCatalog.availablePanes(showsControlSettings: true,
+                                                       showsNetworkSettings: true,
+                                                       aiAssistantEnabled: false)
+
+        XCTAssertFalse(panes.contains(.ai))
+        XCTAssertTrue(panes.contains(.machine))
+        XCTAssertTrue(panes.contains(.display))
+    }
+
+    func testSettingsPaneCatalogIncludesOptionalPanesWhenSupported() {
+        let panes = SettingsPaneCatalog.availablePanes(showsControlSettings: true,
+                                                       showsNetworkSettings: true,
+                                                       aiAssistantEnabled: true)
+
+        XCTAssertTrue(panes.contains(.controls))
+        XCTAssertTrue(panes.contains(.network))
+        XCTAssertTrue(panes.contains(.ai))
+    }
+
+    func testSettingsPaneCatalogHidesUnavailableMachinePanes() {
+        let panes = SettingsPaneCatalog.availablePanes(showsControlSettings: false,
+                                                       showsNetworkSettings: false,
+                                                       aiAssistantEnabled: false)
+
+        XCTAssertFalse(panes.contains(.controls))
+        XCTAssertFalse(panes.contains(.network))
+        XCTAssertFalse(panes.contains(.ai))
+        XCTAssertTrue(panes.contains(.keyboard))
+        XCTAssertTrue(panes.contains(.media))
+    }
+
+    func testSettingsPaneCatalogNormalizesUnavailableSelections() {
+        XCTAssertEqual(
+            SettingsPaneCatalog.normalizedSelection(for: SettingsPaneID.controls.rawValue,
+                                                    showsControlSettings: false,
+                                                    showsNetworkSettings: true,
+                                                    aiAssistantEnabled: false),
+            .keyboard
+        )
+        XCTAssertEqual(
+            SettingsPaneCatalog.normalizedSelection(for: SettingsPaneID.network.rawValue,
+                                                    showsControlSettings: true,
+                                                    showsNetworkSettings: false,
+                                                    aiAssistantEnabled: false),
+            .media
+        )
+        XCTAssertEqual(
+            SettingsPaneCatalog.normalizedSelection(for: SettingsPaneID.ai.rawValue,
+                                                    showsControlSettings: true,
+                                                    showsNetworkSettings: true,
+                                                    aiAssistantEnabled: false),
+            .machine
+        )
+        XCTAssertEqual(
+            SettingsPaneCatalog.normalizedSelection(for: "missing",
+                                                    showsControlSettings: true,
+                                                    showsNetworkSettings: true,
+                                                    aiAssistantEnabled: false),
+            .machine
+        )
+    }
+
+    func testSettingsSharedControlsOwnReusableSlidersAndPortField() throws {
+        let commonSource = try sourceText(at: "macos/ViceMac/Settings/SettingsCommonUI.swift")
+        let settingsSource = try sourceText(at: "macos/ViceMac/Settings/SettingsView.swift")
+
+        XCTAssertTrue(commonSource.contains("struct SettingsSliderControl"))
+        XCTAssertTrue(commonSource.contains("struct SettingsPercentSlider"))
+        XCTAssertTrue(commonSource.contains("struct SettingsPortField"))
+        XCTAssertTrue(commonSource.contains("struct SettingsPane<Content: View>"))
+        XCTAssertTrue(commonSource.contains("format: .number.grouping(.never)"))
+        XCTAssertFalse(settingsSource.contains("private struct SettingsSliderControl"))
+        XCTAssertFalse(settingsSource.contains("private struct SettingsPercentSlider"))
+        XCTAssertFalse(settingsSource.contains("private func portControl"))
+        XCTAssertFalse(settingsSource.contains("private struct SettingsPane<Content: View>"))
+    }
+
+    func testNetworkSettingsUseSharedPortFieldForDialAndIncomingPorts() throws {
+        let settingsSource = try sourceText(at: "macos/ViceMac/Settings/SettingsView.swift")
+
+        XCTAssertEqual(settingsSource.components(separatedBy: "SettingsPortField(").count - 1, 2)
+        XCTAssertFalse(settingsSource.contains("TextField(\"Port\","))
+        XCTAssertFalse(settingsSource.contains("Stepper(\"Port\""))
+    }
+
+    func testViceMacXcodeProjectPinsSwift6AndStrictConcurrency() throws {
+        let projectSource = try sourceText(at: "macos/ViceMac.xcodeproj/project.pbxproj")
+        let swiftVersions = try buildSettingValues(named: "SWIFT_VERSION", in: projectSource)
+        let strictConcurrencyModes = try buildSettingValues(named: "SWIFT_STRICT_CONCURRENCY", in: projectSource)
+
+        XCTAssertFalse(swiftVersions.isEmpty)
+        XCTAssertTrue(swiftVersions.allSatisfy { $0 == "6.0" })
+        XCTAssertFalse(strictConcurrencyModes.isEmpty)
+        XCTAssertTrue(strictConcurrencyModes.allSatisfy { $0 == "complete" })
+    }
+
     func testTerminationPolicyTerminatesImmediatelyWhenEngineIsStopped() {
         var policy = ViceMacTerminationPolicy()
         var didRequestEngineQuit = false
@@ -703,7 +814,7 @@ final class ModelConfigurationTests: XCTestCase {
                                                machine: .x64sc,
                                                storedProfileCount: 0)
 
-        XCTAssertEqual(outcome, .failure("Current modem settings are not compatible with Q-Link Reloaded:\n- Modem is off\n- Hardware is SwiftLink, not User Port\n- Speed is 9600 baud, not 1200 baud\n- Connection is Telnet, not Raw TCP\n- Dial host is blank\n- CONNECT response includes baud rate"))
+        XCTAssertEqual(outcome, .failure("Current modem settings are not compatible with Q-Link Reloaded:\n- Modem is off\n- Connection is Telnet, not Raw TCP\n- Dial host is blank\n- CONNECT response includes baud rate"))
         XCTAssertFalse(checker.didValidate)
     }
 
@@ -764,13 +875,95 @@ final class ModelConfigurationTests: XCTestCase {
         let modem = QLinkReloadedModemRequirements.preset(preservingValuesFrom: .standard)
 
         XCTAssertTrue(QLinkReloadedModemRequirements.isCompatible(modem, for: .x64sc))
-        XCTAssertEqual(modem.interface, .userPort)
-        XCTAssertEqual(modem.baudRate, 1200)
+        XCTAssertEqual(modem.interface, .swiftLink)
+        XCTAssertEqual(modem.baudRate, 38400)
         XCTAssertEqual(modem.transportMode, .raw)
         XCTAssertEqual(modem.defaultDialHost, "q-link.net")
         XCTAssertEqual(modem.defaultDialPort, 5190)
         XCTAssertTrue(modem.verboseResultCodes)
         XCTAssertFalse(modem.connectResultIncludesBaudRate)
+    }
+
+    func testQLinkReloadedModemRequirementsAcceptSwiftLinkAndTurbo232() {
+        let swiftLink = NetworkModemConfiguration(isEnabled: true,
+                                                  interface: .swiftLink,
+                                                  baudRate: 38400,
+                                                  transportMode: .raw,
+                                                  acceptsIncomingCalls: false,
+                                                  incomingPort: 6400,
+                                                  autoAnswerRings: 0,
+                                                  echoCommands: true,
+                                                  verboseResultCodes: true,
+                                                  connectResultIncludesBaudRate: false,
+                                                  defaultDialPort: 5190,
+                                                  defaultDialHost: "q-link.net",
+                                                  aciaBaseAddress: .de00)
+        let turbo232 = NetworkModemConfiguration(isEnabled: true,
+                                                 interface: .turbo232,
+                                                 baudRate: 38400,
+                                                 transportMode: .raw,
+                                                 acceptsIncomingCalls: false,
+                                                 incomingPort: 6400,
+                                                 autoAnswerRings: 0,
+                                                 echoCommands: true,
+                                                 verboseResultCodes: true,
+                                                 connectResultIncludesBaudRate: false,
+                                                 defaultDialPort: 5190,
+                                                 defaultDialHost: "q-link.net",
+                                                 aciaBaseAddress: .de00)
+
+        XCTAssertTrue(QLinkReloadedModemRequirements.isCompatible(swiftLink, for: .x64sc))
+        XCTAssertTrue(QLinkReloadedModemRequirements.isCompatible(turbo232, for: .x64sc))
+    }
+
+    func testQLinkReloadedModemRequirementsAcceptLegacyUserPortWithoutBaudRestriction() {
+        let modem = NetworkModemConfiguration(isEnabled: true,
+                                              interface: .userPort,
+                                              baudRate: 2400,
+                                              transportMode: .raw,
+                                              acceptsIncomingCalls: false,
+                                              incomingPort: 6400,
+                                              autoAnswerRings: 0,
+                                              echoCommands: true,
+                                              verboseResultCodes: true,
+                                              connectResultIncludesBaudRate: false,
+                                              defaultDialPort: 5190,
+                                              defaultDialHost: "q-link.net")
+
+        XCTAssertTrue(QLinkReloadedModemRequirements.isCompatible(modem, for: .x64sc))
+    }
+
+    func testQLinkReloadedModemPresetPrefersModernAciaInterface() {
+        let modem = NetworkModemConfiguration(isEnabled: true,
+                                              interface: .userPort,
+                                              baudRate: 2400,
+                                              transportMode: .telnet,
+                                              acceptsIncomingCalls: false,
+                                              incomingPort: 6400,
+                                              autoAnswerRings: 0,
+                                              echoCommands: true,
+                                              verboseResultCodes: true,
+                                              connectResultIncludesBaudRate: true,
+                                              defaultDialPort: 23,
+                                              defaultDialHost: "")
+
+        let preset = QLinkReloadedModemRequirements.preset(preservingValuesFrom: modem)
+
+        XCTAssertEqual(preset.interface, .swiftLink)
+        XCTAssertEqual(preset.baudRate, 38400)
+        XCTAssertTrue(QLinkReloadedModemRequirements.isCompatible(preset, for: .x64sc))
+    }
+
+    func testQLinkReloadedModemPresetPreservesModernAciaInterface() {
+        var modem = NetworkModemConfiguration.standard
+        modem.interface = .turbo232
+
+        let preset = QLinkReloadedModemRequirements.preset(preservingValuesFrom: modem)
+
+        XCTAssertEqual(preset.interface, .turbo232)
+        XCTAssertEqual(preset.baudRate, 38400)
+        XCTAssertEqual(preset.aciaBaseAddress, modem.aciaBaseAddress)
+        XCTAssertTrue(QLinkReloadedModemRequirements.isCompatible(preset, for: .x64sc))
     }
 
     func testQLinkReloadedModemRequirementsRejectIncompatibleUserSettings() {
@@ -789,8 +982,6 @@ final class ModelConfigurationTests: XCTestCase {
 
         let issues = QLinkReloadedModemRequirements.incompatibilities(in: modem, for: .x64sc)
 
-        XCTAssertTrue(issues.contains("Hardware is SwiftLink, not User Port"))
-        XCTAssertTrue(issues.contains("Speed is 9600 baud, not 1200 baud"))
         XCTAssertTrue(issues.contains("Connection is Telnet, not Raw TCP"))
         XCTAssertFalse(issues.contains { $0.contains(QLinkReloadedModemRequirements.serverHost) })
         XCTAssertFalse(issues.contains { $0.contains(String(QLinkReloadedModemRequirements.serverPort)) })
@@ -2250,6 +2441,71 @@ final class ModelConfigurationTests: XCTestCase {
         XCTAssertTrue(refreshedItem.entries.contains { $0.name.caseInsensitiveCompare("HELLO") == .orderedSame })
     }
 
+    func testMediaLibraryCachesArtworkBesideManagedMediaAndPersistsMetadata() throws {
+        let rootURL = temporaryDirectoryURL("MediaLibraryArtwork")
+        let sourceDirectoryURL = temporaryDirectoryURL("MediaLibraryArtworkSources")
+        let sourceURL = sourceDirectoryURL.appendingPathComponent("cover_test.prg")
+        defer {
+            try? FileManager.default.removeItem(at: rootURL)
+            try? FileManager.default.removeItem(at: sourceDirectoryURL)
+        }
+
+        try FileManager.default.createDirectory(at: sourceDirectoryURL,
+                                                withIntermediateDirectories: true)
+        try Data([0x01, 0x08, 0x60]).write(to: sourceURL)
+
+        let store = try MediaLibraryStore(rootURL: rootURL)
+        let item = try XCTUnwrap(try store.importURLs([sourceURL]).first)
+        let coverData = Data([0x89, 0x50, 0x4e, 0x47, 0x01])
+        let coverSourceURL = try XCTUnwrap(URL(string: "https://example.test/cover.png"))
+
+        let artwork = try store.cacheArtwork(coverData,
+                                             kind: .boxFront,
+                                             itemID: item.id,
+                                             sourceURL: coverSourceURL,
+                                             fileExtension: "png",
+                                             width: 320,
+                                             height: 200)
+        let artworkURL = store.artworkURL(for: artwork)
+
+        XCTAssertTrue(artwork.relativePath.hasPrefix("Artwork/\(item.id.uuidString)/"))
+        XCTAssertEqual(artwork.kind, .boxFront)
+        XCTAssertEqual(artwork.sourceURL, coverSourceURL.absoluteString)
+        XCTAssertEqual(artwork.byteCount, Int64(coverData.count))
+        XCTAssertEqual(artwork.width, 320)
+        XCTAssertEqual(artwork.height, 200)
+        XCTAssertEqual(try Data(contentsOf: artworkURL), coverData)
+
+        let reloadedItem = try XCTUnwrap(try store.items().first { $0.id == item.id })
+        XCTAssertEqual(reloadedItem.artwork.count, 1)
+        XCTAssertEqual(reloadedItem.artwork.first?.id, artwork.id)
+        XCTAssertEqual(reloadedItem.artwork.first?.relativePath, artwork.relativePath)
+
+        let replacementData = Data([0xff, 0xd8, 0xff])
+        let replacement = try store.cacheArtwork(replacementData,
+                                                 kind: .boxFront,
+                                                 itemID: item.id,
+                                                 fileExtension: "jpg")
+
+        XCTAssertEqual(replacement.id, artwork.id)
+        XCTAssertEqual(try store.artwork(for: item.id).count, 1)
+        XCTAssertEqual(try Data(contentsOf: store.artworkURL(for: replacement)), replacementData)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: artworkURL.path))
+
+        try store.updateMetadata(itemID: item.id,
+                                 title: "Cover Test Deluxe",
+                                 notes: "Metadata: TheGamesDB 123")
+        let metadataItem = try XCTUnwrap(try store.items().first { $0.id == item.id })
+        XCTAssertEqual(metadataItem.title, "Cover Test Deluxe")
+        XCTAssertEqual(metadataItem.notes, "Metadata: TheGamesDB 123")
+        XCTAssertEqual(metadataItem.artwork.first?.id, replacement.id)
+
+        try store.removeItem(id: item.id)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: store.primaryFileURL(for: item).path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: replacement.url(in: rootURL).deletingLastPathComponent().path))
+    }
+
     @MainActor
     func testDiskImageManagerOpenRequestsCarryMediaLibraryContext() throws {
         let requests = DiskImageManagerOpenRequests()
@@ -2522,6 +2778,63 @@ final class ModelConfigurationTests: XCTestCase {
         XCTAssertNotEqual(try Data(contentsOf: managedCopyURL), sourceData)
     }
 
+    func testQLinkReloadedDiskPatcherAcceptsDevelopmentNGDiskWithoutFingerprint() throws {
+        let data = try makeQLinkDevelopmentNGD64Data()
+
+        let version = try QLinkReloadedDiskPatcher.knownVersion(for: data)
+
+        XCTAssertEqual(version.displayTitle, "Q-Link NG Development")
+        XCTAssertFalse(version.requiresLegacyPatch)
+        XCTAssertTrue(QLinkReloadedDiskPatcher.isDevelopmentNGDisk(data))
+    }
+
+    func testQLinkReloadedDiskPatcherRejectsGenericBootDiskAsUnknownVersion() throws {
+        let data = try makeQLinkDevelopmentNGD64Data(programNames: ["BOOT64"])
+
+        XCTAssertFalse(QLinkReloadedDiskPatcher.isDevelopmentNGDisk(data))
+        XCTAssertThrowsError(try QLinkReloadedDiskPatcher.knownVersion(for: data)) { error in
+            XCTAssertEqual(error as? QLinkReloadedServiceError, .unknownVersion)
+        }
+    }
+
+    func testQLinkReloadedDiskPatcherDoesNotPatchDevelopmentNGDisk() throws {
+        let url = temporaryURL(pathExtension: "d64")
+        let data = try makeQLinkDevelopmentNGD64Data()
+        try data.write(to: url)
+        let version = try QLinkReloadedDiskPatcher.knownVersion(for: data)
+
+        let result = try QLinkReloadedDiskPatcher.configureReloadedProfile(at: url,
+                                                                           version: version)
+
+        XCTAssertFalse(result.changedDisk)
+        XCTAssertEqual(result.version, version)
+        XCTAssertEqual(try Data(contentsOf: url), data)
+    }
+
+    func testQLinkReloadedDiskPatcherRejectsLegacyProfileWritesForDevelopmentNGDisk() throws {
+        let url = temporaryURL(pathExtension: "d64")
+        let data = try makeQLinkDevelopmentNGD64Data()
+        try data.write(to: url)
+        let version = try QLinkReloadedDiskPatcher.knownVersion(for: data)
+        let registration = try XCTUnwrap(QLinkReloadedDiskPatcher.registrationProfile(from: makeQLinkD64ProfileFixture()))
+
+        XCTAssertThrowsError(try QLinkReloadedDiskPatcher.addRegistrationProfile(registration,
+                                                                                 at: url,
+                                                                                 version: version)) { error in
+            XCTAssertEqual(error as? QLinkReloadedServiceError, .legacyProfileStorageUnavailable)
+        }
+        XCTAssertThrowsError(try QLinkReloadedDiskPatcher.removeRegistrationProfile(id: registration.id,
+                                                                                    at: url,
+                                                                                    version: version)) { error in
+            XCTAssertEqual(error as? QLinkReloadedServiceError, .legacyProfileStorageUnavailable)
+        }
+        XCTAssertThrowsError(try QLinkReloadedDiskPatcher.removeRegistrationProfile(at: url,
+                                                                                    version: version)) { error in
+            XCTAssertEqual(error as? QLinkReloadedServiceError, .legacyProfileStorageUnavailable)
+        }
+        XCTAssertEqual(try Data(contentsOf: url), data)
+    }
+
     @MainActor
     func testMetadataIngestionSettingsPersistProviderAndMatchingConfiguration() throws {
         let defaults = try temporaryUserDefaults("MetadataProvider")
@@ -2529,22 +2842,120 @@ final class ModelConfigurationTests: XCTestCase {
         let settings = MetadataIngestionSettings(defaults: defaults,
                                                  credentialStore: credentialStore)
 
-        settings.setEnabled(true, for: .mobyGames)
+        settings.setEnabled(true, for: .theGamesDB)
+        settings.setCredential("tgdb-key", providerID: .theGamesDB, field: .apiKey)
         settings.matchStrategy = .hashFirst
         settings.cachesArtworkLocally = false
         settings.artworkPreference = .screenshot
 
         let reloadedSettings = MetadataIngestionSettings(defaults: defaults,
                                                          credentialStore: credentialStore)
-        let configuration = reloadedSettings.configuration(for: .mobyGames)
-        let snapshot = try XCTUnwrap(reloadedSettings.providerSnapshots.first { $0.providerID == .mobyGames })
+        let configuration = reloadedSettings.configuration(for: .theGamesDB)
+        let snapshot = try XCTUnwrap(reloadedSettings.providerSnapshots.first { $0.providerID == .theGamesDB })
 
         XCTAssertTrue(configuration.isEnabled)
         XCTAssertEqual(reloadedSettings.matchStrategy, .hashFirst)
         XCTAssertFalse(reloadedSettings.cachesArtworkLocally)
         XCTAssertEqual(reloadedSettings.artworkPreference, .screenshot)
-        XCTAssertFalse(snapshot.isReady)
-        XCTAssertEqual(snapshot.statusTitle, "Needs setup")
+        XCTAssertTrue(snapshot.isReady)
+        XCTAssertEqual(snapshot.statusTitle, "Enabled")
+    }
+
+    func testMetadataProvidersExposeDocumentedArtworkCapabilities() {
+        XCTAssertFalse(MetadataProviderID.allCases.map(\.rawValue).contains("mobyGames"))
+        XCTAssertFalse(MetadataProviderID.activeProviderIDs.map(\.rawValue).contains("mobyGames"))
+
+        XCTAssertFalse(MetadataProviderID.gameBase64.supportsArtwork)
+        XCTAssertEqual(MetadataProviderID.gameBase64.supportedArtworkPreferences, [])
+
+        XCTAssertEqual(MetadataProviderID.igdb.supportedArtworkPreferences, [.boxFront, .screenshot])
+        XCTAssertEqual(MetadataProviderID.theGamesDB.supportedArtworkPreferences, [.boxFront, .screenshot, .titleScreen])
+        XCTAssertTrue(MetadataProviderID.theGamesDB.supportsMediaLibraryMetadataSearch)
+
+        XCTAssertFalse(MetadataProviderID.csdb.supportsArtwork)
+    }
+
+    @MainActor
+    func testMetadataSettingsIgnoreRemovedAndUnknownStoredProviders() throws {
+        let defaults = try temporaryUserDefaults("RemovedMetadataProvider")
+        let storedConfigurationJSON = """
+        [
+          { "providerID": "mobyGames", "isEnabled": true, "databasePath": "/tmp/moby.mdb" },
+          { "providerID": "missingProvider", "isEnabled": true },
+          { "providerID": "theGamesDB", "isEnabled": true }
+        ]
+        """
+        defaults.set(Data(storedConfigurationJSON.utf8), forKey: "vice.metadata.providers")
+
+        let settings = MetadataIngestionSettings(defaults: defaults,
+                                                 credentialStore: MetadataIngestionMemoryCredentialStore())
+
+        XCTAssertTrue(settings.configuration(for: .theGamesDB).isEnabled)
+        XCTAssertEqual(settings.providerSnapshots.map(\.providerID),
+                       MetadataProviderID.activeProviderIDs)
+        XCTAssertFalse(settings.providerSnapshots.map(\.providerID.rawValue).contains("mobyGames"))
+    }
+
+    func testTheGamesDBSearchResponseParsesMetadataAndArtworkURL() throws {
+        let json = """
+        {
+          "data": {
+            "count": 1,
+            "games": [
+              {
+                "id": 53,
+                "game_title": "Impossible Mission",
+                "release_date": "1984-01-01",
+                "platform": 40,
+                "overview": "Stay a while. Stay forever."
+              }
+            ]
+          },
+          "include": {
+            "boxart": {
+              "base_url": {
+                "original": "https://cdn.thegamesdb.net/images/original/",
+                "small": "https://cdn.thegamesdb.net/images/small/",
+                "thumb": "https://cdn.thegamesdb.net/images/thumb/",
+                "medium": "https://cdn.thegamesdb.net/images/medium/",
+                "large": "https://cdn.thegamesdb.net/images/large/"
+              },
+              "data": {
+                "53": [
+                  {
+                    "id": 17438,
+                    "type": "boxart",
+                    "side": "front",
+                    "filename": "boxart/front/53-1.jpg",
+                    "resolution": "1521x2156"
+                  }
+                ]
+              }
+            },
+            "platform": {
+              "data": {
+                "40": {
+                  "id": 40,
+                  "name": "Commodore 64"
+                }
+              }
+            }
+          }
+        }
+        """.data(using: .utf8)!
+
+        let results = try TheGamesDBMetadataClient.searchResults(from: json,
+                                                                 artworkPreference: .boxFront)
+        let result = try XCTUnwrap(results.first)
+
+        XCTAssertEqual(result.id, "theGamesDB:53")
+        XCTAssertEqual(result.providerID, .theGamesDB)
+        XCTAssertEqual(result.externalID, "53")
+        XCTAssertEqual(result.title, "Impossible Mission")
+        XCTAssertEqual(result.platformName, "Commodore 64")
+        XCTAssertEqual(result.releaseDate, "1984-01-01")
+        XCTAssertEqual(result.overview, "Stay a while. Stay forever.")
+        XCTAssertEqual(result.artworkURL?.absoluteString, "https://cdn.thegamesdb.net/images/large/boxart/front/53-1.jpg")
     }
 
     @MainActor
@@ -3053,6 +3464,7 @@ final class ModelConfigurationTests: XCTestCase {
         var image = try makeGEOS128SystemDiskImage()
 
         let initialStatus = try XCTUnwrap(image.geosStatus)
+        XCTAssertEqual(image.geosBootProgramName, "GEOS128")
         XCTAssertEqual(initialStatus.defaultInputDriver?.name, "128 JOYSTICK")
         XCTAssertEqual(initialStatus.preferred1351Driver?.name, "128 COMM 1351")
         XCTAssertTrue(initialStatus.canMake1351Default)
@@ -3068,6 +3480,98 @@ final class ModelConfigurationTests: XCTestCase {
         ])
         XCTAssertTrue(updatedStatus.is1351Default)
         XCTAssertTrue(image.isModified)
+    }
+
+    func testGEOS128DiskRunLaunchUsesC128BasicRunCommand() throws {
+        let image = try makeGEOS128SystemDiskImage()
+
+        let plan = DiskImageLaunchPlan.plan(for: image.url,
+                                            machine: .x128,
+                                            unit: 8,
+                                            driveNumber: 0,
+                                            driveType: .c1571,
+                                            behavior: .run)
+
+        XCTAssertEqual(plan.runMode, .attach)
+        XCTAssertNil(plan.programName)
+        XCTAssertEqual(plan.keyboardText, "RUN\"GEOS128\"\r")
+    }
+
+    func testExplicitGEOS128BootProgramStillUsesC128BasicRunCommand() throws {
+        let image = try makeGEOS128SystemDiskImage()
+
+        let plan = DiskImageLaunchPlan.plan(for: image.url,
+                                            machine: .x128,
+                                            unit: 8,
+                                            driveNumber: 0,
+                                            driveType: .c1571,
+                                            behavior: .run,
+                                            explicitProgramName: "GEOS128")
+
+        XCTAssertEqual(plan.runMode, .attach)
+        XCTAssertNil(plan.programName)
+        XCTAssertEqual(plan.keyboardText, "RUN\"GEOS128\"\r")
+    }
+
+    func testGEOSDiskLoadLaunchQueuesLoadWithoutRun() throws {
+        let image = try makeGEOS128SystemDiskImage()
+
+        let plan = DiskImageLaunchPlan.plan(for: image.url,
+                                            machine: .x128,
+                                            unit: 8,
+                                            driveNumber: 0,
+                                            driveType: .c1571,
+                                            behavior: .load)
+
+        XCTAssertEqual(plan.runMode, .attach)
+        XCTAssertNil(plan.programName)
+        XCTAssertEqual(plan.keyboardText, "LOAD\"GEOS128\",8,1\r")
+    }
+
+    func testGEOS64DiskRunLaunchUsesLoadThenRun() throws {
+        let image = try makeGEOS64SystemDiskImage()
+
+        let plan = DiskImageLaunchPlan.plan(for: image.url,
+                                            machine: .x64sc,
+                                            unit: 8,
+                                            driveNumber: 0,
+                                            driveType: .c1541II,
+                                            behavior: .run)
+
+        XCTAssertEqual(plan.runMode, .attach)
+        XCTAssertNil(plan.programName)
+        XCTAssertEqual(plan.keyboardText, "LOAD\"GEOS\",8,1\rRUN\r")
+    }
+
+    func testGEOS128DiskOnC64AttachesWithoutBooting() throws {
+        let image = try makeGEOS128SystemDiskImage()
+
+        let plan = DiskImageLaunchPlan.plan(for: image.url,
+                                            machine: .x64sc,
+                                            unit: 8,
+                                            driveNumber: 0,
+                                            driveType: .c1541,
+                                            behavior: .run)
+
+        XCTAssertEqual(plan.runMode, .attach)
+        XCTAssertNil(plan.programName)
+        XCTAssertNil(plan.keyboardText)
+        XCTAssertEqual(plan.statusMessage, "GEOS128 requires a Commodore 128")
+    }
+
+    func testNonGEOSDiskRunLaunchUsesVICEAutostart() throws {
+        let url = try makeD64Image(name: "HELLO", payload: Data([0x01, 0x08, 0x00]))
+
+        let plan = DiskImageLaunchPlan.plan(for: url,
+                                            machine: .x64sc,
+                                            unit: 8,
+                                            driveNumber: 0,
+                                            driveType: .c1541,
+                                            behavior: .run)
+
+        XCTAssertEqual(plan.runMode, .run)
+        XCTAssertNil(plan.programName)
+        XCTAssertNil(plan.keyboardText)
     }
 
     func testCommodoreDiskImageInstallsGEOSPackage() throws {
@@ -3220,6 +3724,22 @@ final class ModelConfigurationTests: XCTestCase {
         return url
     }
 
+    private func makeQLinkDevelopmentNGD64Data(programNames: [String] = ["BOOT64", "MODBOOT"]) throws -> Data {
+        let url = temporaryURL(pathExtension: "d64")
+        var image = try CommodoreDiskImage(blankImageAt: url,
+                                           format: .d64,
+                                           diskName: "QLINK NG",
+                                           diskID: "NG")
+
+        for (index, programName) in programNames.enumerated() {
+            try image.importFile(named: programName,
+                                 payload: Data([0x01, 0x08, 0x60, UInt8(index)]))
+        }
+        try image.save()
+
+        return try Data(contentsOf: url)
+    }
+
     private func makeGEOS128SystemDiskImage() throws -> CommodoreDiskImage {
         let url = temporaryURL(pathExtension: "d64")
         var image = try CommodoreDiskImage(blankImageAt: url,
@@ -3242,6 +3762,26 @@ final class ModelConfigurationTests: XCTestCase {
         writeDirectoryEntry("128 COMM 1351", slot: 0, type: 0x83, start: CommodoreDiskAddress(track: 5, sector: 12), blocks: 3, in: &secondDirectory)
         writeDirectoryEntry("128 COMM 1351(A)", slot: 1, type: 0x83, start: CommodoreDiskAddress(track: 1, sector: 16), blocks: 3, in: &secondDirectory)
         try image.writeSector(secondDirectory, at: CommodoreDiskAddress(track: 18, sector: 9))
+        try image.save()
+
+        return image
+    }
+
+    private func makeGEOS64SystemDiskImage() throws -> CommodoreDiskImage {
+        let url = temporaryURL(pathExtension: "d64")
+        var image = try CommodoreDiskImage(blankImageAt: url,
+                                           format: .d64,
+                                           diskName: "GEOS",
+                                           diskID: "G2")
+
+        var directory = try image.readSector(CommodoreDiskAddress(track: 18, sector: 1))
+        directory[0] = 0
+        directory[1] = 255
+        writeDirectoryEntry("GEOS", slot: 0, type: 0x82, start: CommodoreDiskAddress(track: 17, sector: 10), blocks: 2, in: &directory)
+        writeDirectoryEntry("GEOBOOT", slot: 1, type: 0x82, start: CommodoreDiskAddress(track: 17, sector: 11), blocks: 152, in: &directory)
+        writeDirectoryEntry("DESK TOP", slot: 2, type: 0x83, start: CommodoreDiskAddress(track: 23, sector: 10), blocks: 137, in: &directory)
+        try image.writeSector(directory, at: CommodoreDiskAddress(track: 18, sector: 1))
+        try image.save()
 
         return image
     }
@@ -3270,6 +3810,18 @@ final class ModelConfigurationTests: XCTestCase {
     private func sourceText(at relativePath: String) throws -> String {
         try String(contentsOf: repositoryRootURL.appendingPathComponent(relativePath),
                    encoding: .utf8)
+    }
+
+    private func buildSettingValues(named name: String, in source: String) throws -> [String] {
+        let pattern = #"\#(name) = ([^;]+);"#
+        let expression = try NSRegularExpression(pattern: pattern)
+        let range = NSRange(source.startIndex..<source.endIndex, in: source)
+        return expression.matches(in: source, range: range).compactMap { match in
+            guard let valueRange = Range(match.range(at: 1), in: source) else {
+                return nil
+            }
+            return String(source[valueRange])
+        }
     }
 
     private var repositoryRootURL: URL {

@@ -258,6 +258,12 @@ if ! hdiutil attach "$DMG_PATH" -mountpoint "$MOUNT_DIR" -nobrowse -readonly -qu
     fail "unable to mount $DMG_PATH"
 fi
 
+for notice_file in README.txt LICENSE.txt NOTICE.txt; do
+    if [[ ! -f "$MOUNT_DIR/$notice_file" ]]; then
+        fail "DMG is missing $notice_file"
+    fi
+done
+
 for app in $SMOKE_APPS; do
     run_app_smoke_test "$app"
 done

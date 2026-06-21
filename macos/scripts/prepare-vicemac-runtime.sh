@@ -460,7 +460,7 @@ copy_runtime_framework_payload() {
         cp "$dependency" "$frameworks_dir/$(basename "$dependency")"
     done
 
-    rsync -a --delete "$VICE_SRC/data/" "$resources_dir/VICEData/"
+    rsync -a --delete --checksum "$VICE_SRC/data/" "$resources_dir/VICEData/"
 }
 
 write_runtime_framework_manifest() {

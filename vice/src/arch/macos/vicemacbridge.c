@@ -28,6 +28,8 @@
 #include "lib.h"
 #include "log.h"
 #include "machine.h"
+#include "main.h"
+#include "mainlock.h"
 #include "monitor.h"
 #include "monitor/mon_breakpoint.h"
 #include "monitor/mon_disassemble.h"
@@ -2892,7 +2894,12 @@ static void vicemac_dispatch_machine_command(vicemac_machine_command_t *command)
             vsync_set_warp_mode(command->value);
             break;
         case VICEMAC_MACHINE_COMMAND_QUIT:
-            archdep_vice_exit(0);
+#ifdef USE_VICE_THREAD
+            mainlock_initiate_shutdown();
+#else
+            main_exit();
+            pthread_exit(NULL);
+#endif
             break;
     }
 }
