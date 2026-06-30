@@ -8,7 +8,7 @@ Embed VICE machines in native macOS apps.
 
 ## Overview
 
-MacVICEKit is the Swift package behind mac VICE. It wraps the native VICE core
+MacVICEKit is the Swift package behind VICE Mac. It wraps the native VICE core
 with APIs for starting emulator sessions, embedding a Metal display, forwarding
 Mac input, attaching media, observing emulator callbacks, and building debugger
 or inspection tools.
@@ -56,7 +56,7 @@ struct EmulatorView: View {
 MacVICEKit does not build VICE during Swift package resolution. Apps should use
 the release SDK or provide a prepared runtime directory. With
 ``MacVICERuntimeLocation/automatic``, runtime lookup checks `MACVICE_RUNTIME_DIR`,
-embedded framework layouts, app bundle `Frameworks`, and local mac VICE checkout
+embedded framework layouts, app bundle `Frameworks`, and local VICE Mac checkout
 builds.
 
 The runtime must contain the machine-specific `libvicemac*.dylib` files and the

@@ -1,6 +1,6 @@
-# mac VICE Kubernetes Deployment
+# VICE Mac Kubernetes Deployment
 
-These manifests publish the static mac VICE website at:
+These manifests publish the static VICE Mac website at:
 
 - `http://macvice.com`
 - `http://www.macvice.com`
