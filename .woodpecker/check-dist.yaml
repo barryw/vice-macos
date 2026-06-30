@@ -1,0 +1,90 @@
+# Weekly "make dist" sanity check.
+#
+# Ported from .github/workflows/check-make-dist.yml (WAL-45 — CEO Woodpecker-only
+# directive). Verifies that `make dist` still produces a buildable, internally
+# consistent source tarball across the headless / sdl2 / gtk3 UI configurations.
+#
+# Woodpecker owns the schedule. Register a cron named "check-dist" on this repo
+# (Woodpecker -> Settings -> Crons) with schedule "42 5 * * 1" (Mondays 05:42,
+# matching the original). The pipeline only references the cron by name.
+#
+# Differences from the original GitHub Actions matrix:
+#   - GitHub Actions ran a 3x3 source x target matrix across separate runners
+#     and shuttled tarballs between jobs as artifacts. Woodpecker matrix legs run
+#     as independent pipelines with no shared artifact store, so the cross-tarball
+#     comparison (compare-dists.sh) is done in a single job here: each UI config
+#     builds its dist tarball, each tarball is rebuilt from source to prove it is
+#     self-buildable, and then compare-dists.sh diffs the three tarballs' file
+#     listings. This covers both original signals (tarball is buildable; tarball
+#     contents are consistent across UI configs).
+#   - The full off-diagonal source!=target rebuild combinations are not run; the
+#     content diff already flags any config-dependent tarball divergence.
+#   - Upstream IRC failure notifications (#vice-dev) are dropped in favour of
+#     Woodpecker's native notifications.
+when:
+  - event: cron
+    cron: check-dist
+  - event: manual
+
+labels:
+  platform: linux/amd64
+
+steps:
+  - name: check-dist
+    image: ubuntu:24.04
+    commands:
+      - |
+        set -euo pipefail
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get update
+        # Superset of source + target deps for headless/sdl2/gtk3.
+        apt-get install -y \
+          autoconf automake build-essential byacc dos2unix flex \
+          libasound2-dev libcurl4-openssl-dev libpng-dev libpulse-dev xa65 \
+          libevdev-dev libsdl2-dev libsdl2-image-dev libgtk-3-dev libglew-dev \
+          texinfo texlive-fonts-recommended texlive-latex-extra
+
+        declare -A CONF=(
+          [headless]="--enable-headlessui"
+          [sdl2]="--enable-sdl2ui"
+          [gtk3]="--enable-gtk3ui"
+        )
+
+        ARTIFACTS="$CI_WORKSPACE/dist-artifacts"
+        rm -rf "$ARTIFACTS"; mkdir -p "$ARTIFACTS"
+
+        # 1. Build a dist tarball for each UI config.
+        for name in headless sdl2 gtk3; do
+          echo "==== make dist: $name ===="
+          ( cd vice
+            git clean -fdx >/dev/null 2>&1 || true
+            ./autogen.sh
+            ./configure --enable-option-checking=fatal ${CONF[$name]} \
+                        --disable-html-docs --disable-pdf-docs --with-resid
+            make -j"$(nproc)" -s --no-print-directory dist )
+          TARBALL=$(basename vice/vice-*.tar.gz)
+          BASE=$(basename -s .tar.gz "$TARBALL")
+          # Reproduce the GitHub Actions artifact layout compare-dists.sh expects:
+          #   <basename>-<name>.tar.gz/<basename>.tar.gz
+          mkdir -p "$ARTIFACTS/$BASE-$name.tar.gz"
+          cp vice/"$TARBALL" "$ARTIFACTS/$BASE-$name.tar.gz/$TARBALL"
+        done
+
+        # 2. Prove each tarball is self-buildable from the unpacked source.
+        for name in headless sdl2 gtk3; do
+          echo "==== rebuild from tarball: $name ===="
+          DIR=$(find "$ARTIFACTS" -type d -name "vice-*-$name.tar.gz")
+          TARBALL=$(ls "$DIR"/vice-*.tar.gz)
+          WORK=$(mktemp -d)
+          tar -xzf "$TARBALL" -C "$WORK"
+          ( cd "$WORK"/vice-*/
+            ./configure --enable-option-checking=fatal ${CONF[$name]} \
+                        --disable-html-docs --disable-pdf-docs --with-resid
+            make -j"$(nproc)" -s --no-print-directory )
+          rm -rf "$WORK"
+        done
+
+        # 3. Compare tarball file listings across UI configs.
+        echo "==== compare dist tarballs ===="
+        cp vice/build/github-actions/compare-dists.sh "$ARTIFACTS/compare-dists.sh"
+        ( cd "$ARTIFACTS" && bash compare-dists.sh )
