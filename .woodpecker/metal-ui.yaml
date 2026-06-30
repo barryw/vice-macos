@@ -4,9 +4,9 @@ when:
     path:
       exclude:
         - website/**
-        - k8s/**
+        - deploy/**
         - .woodpecker/metal-ui.yaml
-        - .woodpecker/website.yaml
+        - .woodpecker/woodpecker-template.yaml
   - event: manual
     evaluate: 'CI_COMMIT_BRANCH == "main"'
 
