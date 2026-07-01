@@ -1,0 +1,21 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: macvice-website
+  namespace: macvice
+  labels:
+    app.kubernetes.io/name: macvice-website
+    app.kubernetes.io/component: website
+spec:
+  # Keep at least one pod serving during voluntary disruptions (node drain,
+  # cluster upgrade). Paired with replicas: 2 this guarantees the site stays
+  # up while a node is cordoned/drained. (ADR 0007 / WAL-108)
+  #
+  # NOT referenced by k8s/kustomization.yaml yet: the namespace-scoped CI SA
+  # cannot create/patch PDBs until the RBAC grant in WAL-107 lands. Apply
+  # out-of-band: kubectl apply -f k8s/pdb.yaml
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: macvice-website
+      app.kubernetes.io/component: website
