@@ -1,0 +1,5 @@
+# VICE keyboard mapping file
+#
+# Native macOS positional mapping, German host layout, UK business keyboard, PET.
+
+!INCLUDE gtk3_buuk_pos_de.vkm

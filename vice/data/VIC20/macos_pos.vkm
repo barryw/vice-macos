@@ -1,0 +1,5 @@
+# VICE keyboard mapping file
+#
+# Native macOS positional mapping, US Layout, VIC-20.
+
+!INCLUDE gtk3_pos.vkm

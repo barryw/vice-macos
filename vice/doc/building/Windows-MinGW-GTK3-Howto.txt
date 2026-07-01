@@ -1,0 +1,239 @@
+VICE on Windows - The Next G(TK)eneration
+=========================================
+
+These are some instructions about getting VICE with the GTK3 GUI
+compiled on Windows under MinGW.
+
+
+NOTE: Although msys2 can build both 32-bit and 64-bit Windows binaries, a
+      64-bit Windows (7 or later) host is required.
+
+
+1. Get MSYS2 (includes mingw):
+ http://www.msys2.org/
+Install as per that webpage.
+
+
+1.1. Update the distribution:
+
+$ pacman -Syu
+
+This will usually update only a few packages (the package manager itself and
+some related packages), and then require you to exit the shell by clicking 'x'.
+You can then start the shell again and run the same command again to update the
+rest of the packages.
+
+
+
+2. Check your MSYS2 username for spaces, for example:
+
+$ whoami
+David Hogan
+
+If your Windows username has spaces like mine (David Hogan), then your
+home dir will also have spaces in it, which causes problems with our
+bindist build script later. To fix this, you'll need to change your MSYS2
+home dir to something without spaces in it.
+
+$ /usr/bin/mkpasswd > /etc/passwd
+
+Use your favourite editor to change your home dir entry in /etc/passwd:
+
+$ # pacman -S vim
+$ # vim /etc/passwd
+
+For example, change "/home/David Hogan" to "/home/dqh". You also can change
+the username at the start of the entry if you like.
+
+Finally, rename your existing homedir folder and exit and relaunch the
+MSYS2 shell:
+
+$ cd /home
+$ # mv 'David Hogan' dqh
+$ exit
+
+<relaunch MSYS2 MinGW>
+
+$ pwd
+/home/dqh
+
+$ whoami
+dqh
+
+
+*******************************************************************************
+* 3. Install the stuff that you need to build VICE:                           *
+*                                                                             *
+* Launch either the MSYS2 MinGW 64-bit shell or the MSYS2 MinGW 32-bit shell  *
+* (use the one that matches the version of MSYS2 that you installed).         *
+*                                                                             *
+* DON'T USE THE NON-MINGW ONE, STUFF WON'T WORK.                              *
+*                                                                             *
+* To check if the correct shell is used, run `echo $MSYSTEM`, it should print *
+* "MINGW64" (or "MINGW32"), if it prints "MSYS" you're using the wrong shell. *
+*******************************************************************************
+
+
+Run the following command lines to install the prerequisites:
+
+$ pacman -S --noconfirm --needed autotools base-devel iconv p7zip subversion unzip zip
+
+If you are using a 64-bit MinGW shell also run this:
+$ pacman -S --noconfirm --needed mingw-w64-x86_64-curl mingw-w64-x86_64-gcc mingw-w64-x86_64-glew mingw-w64-x86_64-gtk3 mingw-w64-x86_64-icoutils mingw-w64-x86_64-ntldd mingw-w64-x86_64-xa65
+
+..otherwise for a 32-bit MinGW shell run:
+$ pacman -S --noconfirm --needed mingw-w64-i686-curl mingw-w64-i686-gcc mingw-w64-i686-glew mingw-w64-i686-gtk3 mingw-w64-i686-icoutils mingw-w64-i686-ntldd mingw-w64-i686-xa65
+
+(Note: Hit enter for the default on all the prompts, then wait for a lot of stuff
+ to download and install. You can install both 32 and 64 bit packages if required.)
+
+If you want to get all the extras right now then add these additional packages:
+For a 64-bit shell:
+$ pacman -S --noconfirm --needed mingw-w64-x86_64-flac mingw-w64-x86_64-giflib mingw-w64-x86_64-lame mingw-w64-x86_64-libvorbis mingw-w64-x86_64-mpg123 mingw-w64-x86_64-portaudio
+or for a 32-bit shell:
+$ pacman -S --noconfirm --needed mingw-w64-i686-flac mingw-w64-i686-giflib mingw-w64-i686-lame mingw-w64-i686-libvorbis mingw-w64-i686-mpg123 mingw-w64-i686-portaudio
+
+See further below for details; some options require adding flags to configure.
+
+
+
+4. Get MiKTeX, in order to build the PDF documentation (optional).
+NOTE: if you skip this step, you will need to ./configure with --disable-pdf-docs
+
+Download and install it, see: https://miktex.org/howto/install-miktex
+
+Set $PATH so configure will find the required binaries:
+
+(My MiKTeX path is C:\miktex, I'll use that as the example -- assumes 64-bit
+ Windows.)
+$ export PATH="$PATH:/c/miktex/miktex/bin/x64"
+
+Remember either to do that last step every time you open the msys64 terminal,
+or edit your "~/.bash_profile".
+
+Also, add this line to your "~/.bash_profile" file:
+
+export OSTYPE="MSYS"
+
+(It works around a current bug that makes it impossible to build the PDF
+document without that line.)
+
+If you change your ".bash_profile" exit from the shell and relaunch that
+shell (it will use your updated profile).
+
+
+
+5. Get VICE's source code.
+To check out the source with Subversion (into "~/vice-trunk/", for example),
+you could type:
+
+$ cd ~
+$ svn checkout http://svn.code.sf.net/p/vice-emu/code/trunk vice-trunk
+
+
+
+6. Now, you can try to build VICE:
+
+$ cd ~/vice-trunk/vice
+$ ./autogen.sh
+$ ./configure -C --enable-gtk3ui
+$ make -s --no-print-dir
+$ make -s --no-print-dir bindist
+
+NOTE: if you want to help us out with bug reports, please instead configure
+with:
+
+$ ./configure -C --enable-gtk3ui --enable-debug-gtk3ui --enable-debug
+
+
+
+7. If it got through all those steps, you should have some executables to play
+with in "GTK3VICE-3.?-win??-*/" (the "win??" part of that name tells you which
+type [32-bit or 64-bit] you built).
+
+
+
+8. You can build the 32-bit version of VICE and/or the 64-bit version.  You
+make the choice by choosing to run a particular one of the MSYS2 MinGW shells
+(its environment variables control VICE's configuration).
+
+If you build one version, then want to build the other version, you must clean
+away the object files first.  Then, you must configure VICE again.
+
+$ make clean
+$ rm config.cache
+$ ./configure -C --enable-gtk3ui
+$ make -s --no-print-dir
+$ make -s --no-print-dir bindist
+
+
+
+9. If you want the distribution in a ZIP or a 7z archive instead of a
+subdirectory then use one of these commands (instead of "make -s --no-print-dir bindist").
+Use this for a ZIP-format bindist:
+
+$ make -s --no-print-dir bindistzip
+
+or this for a 7z bindist:
+
+$ make -s --no-print-dir bindist7zip
+
+
+
+10. Optional features
+
+You can install other packages if you want to add features to VICE.
+
+If you install any of these packages after you have built VICE, rerun
+"./configure" (using the respective options) and "make" to produce updated
+binaries that make use of the new options.
+
+For 64 bit MinGW shell:
+$ pacman -S mingw-w64-x86_64-portaudio  (needed for sampler input, reconfigure with --enable-portaudio)
+$ pacman -S mingw-w64-x86_64-giflib     (reconfigure with --with-gif)
+$ pacman -S mingw-w64-x86_64-flac       (reconfigure with --with-flac)
+$ pacman -S mingw-w64-x86_64-mpg123     (reconfigure with --with-mpg123)
+$ pacman -S mingw-w64-x86_64-lame       (reconfigure with --with-lame)
+$ pacman -S mingw-w64-x86_64-libvorbis  (reconfigure with --with-vorbis)
+
+For 32 bit MinGW shell:
+$ pacman -S mingw-w64-i686-portaudio    (needed for sampler input, reconfigure with --enable-portaudio)
+$ pacman -S mingw-w64-i686-giflib       (reconfigure with --with-gif)
+$ pacman -S mingw-w64-i686-flac         (reconfigure with --with-flac)
+$ pacman -S mingw-w64-i686-mpg123       (reconfigure with --with-mpg123)
+$ pacman -S mingw-w64-i686-lame         (reconfigure with --with-lame)
+$ pacman -S mingw-w64-i686-libvorbis    (reconfigure with --with-vorbis)
+
+
+10.1 Extra Libraries
+
+Some extra libraries must be built from source, since there are no packages
+for msys2:
+
+First lets install some tools that will help us to download stuff :)
+
+$ pacman -S git wget
+
+now we can build/install extra libraries:
+
+
+10.2 libieee1284 (required for parsid)
+
+We need some tools for libieee1284 to build:
+
+# This assumes compiling for x86_64:
+$ pacman -S libtool xmlto mingw-w64-x86_64-docbook-{xml,xsl}
+$ export XML_CATALOG_FILES="/mingw64/etc/xml/catalog"
+
+$ mkdir ~/work && cd ~/work
+$ git clone https://github.com/twaugh/libieee1284 .
+$ ./bootstrap
+$ ./configure --without-python
+$ make CFLAGS="-Wno-incompatible-pointer-types" -s && make -s install
+$ cd .. && rm -rf work
+
+reconfigure with --enable-parsid --enable-libieee1284
+
+
+
+Enjoy!

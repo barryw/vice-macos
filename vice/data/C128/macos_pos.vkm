@@ -1,0 +1,5 @@
+# VICE keyboard mapping file
+#
+# Native macOS positional fallback mapping, C128.
+
+!INCLUDE gtk3_pos.vkm

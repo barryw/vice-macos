@@ -1,0 +1,5 @@
+# VICE keyboard mapping file
+#
+# Native macOS symbolic mapping, US graphics keyboard, PET.
+
+!INCLUDE gtk3_grus_sym.vkm

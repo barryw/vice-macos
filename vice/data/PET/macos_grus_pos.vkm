@@ -1,0 +1,5 @@
+# VICE keyboard mapping file
+#
+# Native macOS positional mapping, US graphics keyboard, PET.
+
+!INCLUDE gtk3_grus_pos.vkm
