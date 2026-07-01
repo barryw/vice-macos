@@ -92,3 +92,10 @@ pull secret are bootstrap tasks, not part of the app deploy.
      The template deploy is push-gated on website/** + deploy/**; restarts
      have no diff context so the when.path filter yields no workflows. This
      commit is the trigger push that converges the site onto build-N images. -->
+
+<!-- WAL-163: macvice de-ArgoCD'd — this overlay is now the SINGLE owner of the
+     macvice namespace (infra kubernetes/macvice/ removed, ArgoCD Application
+     deleted with preserveResourcesOnDeletion so the workload was preserved,
+     WAL-161 Option C). preStop drain + grace35 added to deployment.yaml so the
+     CI-owned deploy keeps ADR-0007 item 8. This push exercises the deploy path
+     to confirm build-N now sticks (ArgoCD no longer reverts it). -->
