@@ -34,11 +34,18 @@ steps:
   - name: wait-for-release
     image: node:22-bookworm
     environment:
-      GH_TOKEN:
-        from_secret: github_token
+      GH_APP_ID:
+        from_secret: gh_app_id
+      GH_APP_INSTALLATION_ID:
+        from_secret: gh_app_installation_id
+      GH_APP_PRIVATE_KEY:
+        from_secret: gh_app_private_key
       VICE_MAC_WEBSITE_WAIT_FOR_RELEASE: "1"
     commands:
       - bash -n website/tools/wait-for-current-release.sh
+      # WAL-125: mint a ~1h App token (contents=read) to read the latest release
+      # in place of the shared admin PAT. node:22-bookworm ships bash+openssl+curl.
+      - export GH_TOKEN="$(MINT_PERMS=contents=read,metadata=read bash ci/mint-token.sh)"
       - bash website/tools/wait-for-current-release.sh
     when:
       - event: push
@@ -58,20 +65,41 @@ steps:
       kubernetes:
         serviceAccountName: woodpecker-agent
 
+  # WAL-122/125: mint a ~1h GitHub App installation token (ghcr-push profile,
+  # packages=write) scoped to this repo, replacing the shared admin PAT for the
+  # kaniko GHCR push below. Written to the shared workspace so the kaniko `debug`
+  # (busybox) step — no bash/openssl/curl to mint inline — can read it.
+  - name: mint-ghcr-token
+    image: alpine:3.21
+    depends_on:
+      - validate-static
+    environment:
+      GH_APP_ID:
+        from_secret: gh_app_id
+      GH_APP_INSTALLATION_ID:
+        from_secret: gh_app_installation_id
+      GH_APP_PRIVATE_KEY:
+        from_secret: gh_app_private_key
+      MINT_PERMS: packages=write,metadata=read
+    commands:
+      - apk add --no-cache bash openssl curl > /dev/null 2>&1
+      - bash ci/mint-token.sh > "$CI_WORKSPACE/.ghcr-token"
+      - chmod 600 "$CI_WORKSPACE/.ghcr-token"
+
   - name: build-and-push
     image: gcr.io/kaniko-project/executor:debug
     depends_on:
       - validate-static
       - validate-k8s
       - wait-for-release
+      - mint-ghcr-token
     environment:
-      GHCR_TOKEN:
-        from_secret: github_token
       GHCR_USERNAME: barryw
       WEBSITE_IMAGE: ghcr.io/barryw/macvice-website
     commands:
       - |
         IMAGE_TAG="$(printf '%.12s' "$CI_COMMIT_SHA")"
+        GHCR_TOKEN="$(cat "$CI_WORKSPACE/.ghcr-token")"
         mkdir -p /kaniko/.docker
         echo "{\"auths\":{\"ghcr.io\":{\"username\":\"$GHCR_USERNAME\",\"password\":\"$GHCR_TOKEN\"}}}" > /kaniko/.docker/config.json
         /kaniko/executor \
