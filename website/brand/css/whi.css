@@ -1,0 +1,458 @@
+/*
+ * Walker Heavy Industries — vendored design-system slice for the shared
+ * "Download latest" control (WAL-48 / WAL-39, Build & Release Standard §6).
+ *
+ * This is a SCOPED slice, NOT the full house bundle. macvice.com keeps its own
+ * bespoke stylesheet (styles.css), so we deliberately OMIT brand/css/base.css —
+ * that layer globally restyles body / headings / links and would clobber the
+ * site design. What remains is class-/:root-scoped and safe to load alongside
+ * styles.css: the design tokens + the .whi-btn / .whi-download / .whi-icon
+ * component rules the shared control needs.
+ *
+ * Source of truth: whi-brand web/brand/tokens/tokens.css + web/brand/css/
+ * components.css. Regenerate from whi-brand when the house components change;
+ * do not hand-edit the token/component bodies below.
+ */
+/*
+ * Walker Heavy Industries — house design tokens (CSS custom properties).
+ * Mirror of tokens/tokens.json (the single source of truth). v1.1.0.
+ * Spec: WAL-16 brand-guidelines rev 4 §4 + WHI Design System v1.0 (WAL-23).
+ *
+ * Consume from any product site:
+ *   <link rel="stylesheet" href="…/web/brand/tokens/tokens.css">
+ * then reference var(--whi-*) anywhere. web/check.sh verifies parity with tokens.json.
+ *
+ * A11y (Design System v1): see the rules on --whi-line-amiga, --whi-text-faint and the
+ * (off-white, NOT line-colored) focus ring below.
+ */
+:root {
+  /* --- Base / surfaces (dark) --- */
+  --whi-bg:        #0d1117;
+  --whi-bg-alt:    #111311;
+  --whi-surface:   #161b22;
+  --whi-surface-2: #1c222b;
+  --whi-border:    #2a2f37;
+
+  /* --- Text (warm off-white) --- */
+  --whi-text:         #f3f0e6;
+  --whi-text-muted:   #b9b4a6;
+  --whi-text-faint:   #7e7a70; /* 4.4:1 — AA-large ONLY (captions/non-essential) */
+  --whi-text-inverse: #0d1117;
+
+  /* --- Per-line accents (wayfinding; one per platform line) --- */
+  --whi-line-commodore: #0a84ff;
+  --whi-line-amiga:     #e63030; /* 4.35:1 — accents/large-text ONLY, never normal-text color */
+  --whi-line-nes:       #f5b700; /* PROPOSED — §4 NES TBD; ratification is Quill/CEO (WAL-23 §1.4/§9) */
+  --whi-line-nova:      #53e0d8;
+  --whi-accent-amiga-alt: #ff8c00; /* Miggy Draw orange, within-Amiga product accent */
+
+  /* The house itself stays neutral — lines carry the color. A surface sets
+     --whi-line to its line accent; components read var(--whi-line). */
+  --whi-line: var(--whi-text);
+
+  /* --- Semantic colors (AA-safe as text on #0d1117; status red is NOT Amiga red) --- */
+  --whi-success:    #3fb950;
+  --whi-success-bg: rgba(63,185,80,0.15);
+  --whi-warning:    #d29922;
+  --whi-warning-bg: rgba(210,153,34,0.15);
+  --whi-danger:     #f85149;
+  --whi-danger-bg:  rgba(248,81,73,0.15);
+  --whi-info:       #58a6ff;
+  --whi-info-bg:    rgba(88,166,255,0.15);
+
+  /* --- Typography --- */
+  --whi-font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --whi-font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, monospace;
+
+  --whi-weight-regular:  400;
+  --whi-weight-medium:   500;
+  --whi-weight-semibold: 600;
+  --whi-weight-bold:     700;
+
+  --whi-leading-tight:   1.15; /* display / headings */
+  --whi-leading-snug:    1.3;  /* eyebrows / chips */
+  --whi-leading-normal:  1.5;  /* lead / small / code */
+  --whi-leading-relaxed: 1.6;  /* body copy */
+
+  /* --- Type scale --- */
+  --whi-text-xs:   0.75rem;
+  --whi-text-sm:   0.875rem;
+  --whi-text-base: 1rem;
+  --whi-text-lg:   1.125rem;
+  --whi-text-xl:   1.375rem;
+  --whi-text-2xl:  1.75rem;
+  --whi-text-3xl:  2.25rem;
+  --whi-text-4xl:  3rem;
+
+  /* --- Spacing --- */
+  --whi-space-1:  0.25rem;
+  --whi-space-2:  0.5rem;
+  --whi-space-3:  0.75rem;
+  --whi-space-4:  1rem;
+  --whi-space-6:  1.5rem;
+  --whi-space-8:  2rem;
+  --whi-space-12: 3rem;
+  --whi-space-16: 4rem;
+
+  /* --- Radius --- */
+  --whi-radius-sm:   4px;
+  --whi-radius-md:   8px;
+  --whi-radius-lg:   14px;
+  --whi-radius-pill: 9999px;
+
+  /* --- Elevation (dark-UI shadow ramp; pair with surface step) --- */
+  --whi-elev-0: none;
+  --whi-elev-1: 0 1px 2px rgba(0,0,0,0.4);
+  --whi-elev-2: 0 1px 2px rgba(0,0,0,0.4), 0 8px 24px rgba(0,0,0,0.25);
+  --whi-elev-3: 0 4px 8px rgba(0,0,0,0.4), 0 16px 40px rgba(0,0,0,0.35);
+  --whi-elev-4: 0 8px 16px rgba(0,0,0,0.45), 0 24px 64px rgba(0,0,0,0.5);
+  --whi-shadow-card: var(--whi-elev-2); /* back-compat alias */
+
+  /* --- Motion (reduced-motion override enforced in base.css) --- */
+  --whi-dur-fast: 120ms;
+  --whi-dur-base: 200ms;
+  --whi-dur-slow: 320ms;
+  --whi-ease-standard:   cubic-bezier(0.2, 0, 0, 1);
+  --whi-ease-emphasized: cubic-bezier(0.3, 0, 0, 1);
+  --whi-ease-exit:       cubic-bezier(0.4, 0, 1, 1);
+
+  /* --- Focus ring (off-white, line-agnostic — WAL-23 §1.6) --- */
+  --whi-focus-ring:   var(--whi-text);
+  --whi-focus-offset: 2px;
+
+  /* --- Z-index scale --- */
+  --whi-z-base:    0;
+  --whi-z-sticky:  100;
+  --whi-z-popover: 200;
+  --whi-z-modal:   300;
+  --whi-z-toast:   400;
+
+  /* --- Layout --- */
+  --whi-max-width: 1080px;
+}
+
+/* Line scoping helpers: set the active accent for a subtree. */
+.whi-line-commodore { --whi-line: var(--whi-line-commodore); }
+.whi-line-amiga     { --whi-line: var(--whi-line-amiga); }
+.whi-line-nes       { --whi-line: var(--whi-line-nes); }
+.whi-line-nova      { --whi-line: var(--whi-line-nova); }
+
+/*
+ * Walker Heavy Industries — shared web components.
+ * Consumable by any product site (§6). Requires tokens.css + base.css.
+ * Spec: WAL-16 brand-guidelines rev 4 §4/§6/§8 + WHI Design System v1.0 (WAL-23 §4).
+ *
+ * Shipped components (states completed per WAL-23 §4.1–4.6):
+ *   .whi-btn (+--ghost/--line) — house call-to-action
+ *   .whi-endorsement          — "a Walker Heavy Industries project" badge (§4)
+ *   .whi-card                 — product / content card (reads var(--whi-line))
+ *   .whi-line-chip            — line wayfinding pill
+ *   .whi-suite-crosslink      — "part of the suite" cross-link block (§6/§7/§8)
+ *   .whi-pixel-rule           — sprite-grid motif divider (§4)
+ * Next-6 components (WAL-23 §4.7) added here:
+ *   .whi-field/.whi-input     — text input / field
+ *   .whi-tag                  — status badge (semantic tints)
+ *   .whi-alert                — alert / callout (4 tones)
+ *   .whi-codeblock            — code block with copy button
+ * The remaining two §4.7 components — site header/nav and footer — are page
+ * CHROME and ship in marketing.css (.whi-siteheader / .whi-sitefooter, WAL-24);
+ * they are not duplicated here.
+ *
+ * Motion: all transitions use the motion tokens (--whi-dur-*/--whi-ease-*); the
+ * global prefers-reduced-motion guard in base.css neutralizes them when requested.
+ * Focus: every interactive element shows the off-white --whi-focus-ring on
+ * :focus-visible (never suppressed); the base.css :where() rule covers anchors and
+ * native controls, reinforced below for the button variants and the card link.
+ */
+
+/* --- Buttons (house action: neutral off-white, not a line color) --- */
+.whi-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--whi-space-2);
+  font: inherit;
+  font-weight: var(--whi-weight-semibold);
+  padding: var(--whi-space-3) var(--whi-space-6);
+  min-height: 44px; /* §4.1 A11y: ≥44×44 hit target */
+  border-radius: var(--whi-radius-md);
+  border: 1px solid var(--whi-text);
+  background: var(--whi-text);
+  color: var(--whi-text-inverse);
+  cursor: pointer;
+  transition: opacity var(--whi-dur-fast) var(--whi-ease-standard),
+              transform var(--whi-dur-fast) var(--whi-ease-standard),
+              border-color var(--whi-dur-fast) var(--whi-ease-standard);
+}
+.whi-btn:hover { opacity: 0.88; text-decoration: none; }
+.whi-btn:active { transform: translateY(1px); opacity: 0.82; }
+.whi-btn:focus-visible {
+  outline: 2px solid var(--whi-focus-ring);
+  outline-offset: var(--whi-focus-offset);
+}
+.whi-btn--ghost {
+  background: transparent;
+  color: var(--whi-text);
+  border-color: var(--whi-border);
+}
+.whi-btn--line {
+  background: var(--whi-line);
+  border-color: var(--whi-line);
+  color: var(--whi-text-inverse);
+}
+/* Disabled: applies to <button disabled> and [aria-disabled="true"] (links). */
+.whi-btn:disabled,
+.whi-btn[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.whi-btn:disabled:hover,
+.whi-btn[aria-disabled="true"]:hover { opacity: 0.5; transform: none; }
+.whi-btn:disabled:active,
+.whi-btn[aria-disabled="true"]:active { transform: none; opacity: 0.5; }
+/* Loading: caller sets aria-busy="true" and swaps the leading icon for a spinner. */
+.whi-btn[aria-busy="true"] { cursor: progress; }
+
+/* --- Endorsement badge --- */
+.whi-endorsement {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--whi-space-2);
+  font-size: var(--whi-text-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--whi-text-muted);
+}
+.whi-endorsement img, .whi-endorsement svg { height: 1em; width: auto; opacity: 0.9; }
+
+/* --- Cards --- */
+.whi-card {
+  display: block;
+  background: var(--whi-surface);
+  border: 1px solid var(--whi-border);
+  border-top: 3px solid var(--whi-line);
+  border-radius: var(--whi-radius-lg);
+  padding: var(--whi-space-6);
+  box-shadow: var(--whi-elev-2);
+  transition: border-color var(--whi-dur-base) var(--whi-ease-standard),
+              transform var(--whi-dur-base) var(--whi-ease-standard);
+}
+a.whi-card:hover { transform: translateY(-2px); border-color: var(--whi-line); text-decoration: none; }
+/* Card-as-link focus ring follows the card's own radius (base.css uses radius-sm). */
+a.whi-card:focus-visible {
+  outline: 2px solid var(--whi-focus-ring);
+  outline-offset: var(--whi-focus-offset);
+  border-radius: var(--whi-radius-lg);
+}
+.whi-card h3 { margin-bottom: var(--whi-space-2); }
+.whi-card__targets {
+  font-family: var(--whi-font-mono);
+  font-size: var(--whi-text-xs);
+  color: var(--whi-text-faint);
+}
+
+/* --- Line chips (pure wayfinding label; not interactive) --- */
+.whi-line-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--whi-space-2);
+  font-size: var(--whi-text-xs);
+  font-weight: var(--whi-weight-semibold);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--whi-text-muted);
+}
+.whi-line-chip::before {
+  content: "";
+  width: 0.6em; height: 0.6em;
+  border-radius: 2px;
+  background: var(--whi-line); /* safe Amiga-red use: decorative dot, text carries meaning */
+}
+
+/* --- Suite cross-link block (every product surface carries this) --- */
+.whi-suite-crosslink {
+  background: var(--whi-bg-alt);
+  border: 1px solid var(--whi-border);
+  border-radius: var(--whi-radius-lg);
+  padding: var(--whi-space-6);
+}
+.whi-suite-crosslink h4 {
+  margin: 0 0 var(--whi-space-3);
+  font-size: var(--whi-text-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--whi-text-muted);
+}
+.whi-suite-crosslink ul {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-wrap: wrap; gap: var(--whi-space-2) var(--whi-space-6);
+}
+
+/* --- Pixel / sprite-grid motif divider (§4, used sparingly) --- */
+.whi-pixel-rule {
+  height: 6px;
+  border: 0;
+  margin: var(--whi-space-8) 0;
+  background-image: linear-gradient(90deg, var(--whi-border) 2px, transparent 2px);
+  background-size: 6px 6px;
+  background-repeat: repeat-x;
+  background-position: 0 50%;
+  opacity: 0.7;
+}
+
+/* ============================================================
+ * Next-6 components (WAL-23 §4.7)
+ * ============================================================ */
+
+/* --- Text input / field ---------------------------------------------------
+ * Anatomy: <label.whi-label> + control. States: focus = line border + ring;
+ * error = danger border + helper text; disabled = .5 opacity. Label is always
+ * present (no placeholder-as-label). A11y: associate label via for/id. */
+.whi-field { display: flex; flex-direction: column; gap: var(--whi-space-2); }
+.whi-label {
+  font-size: var(--whi-text-sm);
+  font-weight: var(--whi-weight-medium);
+  color: var(--whi-text);
+}
+.whi-input {
+  font: inherit;
+  width: 100%;
+  color: var(--whi-text);
+  background: var(--whi-surface);
+  border: 1px solid var(--whi-border);
+  border-radius: var(--whi-radius-sm);
+  padding: var(--whi-space-2) var(--whi-space-3);
+  transition: border-color var(--whi-dur-fast) var(--whi-ease-standard);
+}
+.whi-input::placeholder { color: var(--whi-text-faint); }
+.whi-input--mono { font-family: var(--whi-font-mono); }
+.whi-input:focus-visible {
+  border-color: var(--whi-line);
+  outline: 2px solid var(--whi-focus-ring);
+  outline-offset: var(--whi-focus-offset);
+}
+.whi-input:disabled { opacity: 0.5; cursor: not-allowed; }
+.whi-field__help { font-size: var(--whi-text-xs); color: var(--whi-text-muted); }
+.whi-field--error .whi-input { border-color: var(--whi-danger); }
+.whi-field--error .whi-field__help { color: var(--whi-danger); }
+
+/* --- Tag / status badge ---------------------------------------------------
+ * Filled semantic tint (distinct from .whi-line-chip wayfinding). Neutral base;
+ * tone modifiers set fg + tinted bg. A11y: color is never the only signal —
+ * pair with text/icon. */
+.whi-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--whi-space-1);
+  font-size: var(--whi-text-xs);
+  font-weight: var(--whi-weight-semibold);
+  letter-spacing: 0.02em;
+  line-height: var(--whi-leading-snug);
+  padding: 0.15em var(--whi-space-2);
+  border-radius: var(--whi-radius-pill);
+  color: var(--whi-text-muted);
+  background: var(--whi-surface-2);
+}
+.whi-tag svg { width: 1em; height: 1em; }
+.whi-tag--success { color: var(--whi-success); background: var(--whi-success-bg); }
+.whi-tag--warning { color: var(--whi-warning); background: var(--whi-warning-bg); }
+.whi-tag--danger  { color: var(--whi-danger);  background: var(--whi-danger-bg); }
+.whi-tag--info    { color: var(--whi-info);    background: var(--whi-info-bg); }
+
+/* --- Alert / callout ------------------------------------------------------
+ * 3px left border + tint bg in the matching semantic color; icon + title + body.
+ * Four tones. A11y: meaningful icon needs role/title; use role="alert" for live
+ * errors. Color is reinforced by icon + heading, never hue alone. */
+.whi-alert {
+  display: flex;
+  gap: var(--whi-space-3);
+  padding: var(--whi-space-4);
+  border: 1px solid var(--whi-border);
+  border-left: 3px solid var(--whi-text-muted);
+  border-radius: var(--whi-radius-md);
+  background: var(--whi-surface);
+}
+.whi-alert__icon { flex: 0 0 auto; width: 20px; height: 20px; margin-top: 0.1em; }
+.whi-alert__body { margin: 0; }
+.whi-alert__title {
+  margin: 0 0 var(--whi-space-1);
+  font-size: var(--whi-text-sm);
+  font-weight: var(--whi-weight-semibold);
+}
+.whi-alert--success { border-left-color: var(--whi-success); background: var(--whi-success-bg); }
+.whi-alert--warning { border-left-color: var(--whi-warning); background: var(--whi-warning-bg); }
+.whi-alert--danger  { border-left-color: var(--whi-danger);  background: var(--whi-danger-bg); }
+.whi-alert--info    { border-left-color: var(--whi-info);    background: var(--whi-info-bg); }
+.whi-alert--success .whi-alert__icon { color: var(--whi-success); }
+.whi-alert--warning .whi-alert__icon { color: var(--whi-warning); }
+.whi-alert--danger  .whi-alert__icon { color: var(--whi-danger); }
+.whi-alert--info    .whi-alert__icon { color: var(--whi-info); }
+
+/* --- Code block -----------------------------------------------------------
+ * Block-level mono on bg-alt with a copy button (uses the `copy` core icon).
+ * Inline <code> is styled in base.css. A11y: copy button needs aria-label. */
+.whi-codeblock {
+  position: relative;
+  background: var(--whi-bg-alt);
+  border: 1px solid var(--whi-border);
+  border-radius: var(--whi-radius-md);
+}
+.whi-codeblock pre {
+  margin: 0;
+  padding: var(--whi-space-4);
+  overflow-x: auto;
+  font-family: var(--whi-font-mono);
+  font-size: var(--whi-text-sm);
+  line-height: var(--whi-leading-normal);
+  color: var(--whi-text);
+}
+.whi-codeblock pre code { background: none; border: 0; padding: 0; }
+.whi-codeblock__copy {
+  position: absolute;
+  top: var(--whi-space-2);
+  right: var(--whi-space-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px; height: 32px;
+  color: var(--whi-text-muted);
+  background: var(--whi-surface);
+  border: 1px solid var(--whi-border);
+  border-radius: var(--whi-radius-sm);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--whi-dur-fast) var(--whi-ease-standard),
+              color var(--whi-dur-fast) var(--whi-ease-standard);
+}
+.whi-codeblock:hover .whi-codeblock__copy,
+.whi-codeblock__copy:focus-visible { opacity: 1; }
+.whi-codeblock__copy:hover { color: var(--whi-text); }
+.whi-codeblock__copy:focus-visible {
+  outline: 2px solid var(--whi-focus-ring);
+  outline-offset: var(--whi-focus-offset);
+}
+.whi-codeblock__copy svg { width: 16px; height: 16px; }
+
+/* --- Download-latest control (§6 / WAL-39) -------------------------------
+ * The button itself is a .whi-btn variant — no new colors. This adds only the
+ * wrapper layout and the small mono meta line that JS fills with the live
+ * version/size/date. Enhanced by brand/js/download-latest.js; degrades to the
+ * static fallback link with no JS. */
+.whi-download {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--whi-space-2);
+}
+.whi-download--center { align-items: center; text-align: center; }
+.whi-download__meta {
+  margin: 0;
+  min-height: 1.1em; /* reserve space so the JS fill-in doesn't shift layout */
+  font-family: var(--whi-font-mono);
+  font-size: var(--whi-text-xs);
+  color: var(--whi-text-muted);
+}
+
+/* .whi-icon — sizing rule (per web/brand/icons/README.md; not in components.css
+ * because the size is a consumer decision). Matches the house 20px inline glyph. */
+.whi-icon { width: 20px; height: 20px; flex: none; vertical-align: middle; }

@@ -14,6 +14,10 @@
     <meta property="og:image" content="assets/mac-vice-icon.png">
     <link rel="icon" href="assets/mac-vice-icon.png">
     <link rel="stylesheet" href="styles.css?v=20260618a">
+    <!-- Scoped WHI brand slice (tokens + components) for the shared download
+         control; deliberately omits the house base reset so it can't restyle
+         this bespoke page. See brand/css/whi.css. -->
+    <link rel="stylesheet" href="brand/css/whi.css">
     <script src="site.js" defer></script>
   </head>
   <body>
@@ -375,16 +379,24 @@
         </div>
 
         <div class="download-panel">
-          <div class="download-meta">
-            <span id="release-version">GitHub latest release</span>
-            <strong id="release-asset">VICE Mac DMG</strong>
-            <span id="release-published">Signed Apple Silicon build</span>
+          <!--
+            WHI shared "Download latest" control (WAL-39 / WAL-48, Build &
+            Release Standard §6) — identical markup on every product site; only
+            the data-* attributes change. brand/js/download-latest.js resolves
+            the current GitHub Release .dmg client-side and fills the meta line;
+            with no JS the static href links the public releases page.
+            whi-line-commodore themes the house button with the Commodore accent.
+          -->
+          <div class="whi-download whi-download--center whi-line-commodore" data-whi-download
+               data-repo="barryw/vice-macos" data-asset="dmg"
+               data-platform="macOS" data-product="VICE Mac">
+            <a class="whi-btn whi-btn--line" data-whi-download-link
+               href="https://github.com/barryw/vice-macos/releases/latest">
+              <svg class="whi-icon" aria-hidden="true"><use href="brand/icons/icons.svg#whi-download"></use></svg>
+              <span data-whi-download-label>Download latest DMG</span>
+            </a>
+            <p class="whi-download__meta" data-whi-download-meta></p>
           </div>
-          <a
-            class="button primary download-button"
-            id="download-link"
-            href="https://github.com/barryw/vice-macos/releases/latest"
-          >Download latest DMG</a>
           <div class="release-links" aria-label="Release links">
             <a id="release-notes-link" href="https://github.com/barryw/vice-macos/releases/latest">Release notes</a>
             <a id="checksums-link" href="https://github.com/barryw/vice-macos/releases/latest">Checksums</a>
@@ -433,5 +445,8 @@
         <a href="https://github.com/barryw/vice-macos">GitHub</a>
       </div>
     </footer>
+
+    <!-- Shared WHI "Download latest" enhancer (load once, end of body). -->
+    <script src="brand/js/download-latest.js" defer></script>
   </body>
 </html>
