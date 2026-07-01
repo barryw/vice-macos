@@ -1,0 +1,158 @@
+The pictures (and json) of the keymaps have been created using the editor at
+http://www.keyboard-layout-editor.com
+
+
+C64, VIC20, DTV
+---------------
+
+C64 layout:
+http://www.keyboard-layout-editor.com/#/gists/122119f260d1c0cd1976a9b794165cc1
+
+C64 symbolic (US):
+
+http://www.keyboard-layout-editor.com/#/gists/021a6c322ea844e85db246c8ff4a265b
+
+C64 symbolic (DE):
+
+http://www.keyboard-layout-editor.com/#/gists/12339f5dad4e6a5b6d31579671760b1e
+
+C64 positional (US):
+
+http://www.keyboard-layout-editor.com/#/gists/42e0528ec071613fda39b0a28c45e860
+
+C64 positional (DE):
+
+http://www.keyboard-layout-editor.com/#/gists/658f280e1c5e1644694dc9b4806c3602
+
+
+C128:
+-----
+
+The C128 keymaps are based on their respective C64 counterpart, plus the
+additional C128 keys.
+
+C128 layout:
+http://www.keyboard-layout-editor.com/#/gists/0aacef17ee0217ef95406b4c5e812dfc
+
+C128 symbolic (US):
+
+http://www.keyboard-layout-editor.com/#/gists/370229c503b1acffcfb779e2a2542ef7
+
+C128 symbolic (DE):
+
+http://www.keyboard-layout-editor.com/#/gists/eb502c25794bf52ed82e5dd29109c36b
+
+C128 positional (US):
+
+http://www.keyboard-layout-editor.com/#/gists/83bf340aec7cda542ed5060bead9dfcb
+
+C128 positional (DE):
+
+http://www.keyboard-layout-editor.com/#/gists/d9e3cc72b27d674e94e50067c5cf367b
+
+
+C16:
+----
+
+C16 Layout:
+http://www.keyboard-layout-editor.com/#/gists/c383b9a8ac78d2c7bc46b7cac05cae5e
+
+C116:
+-----
+
+C116 Layout:
+http://www.keyboard-layout-editor.com/#/gists/dd2fb05387aab85e3c979243cabc5dfb
+
+Plus4:
+------
+
+Plus4 Layout:
+http://www.keyboard-layout-editor.com/#/gists/939ff653d1c4a11a4fd852fa21d413f0
+
+Plus4 symbolic (US):
+
+http://www.keyboard-layout-editor.com/#/gists/d1426ed13ed6f9179f542af831526ce9
+
+Plus4 symbolic (DE):
+
+http://www.keyboard-layout-editor.com/#/gists/f88993d44226e4c2d36abaa3432ec9f6
+
+Plus4 positional (US):
+
+http://www.keyboard-layout-editor.com/#/gists/ba3e5aa1e19745b5ca2eff7bbbc226d2
+
+Plus4 positional (DE):
+
+http://www.keyboard-layout-editor.com/#/gists/32b4ba8590e35a0fb7a14ab20ccfdfae
+
+PET:
+----
+
+PET chiclet layout:
+http://www.keyboard-layout-editor.com/#/gists/93cec823046d9d6a7712c30030c10cfb
+
+PET graphical layout:
+http://www.keyboard-layout-editor.com/#/gists/b19cd42ac09ed310e335eacbbcfcab7b
+
+
+PET symbolic (US):
+
+http://www.keyboard-layout-editor.com/#/gists/d1a6d04d198c0c22d58c093373cbe139
+
+PET symbolic (DE):
+
+http://www.keyboard-layout-editor.com/#/gists/ad20b3fdd6fb2acdcc10385387163d31
+
+PET positional (US):
+
+http://www.keyboard-layout-editor.com/#/gists/e2d595841f67f7a6c7e2b03c3d7fc16f
+
+PET positional (DE):
+
+http://www.keyboard-layout-editor.com/#/gists/d454a5f2e2049cb78e978079697b54d7
+
+
+PET business-uk layout:
+
+http://www.keyboard-layout-editor.com/#/gists/0eabca73814428202f201a78014a46f6
+
+
+PET symbolic (US):
+
+http://www.keyboard-layout-editor.com/#/gists/8ce2df35c879612dd37f3f3812c09e6e
+
+PET symbolic (DE):
+
+http://www.keyboard-layout-editor.com/#/gists/c25719c89a7941958a4c101ddd5e13e3
+
+PET positional (US):
+
+http://www.keyboard-layout-editor.com/#/gists/ec37b6fc4cbda159fba1e80573023878
+
+PET positional (DE):
+
+http://www.keyboard-layout-editor.com/#/gists/0ef82f590c48dacfde441ffae18b0976
+
+
+CBM2:
+-----
+
+CBM2 layout:
+
+http://www.keyboard-layout-editor.com/#/gists/792e442a5c236bf9338b0aa3e36fd34d
+
+CBM2 symbolic (US):
+
+http://www.keyboard-layout-editor.com/#/gists/5bbb932a2c271ba8de83d45e49278f0c
+
+CBM2 symbolic (DE):
+
+http://www.keyboard-layout-editor.com/#/gists/a505d11391d45671984ff7b875311637
+
+CBM2 positional (US):
+
+http://www.keyboard-layout-editor.com/#/gists/97c8478526b116a3f3ba0f86686091b0
+
+CBM2 positional (DE):
+
+http://www.keyboard-layout-editor.com/#/gists/0bb82191926577c24e1a8e6e99c02032

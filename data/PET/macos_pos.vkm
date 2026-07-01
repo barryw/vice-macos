@@ -1,0 +1,5 @@
+# VICE keyboard mapping file
+#
+# Native macOS positional fallback mapping, PET.
+
+!INCLUDE gtk3_pos.vkm
