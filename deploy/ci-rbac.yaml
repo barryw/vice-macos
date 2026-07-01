@@ -1,0 +1,54 @@
+# RBAC for Woodpecker CI to deploy the macvice product site into the
+# `macvice` namespace (in-repo pipeline .woodpecker/website.yaml, which runs
+# as system:serviceaccount:woodpecker:default).
+#
+# CHICKEN-AND-EGG: this file is intentionally NOT part of k8s/kustomization.yaml
+# and is NOT applied by the website pipeline — the pipeline's own service
+# account cannot grant itself permissions. Apply ONCE, out-of-band, by a
+# cluster admin:
+#
+#     kubectl apply -f k8s/ci-rbac.yaml
+#
+# Mirrors the sibling product sites (NovaVM deploy/ci-rbac.yaml, etc.). Without
+# it the deploy step fails Forbidden at the first `kubectl -n macvice ...` call.
+# Includes policy/poddisruptionbudgets so the site PDB (k8s/pdb.yaml) can be
+# applied for zero-downtime rollouts (ADR 0007 / WAL-104 / WAL-107).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: macvice-deployer
+  namespace: macvice
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["pods", "services", "configmaps", "secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["policy"]
+    resources: ["poddisruptionbudgets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: woodpecker-deployer-binding
+  namespace: macvice
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: woodpecker
+roleRef:
+  kind: Role
+  name: macvice-deployer
+  apiGroup: rbac.authorization.k8s.io
+
+# Applied out-of-band by Keel 2026-07-01 (WAL-107): Role macvice-deployer +
+# RoleBinding created via k8s API. Fixes a latent gap — macvice had NO CI RBAC
+# (deploy would Forbidden) — and grants PDB CRUD (SubjectAccessReview=allowed).

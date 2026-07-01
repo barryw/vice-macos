@@ -1,6 +1,6 @@
-# mac VICE Website
+# VICE Mac Website
 
-Static marketing site for mac VICE.
+Static marketing site for VICE Mac.
 
 Open `index.html` directly in a browser, or serve the `website/` directory from
 any static host. There is no build step.
