@@ -31,25 +31,6 @@ steps:
       - bash website/tools/validate-containerfile-pages.sh
       - node --check website/site.js
 
-  - name: wait-for-release
-    image: node:22-bookworm
-    environment:
-      GH_TOKEN:
-        from_secret: github_token
-      VICE_MAC_WEBSITE_WAIT_FOR_RELEASE: "1"
-    commands:
-      - bash -n website/tools/wait-for-current-release.sh
-      - bash website/tools/wait-for-current-release.sh
-    when:
-      - event: push
-        evaluate: 'CI_COMMIT_BRANCH == "main"'
-        path:
-          exclude:
-            - website/**
-            - k8s/**
-            - .woodpecker/metal-ui.yaml
-            - .woodpecker/website.yaml
-
   - name: validate-k8s
     image: bitnami/kubectl:latest
     commands:
@@ -63,7 +44,6 @@ steps:
     depends_on:
       - validate-static
       - validate-k8s
-      - wait-for-release
     environment:
       GHCR_TOKEN:
         from_secret: github_token
