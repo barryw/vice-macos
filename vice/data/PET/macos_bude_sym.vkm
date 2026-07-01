@@ -1,5 +1,0 @@
-# VICE keyboard mapping file
-#
-# Native macOS symbolic mapping, German business keyboard, PET.
-
-!INCLUDE gtk3_bude_sym.vkm

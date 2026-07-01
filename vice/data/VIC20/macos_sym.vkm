@@ -1,5 +1,0 @@
-# VICE keyboard mapping file
-#
-# Native macOS symbolic mapping, US Layout, VIC-20.
-
-!INCLUDE gtk3_sym.vkm

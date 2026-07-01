@@ -1,5 +1,0 @@
-# VICE keyboard mapping file
-#
-# Native macOS positional mapping, German business keyboard, PET.
-
-!INCLUDE gtk3_bude_pos.vkm

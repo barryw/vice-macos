@@ -1,5 +1,0 @@
-# VICE keyboard mapping file
-#
-# Native macOS positional mapping, UK business keyboard, PET.
-
-!INCLUDE gtk3_buuk_pos.vkm
