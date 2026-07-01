@@ -84,3 +84,11 @@ pull secret are bootstrap tasks, not part of the app deploy.
 > `validate-static` / `validate-k8s` / `wait-for-release` steps and watched
 > `k8s/**`) was retired in favor of this template. The k8s manifests moved from
 > `k8s/` to `deploy/` to match the template's trigger path and house layout.
+
+<!-- WAL-155 / WAL-48: macvice.com convergence onto release-static-site.
+     Woodpecker repo (id 45) `cloudflare_zone_id` + `cloudflare_api_token`
+     secrets provisioned (zone 893d6793d3074ae4f01cbe21e3bb5055) — the first
+     template run (pipeline 194) failed only on the then-missing zone secret.
+     The template deploy is push-gated on website/** + deploy/**; restarts
+     have no diff context so the when.path filter yields no workflows. This
+     commit is the trigger push that converges the site onto build-N images. -->
