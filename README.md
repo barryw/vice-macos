@@ -4,6 +4,8 @@
 
 <h1 align="center">VICE Mac</h1>
 
+_**VICE Mac** is a Walker Heavy Industries project._
+
 <p align="center">
   <strong>VICE underneath. Native Mac on top.</strong><br>
   Apple Silicon Commodore emulation with SwiftUI, Metal, signed releases, a real media library, Q-Link Reloaded support, and MacVICEKit for developers.
@@ -291,3 +293,11 @@ explicitly states otherwise.
 VICE Mac exists because the VICE team did the hard emulator work first. This
 project adds the native macOS application layer, packaging, MacVICEKit, website,
 and Mac-specific workflow on top of that foundation.
+
+## Part of the suite
+
+VICE Mac is part of the **Walker Heavy Industries** retro toolchain —
+modern tools for the retro 8- and 16-bit ecosystem.
+
+- **House hub:** https://whi.dev
+- **Siblings:** VICE Mac · VICE MCP · FamiForge · NESBasic · Novus · Miggy Draw · NovaVM
