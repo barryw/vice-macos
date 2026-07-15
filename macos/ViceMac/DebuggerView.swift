@@ -506,8 +506,10 @@ final class DebuggerSession: ObservableObject {
             disassemblyAddressText = DebuggerFormatter.hex16(programCounter)
         }
 
-        loadDisassembly(emulator: emulator)
+        // Checkpoints must load before disassembly: the disassembly rows read
+        // the checkpoint list to mark which addresses have breakpoints.
         loadCheckpoints(emulator: emulator)
+        loadDisassembly(emulator: emulator)
         loadMemory(emulator: emulator)
     }
 

@@ -884,8 +884,3 @@ extension EmulatorSession {
     }
 
 }
-
-
-
-extension Array where Element == String {
-}

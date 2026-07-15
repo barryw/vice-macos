@@ -158,7 +158,7 @@ enum AIAssistantRemoteProvider: String, CaseIterable, Codable, Hashable, Identif
     var defaultBaseURLString: String {
         switch self {
         case .local:
-            return "http://beast:11434/v1"
+            return "http://localhost:11434/v1"
         case .openAI:
             return "https://api.openai.com/v1"
         case .anthropic:

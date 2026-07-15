@@ -315,6 +315,10 @@ final class EmulatorSession: ObservableObject {
                 return
             }
 
+            guard driveConfigurations != oldValue else {
+                return
+            }
+
             EmulatorDefaults.saveDriveConfigurations(driveConfigurations, for: machine)
             applyDriveConfigurationChanges(from: oldValue)
         }

@@ -928,7 +928,8 @@ final class HayesModemService: @unchecked Sendable {
         }
 
         if let host = defaultHostForTelephoneDialTarget(target),
-           let port = NWEndpoint.Port(rawValue: UInt16(configuration.defaultDialPort)) {
+           let portValue = UInt16(exactly: configuration.defaultDialPort),
+           let port = NWEndpoint.Port(rawValue: portValue) {
             return .tcp(host: host, port: port)
         }
 

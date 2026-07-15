@@ -320,7 +320,7 @@ private struct AIAssistantSettingsPane: View {
                             .frame(minWidth: 320)
                     }
 
-                    LabeledContent(aiSettings.remoteProviderRequiresAPIKey ? "API key" : "API key") {
+                    LabeledContent("API key") {
                         SecureField(aiSettings.remoteProviderRequiresAPIKey ? "Required" : "Optional",
                                     text: remoteAPIKeyBinding)
                             .textFieldStyle(.roundedBorder)
@@ -3242,11 +3242,11 @@ private struct DriveSettingsSection: View {
                     .disabled(!drive.isAttached)
 
                 Toggle("Drive sounds", isOn: $drive.soundEnabled)
-                    .disabled(!drive.supportsDriveSounds)
+                    .disabled(!drive.isAttached || !drive.supportsDriveSounds)
 
                 LabeledContent("Sound volume") {
                     SettingsPercentSlider(value: $drive.soundVolume,
-                                          isEnabled: drive.supportsDriveSounds && drive.soundEnabled,
+                                          isEnabled: drive.isAttached && drive.supportsDriveSounds && drive.soundEnabled,
                                           onEditingChanged: handleVolumeEditingChanged)
                 }
             }

@@ -391,6 +391,12 @@ private struct SimpleZIPArchive {
         }
         defer { inflateEnd(&stream) }
 
+        // Guard against a corrupt/malicious central-directory size forcing a
+        // huge up-front allocation before any inflate or CRC validation.
+        guard uncompressedSize <= 512 * 1024 * 1024 else {
+            throw GameBase64MetadataImportError.corruptZIPEntry(filename)
+        }
+
         var outputData = Data(count: uncompressedSize)
         let outputCapacity = outputData.count
         let result = data.withUnsafeBytes { sourceBuffer -> Int32 in

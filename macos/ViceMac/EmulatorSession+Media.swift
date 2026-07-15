@@ -158,14 +158,17 @@ extension EmulatorSession {
     }
 
     func handleCartridgeStatus(_ status: MacVICECartridgeStatus) {
-        cartridgeStatus = CartridgeStatus(isAttached: status.isAttached,
-                                          cartridgeID: status.cartridgeID,
-                                          cartridgeFlags: status.cartridgeFlags,
-                                          romSize: status.romSize,
-                                          chipCount: status.chipCount,
-                                          bankCount: status.bankCount,
-                                          cartridgeName: status.cartridgeName,
-                                          imagePath: status.imagePath)
+        let newStatus = CartridgeStatus(isAttached: status.isAttached,
+                                        cartridgeID: status.cartridgeID,
+                                        cartridgeFlags: status.cartridgeFlags,
+                                        romSize: status.romSize,
+                                        chipCount: status.chipCount,
+                                        bankCount: status.bankCount,
+                                        cartridgeName: status.cartridgeName,
+                                        imagePath: status.imagePath)
+        if cartridgeStatus != newStatus {
+            cartridgeStatus = newStatus
+        }
     }
 
     func resetDrive(_ unit: Int) {
@@ -296,15 +299,14 @@ extension EmulatorSession {
                                           runMode: launchPlan.runMode)
 
         if didAttach {
-            if let keyboardText = launchPlan.keyboardText,
-               !typeText(keyboardText) {
-                statusText = "Unable to type GEOS boot command"
-                return false
-            }
-
             rememberMedia(url)
             let attachedStatus = "\(url.lastPathComponent) \(behavior.statusVerb) on \(driveAddress(unit: unit, driveNumber: driveNumber))"
-            if let statusMessage = launchPlan.statusMessage {
+            if let keyboardText = launchPlan.keyboardText,
+               !typeText(keyboardText) {
+                // The disk is attached; only the optional auto-boot keystrokes
+                // failed to queue. Report success and surface the keystroke issue.
+                statusText = "\(attachedStatus), but the boot command could not be typed"
+            } else if let statusMessage = launchPlan.statusMessage {
                 statusText = "\(statusMessage). \(attachedStatus)"
             } else {
                 statusText = attachedStatus

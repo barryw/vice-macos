@@ -197,9 +197,13 @@ extension EmulatorSession {
         }
 
         for page in renderedPages {
-            context.beginPDFPage(nil)
+            var pageBox = page.box
+            let pageInfo = withUnsafeBytes(of: &pageBox) { bytes in
+                [kCGPDFContextMediaBox as String: Data(bytes) as CFData] as CFDictionary
+            }
+            context.beginPDFPage(pageInfo)
             context.interpolationQuality = .none
-            context.draw(page.image, in: mediaBox)
+            context.draw(page.image, in: pageBox)
             context.endPDFPage()
         }
         context.closePDF()
