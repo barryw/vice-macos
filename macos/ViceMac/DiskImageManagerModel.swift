@@ -861,6 +861,18 @@ final class DiskImageManagerModel: ObservableObject {
                 state.selectedEntryID = nil
             }
         } catch {
+            // A parse failure must not leave the pane describing a *different*
+            // image: state.image has already been switched to the new disk, so
+            // stale directory/sector coordinates here would make Export/Rename/
+            // Delete operate on the wrong image. Clear everything derived.
+            state.entries = []
+            state.fileByteCounts = [:]
+            state.sectors = []
+            state.rebuildAnalysis = nil
+            state.geosStatus = nil
+            state.selectedEntryID = nil
+            state.selectedAddress = nil
+            state.sectorEditorText = ""
             state.errorMessage = error.localizedDescription
         }
     }
