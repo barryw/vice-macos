@@ -4732,3 +4732,57 @@ private enum NetworkTestPort {
         return endpointPort
     }
 }
+
+extension ModelConfigurationTests {
+    // Regression: PSID/RSID v3+ bytes 0x7A and 0x7B are two independent SID
+    // address bytes (address = $D000 | value<<4). The old decoder derived both
+    // the second- and third-SID address from byte 0x7B's nibbles and ignored
+    // byte 0x7A entirely.
+    func testSIDMultiSIDAddressesDecodeFromIndependentBytes() throws {
+        let secondOnly = try loadSID(makePSIDData(version: 3, secondSIDByte: 0x42, thirdSIDByte: 0x00))
+        XCTAssertEqual(secondOnly.secondSIDAddress, 0xd420)
+        XCTAssertNil(secondOnly.thirdSIDAddress)
+        XCTAssertEqual(secondOnly.sidChipCount, 2)
+
+        let thirdOnly = try loadSID(makePSIDData(version: 3, secondSIDByte: 0x00, thirdSIDByte: 0xfe))
+        XCTAssertNil(thirdOnly.secondSIDAddress)
+        XCTAssertEqual(thirdOnly.thirdSIDAddress, 0xdfe0)
+        XCTAssertEqual(thirdOnly.sidChipCount, 2)
+
+        let stereo3 = try loadSID(makePSIDData(version: 4, secondSIDByte: 0x42, thirdSIDByte: 0xe0))
+        XCTAssertEqual(stereo3.secondSIDAddress, 0xd420)
+        XCTAssertEqual(stereo3.thirdSIDAddress, 0xde00)
+        XCTAssertEqual(stereo3.sidChipCount, 3)
+    }
+
+    func testSIDMultiSIDIgnoredBelowVersion3AndForInvalidBytes() throws {
+        let legacy = try loadSID(makePSIDData(version: 2, secondSIDByte: 0x42, thirdSIDByte: 0x42))
+        XCTAssertNil(legacy.secondSIDAddress)
+        XCTAssertNil(legacy.thirdSIDAddress)
+        XCTAssertEqual(legacy.sidChipCount, 1)
+
+        // 0x10 -> $D100, outside the valid $D420–$D7E0 / $DE00–$DFE0 mirrors.
+        let invalid = try loadSID(makePSIDData(version: 3, secondSIDByte: 0x10, thirdSIDByte: 0x00))
+        XCTAssertNil(invalid.secondSIDAddress)
+        XCTAssertEqual(invalid.sidChipCount, 1)
+    }
+
+    private func loadSID(_ data: Data) throws -> SIDTuneFile {
+        let url = temporaryURL(pathExtension: "sid")
+        try data.write(to: url)
+        return try SIDTuneFile.load(from: url)
+    }
+
+    private func makePSIDData(version: Int, secondSIDByte: UInt8, thirdSIDByte: UInt8) -> Data {
+        var data = Data(count: 0x7c)
+        data.replaceSubrange(0..<4, with: Array("PSID".utf8))
+        data[0x04] = UInt8((version >> 8) & 0xff)
+        data[0x05] = UInt8(version & 0xff)
+        data[0x07] = 0x7c        // dataOffset = 124
+        data[0x0f] = 0x01        // songs = 1
+        data[0x11] = 0x01        // startSong = 1
+        data[0x7a] = secondSIDByte
+        data[0x7b] = thirdSIDByte
+        return data
+    }
+}

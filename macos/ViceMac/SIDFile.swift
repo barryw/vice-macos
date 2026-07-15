@@ -104,9 +104,16 @@ struct SIDTuneFile: Equatable, Sendable {
             startPage = data.count > 0x78 ? data[0x78] : 0
             pageCount = data.count > 0x79 ? data[0x79] : 0
 
-            let reserved = data.count >= 0x7c ? data.bigEndianUInt16(at: 0x7a) : 0
-            secondSIDAddress = Self.sidAddress(from: Int((reserved >> 4) & 0x0f))
-            thirdSIDAddress = Self.sidAddress(from: Int(reserved & 0x0f))
+            // PSID/RSID v3+ define bytes 0x7A and 0x7B as two independent SID
+            // address fields (each encodes its address as $D000 | value<<4).
+            // Earlier versions leave them reserved/zero, so only decode for v3+.
+            if version >= 3 {
+                secondSIDAddress = data.count > 0x7a ? Self.sidAddress(fromAddressByte: data[0x7a]) : nil
+                thirdSIDAddress = data.count > 0x7b ? Self.sidAddress(fromAddressByte: data[0x7b]) : nil
+            } else {
+                secondSIDAddress = nil
+                thirdSIDAddress = nil
+            }
             dataSize = max(0, data.count - dataOffset)
             return
         }
@@ -137,12 +144,22 @@ struct SIDTuneFile: Equatable, Sendable {
         throw SIDTuneFileError.unsupportedFormat
     }
 
-    private static func sidAddress(from nibble: Int) -> Int? {
-        guard nibble >= 0x4 && nibble <= 0xf else {
+    /// Decodes a PSID/RSID second- or third-SID address byte. The byte encodes
+    /// the address as `$D000 | (value << 4)`; `0x00` means "not present". Only
+    /// the documented mirrors `$D420…$D7E0` and `$DE00…$DFE0` are accepted.
+    private static func sidAddress(fromAddressByte value: UInt8) -> Int? {
+        guard value != 0 else {
             return nil
         }
 
-        return 0xd000 + (nibble << 8)
+        let address = 0xd000 | (Int(value) << 4)
+        let isValidMirror = (0xd420...0xd7e0).contains(address)
+            || (0xde00...0xdfe0).contains(address)
+        guard isValidMirror else {
+            return nil
+        }
+
+        return address
     }
 }
 
