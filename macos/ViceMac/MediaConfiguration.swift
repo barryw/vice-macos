@@ -843,6 +843,9 @@ enum QLinkReloadedDiskPatcher {
     private static let developmentNGVersion = QLinkReloadedDiskVersion(profileAgnosticSHA256: "development-ng",
                                                                        displayTitle: "Q-Link NG Development",
                                                                        requiresLegacyPatch: false)
+    private static let unknownClientVersion = QLinkReloadedDiskVersion(profileAgnosticSHA256: "unknown-client",
+                                                                       displayTitle: "Unknown Q-Link client disk",
+                                                                       requiresLegacyPatch: false)
     private static let legacyBootProgramNames: Set<String> = ["BOOT64", "BOOT128"]
     private static let developmentNGMarkerNames: Set<String> = ["MODBOOT", "NGBOOT"]
 
@@ -876,6 +879,10 @@ enum QLinkReloadedDiskPatcher {
             return developmentNGVersion
         }
 
+        if isLikelyQLinkClientDisk(data) {
+            return unknownClientVersion
+        }
+
         throw QLinkReloadedServiceError.unknownVersion
     }
 
@@ -906,6 +913,15 @@ enum QLinkReloadedDiskPatcher {
 
         return !directoryNames.isDisjoint(with: legacyBootProgramNames)
             && !directoryNames.isDisjoint(with: developmentNGMarkerNames)
+    }
+
+    static func isLikelyQLinkClientDisk(_ data: Data) -> Bool {
+        guard isSupportedDevelopmentD64ByteCount(data.count),
+              let directoryNames = try? directoryNames(in: data) else {
+            return false
+        }
+
+        return !directoryNames.isDisjoint(with: legacyBootProgramNames)
     }
 
     static func removeRegistrationProfile(at url: URL,
@@ -1966,6 +1982,7 @@ enum QLinkReloadedModemRequirements {
     static let serverPort = 5190
     static let preferredInterface = NetworkModemInterface.swiftLink
     static let preferredBaudRate = 38400
+    static let legacyUserPortMaximumBaudRate = 1200
     static let supportedInterfaces: [NetworkModemInterface] = [.userPort, .swiftLink, .turbo232]
     static let transportMode = NetworkTransportMode.raw
 
@@ -1997,6 +2014,11 @@ enum QLinkReloadedModemRequirements {
 
         if !supportedInterfaces.contains(modem.interface) {
             issues.append("Hardware is \(modem.interface.title), not \(supportedInterfaceTitle)")
+        }
+
+        if modem.interface == .userPort,
+           modem.baudRate > legacyUserPortMaximumBaudRate {
+            issues.append("User Port is set to \(modem.baudRate) baud; Q-Link Reloaded over User Port needs \(legacyUserPortMaximumBaudRate) baud or SwiftLink/Turbo232.")
         }
 
         if modem.transportMode != transportMode {

@@ -916,7 +916,24 @@ final class ModelConfigurationTests: XCTestCase {
         XCTAssertTrue(QLinkReloadedModemRequirements.isCompatible(turbo232, for: .x64sc))
     }
 
-    func testQLinkReloadedModemRequirementsAcceptLegacyUserPortWithoutBaudRestriction() {
+    func testQLinkReloadedModemRequirementsAcceptLegacyUserPortAt1200Baud() {
+        let modem = NetworkModemConfiguration(isEnabled: true,
+                                              interface: .userPort,
+                                              baudRate: 1200,
+                                              transportMode: .raw,
+                                              acceptsIncomingCalls: false,
+                                              incomingPort: 6400,
+                                              autoAnswerRings: 0,
+                                              echoCommands: true,
+                                              verboseResultCodes: true,
+                                              connectResultIncludesBaudRate: false,
+                                              defaultDialPort: 5190,
+                                              defaultDialHost: "q-link.net")
+
+        XCTAssertTrue(QLinkReloadedModemRequirements.isCompatible(modem, for: .x64sc))
+    }
+
+    func testQLinkReloadedModemRequirementsWarnsForLegacyUserPortAbove1200Baud() {
         let modem = NetworkModemConfiguration(isEnabled: true,
                                               interface: .userPort,
                                               baudRate: 2400,
@@ -930,7 +947,36 @@ final class ModelConfigurationTests: XCTestCase {
                                               defaultDialPort: 5190,
                                               defaultDialHost: "q-link.net")
 
-        XCTAssertTrue(QLinkReloadedModemRequirements.isCompatible(modem, for: .x64sc))
+        let issues = QLinkReloadedModemRequirements.incompatibilities(in: modem, for: .x64sc)
+
+        XCTAssertEqual(issues, [
+            "User Port is set to 2400 baud; Q-Link Reloaded over User Port needs 1200 baud or SwiftLink/Turbo232."
+        ])
+        XCTAssertFalse(QLinkReloadedModemRequirements.isCompatible(modem, for: .x64sc))
+    }
+
+    func testQLinkConfigurationValidatorWarnsAboutLegacyUserPortAbove1200BeforeNetworkCheck() async {
+        let checker = StubQLinkServerChecker(result: .success)
+        let validator = QLinkReloadedConfigurationValidator(connectionChecker: checker)
+        let modem = NetworkModemConfiguration(isEnabled: true,
+                                              interface: .userPort,
+                                              baudRate: 2400,
+                                              transportMode: .raw,
+                                              acceptsIncomingCalls: false,
+                                              incomingPort: 6400,
+                                              autoAnswerRings: 0,
+                                              echoCommands: true,
+                                              verboseResultCodes: true,
+                                              connectResultIncludesBaudRate: false,
+                                              defaultDialPort: 5190,
+                                              defaultDialHost: "q-link.net")
+
+        let outcome = await validator.validate(configuration: modem,
+                                               machine: .x64sc,
+                                               storedProfileCount: 0)
+
+        XCTAssertEqual(outcome, .failure("Current modem settings are not compatible with Q-Link Reloaded:\n- User Port is set to 2400 baud; Q-Link Reloaded over User Port needs 1200 baud or SwiftLink/Turbo232."))
+        XCTAssertFalse(checker.didValidate)
     }
 
     func testQLinkReloadedModemPresetPrefersModernAciaInterface() {
@@ -2788,10 +2834,24 @@ final class ModelConfigurationTests: XCTestCase {
         XCTAssertTrue(QLinkReloadedDiskPatcher.isDevelopmentNGDisk(data))
     }
 
-    func testQLinkReloadedDiskPatcherRejectsGenericBootDiskAsUnknownVersion() throws {
+    func testQLinkReloadedDiskPatcherAcceptsUnknownClientDiskWithoutFingerprint() throws {
         let data = try makeQLinkDevelopmentNGD64Data(programNames: ["BOOT64"])
 
         XCTAssertFalse(QLinkReloadedDiskPatcher.isDevelopmentNGDisk(data))
+        XCTAssertTrue(QLinkReloadedDiskPatcher.isLikelyQLinkClientDisk(data))
+
+        let version = try QLinkReloadedDiskPatcher.knownVersion(for: data)
+
+        XCTAssertEqual(version.displayTitle, "Unknown Q-Link client disk")
+        XCTAssertFalse(version.requiresLegacyPatch)
+    }
+
+    func testQLinkReloadedDiskPatcherRejectsNonQLinkDiskAsUnknownVersion() throws {
+        let data = try makeQLinkDevelopmentNGD64Data(programNames: ["NOTQLINK"])
+
+        XCTAssertFalse(QLinkReloadedDiskPatcher.isDevelopmentNGDisk(data))
+        XCTAssertFalse(QLinkReloadedDiskPatcher.isLikelyQLinkClientDisk(data))
+
         XCTAssertThrowsError(try QLinkReloadedDiskPatcher.knownVersion(for: data)) { error in
             XCTAssertEqual(error as? QLinkReloadedServiceError, .unknownVersion)
         }
@@ -2811,9 +2871,47 @@ final class ModelConfigurationTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: url), data)
     }
 
+    func testQLinkReloadedDiskPatcherDoesNotPatchUnknownClientDisk() throws {
+        let url = temporaryURL(pathExtension: "d64")
+        let data = try makeQLinkDevelopmentNGD64Data(programNames: ["BOOT64"])
+        try data.write(to: url)
+        let version = try QLinkReloadedDiskPatcher.knownVersion(for: data)
+
+        let result = try QLinkReloadedDiskPatcher.configureReloadedProfile(at: url,
+                                                                           version: version)
+
+        XCTAssertFalse(result.changedDisk)
+        XCTAssertEqual(result.version, version)
+        XCTAssertEqual(try Data(contentsOf: url), data)
+    }
+
     func testQLinkReloadedDiskPatcherRejectsLegacyProfileWritesForDevelopmentNGDisk() throws {
         let url = temporaryURL(pathExtension: "d64")
         let data = try makeQLinkDevelopmentNGD64Data()
+        try data.write(to: url)
+        let version = try QLinkReloadedDiskPatcher.knownVersion(for: data)
+        let registration = try XCTUnwrap(QLinkReloadedDiskPatcher.registrationProfile(from: makeQLinkD64ProfileFixture()))
+
+        XCTAssertThrowsError(try QLinkReloadedDiskPatcher.addRegistrationProfile(registration,
+                                                                                 at: url,
+                                                                                 version: version)) { error in
+            XCTAssertEqual(error as? QLinkReloadedServiceError, .legacyProfileStorageUnavailable)
+        }
+        XCTAssertThrowsError(try QLinkReloadedDiskPatcher.removeRegistrationProfile(id: registration.id,
+                                                                                    at: url,
+                                                                                    version: version)) { error in
+            XCTAssertEqual(error as? QLinkReloadedServiceError, .legacyProfileStorageUnavailable)
+        }
+        XCTAssertThrowsError(try QLinkReloadedDiskPatcher.removeRegistrationProfile(at: url,
+                                                                                    version: version)) { error in
+            XCTAssertEqual(error as? QLinkReloadedServiceError, .legacyProfileStorageUnavailable)
+        }
+        XCTAssertEqual(try Data(contentsOf: url), data)
+    }
+
+    func testQLinkReloadedDiskPatcherRejectsLegacyProfileWritesForUnknownClientDisk() throws {
+        let url = temporaryURL(pathExtension: "d64")
+        let data = try makeQLinkDevelopmentNGD64Data(programNames: ["BOOT64"])
         try data.write(to: url)
         let version = try QLinkReloadedDiskPatcher.knownVersion(for: data)
         let registration = try XCTUnwrap(QLinkReloadedDiskPatcher.registrationProfile(from: makeQLinkD64ProfileFixture()))

@@ -1375,6 +1375,17 @@ final class QLinkReloadedService: ObservableObject {
                 return
             }
 
+            let version = try QLinkReloadedDiskPatcher.knownVersion(for: url)
+            guard version.requiresLegacyPatch else {
+                configuredDiskRegistrationProfiles = []
+                configuredDiskVersionTitle = version.displayTitle
+                if presentsNotice {
+                    presentNotice(title: "Q-Link Reloaded",
+                                  message: QLinkReloadedServiceError.legacyProfileStorageUnavailable.localizedDescription)
+                }
+                return
+            }
+
             let data = try Data(contentsOf: url)
             let registrations = try QLinkReloadedDiskPatcher.registrationProfiles(from: data)
             guard let registration = registrations.first(where: { $0.id == id }) else {
