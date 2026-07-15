@@ -176,10 +176,12 @@ struct KeyboardSettingsPane: View {
         }
         .sheet(item: $editorState) { state in
             KeyboardMapEntryEditorSheet(state: state) { entry in
-                if emulator.saveKeyboardMapEntry(entry) {
-                    reloadDocument()
-                    selectedEntryID = entry.id
+                guard emulator.saveKeyboardMapEntry(entry) else {
+                    return false
                 }
+                reloadDocument()
+                selectedEntryID = entry.id
+                return true
             }
         }
         .confirmationDialog("Remove keyboard mapping?",
@@ -970,14 +972,15 @@ private struct KeyboardMapEntryEditorSheet: View {
     @State private var entry: VICEKeymapEntry
     @State private var flags: Int
     @State private var showsVICECompatibility = false
+    @State private var saveErrorMessage: String?
 
     let document: VICEKeymapDocument
     let machine: EmulatedMachine
     let isNew: Bool
-    let onSave: (VICEKeymapEntry) -> Void
+    let onSave: (VICEKeymapEntry) -> Bool
 
     init(state: KeyboardMapEntryEditorState,
-         onSave: @escaping (VICEKeymapEntry) -> Void) {
+         onSave: @escaping (VICEKeymapEntry) -> Bool) {
         document = state.document
         machine = state.machine
         isNew = state.isNew
@@ -1069,11 +1072,22 @@ private struct KeyboardMapEntryEditorSheet: View {
 
             Button("Save") {
                 entry.flags = flags
-                onSave(entry)
-                dismiss()
+                if onSave(entry) {
+                    dismiss()
+                } else {
+                    saveErrorMessage = "This key mapping couldn't be saved."
+                }
             }
             .keyboardShortcut(.defaultAction)
             .disabled(!canSave)
+        }
+        .alert("Couldn't save mapping",
+               isPresented: Binding(get: { saveErrorMessage != nil },
+                                    set: { if !$0 { saveErrorMessage = nil } }),
+               presenting: saveErrorMessage) { _ in
+            Button("OK", role: .cancel) {}
+        } message: { message in
+            Text(message)
         }
     }
 
@@ -1397,12 +1411,17 @@ private struct KeySymbolCaptureMonitor: NSViewRepresentable {
                 return
             }
 
-            monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { [weak self] event in
+            monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak self] event in
                 guard let self else {
                     return event
                 }
 
-                guard let symbol = ViceMacKeyMapper.keySymbolName(for: event) else {
+                // .flagsChanged lets a bare modifier press (Shift/Control/Caps)
+                // be captured; .keyDown never fires for a modifier on its own.
+                let capturedSymbol = event.type == .flagsChanged
+                    ? ViceMacKeyMapper.pressedModifierKeySymbol(for: event)
+                    : ViceMacKeyMapper.keySymbolName(for: event)
+                guard let symbol = capturedSymbol else {
                     return event
                 }
 

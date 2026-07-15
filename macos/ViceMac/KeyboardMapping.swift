@@ -1303,6 +1303,31 @@ enum ViceMacKeyMapper {
         }
     }
 
+    /// For a `.flagsChanged` event, returns the VICE key symbol of the modifier
+    /// that was just *pressed* (its flag is now active). Returns nil on release
+    /// or for keys that aren't mappable modifiers, so a capture fires only once
+    /// on the down transition.
+    static func pressedModifierKeySymbol(for event: NSEvent) -> String? {
+        guard let modifierKey = modifierKey(for: event) else {
+            return nil
+        }
+
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        let isPressed: Bool
+        switch event.keyCode {
+        case MacKeyCode.leftShift, MacKeyCode.rightShift:
+            isPressed = flags.contains(.shift)
+        case MacKeyCode.leftControl, MacKeyCode.rightControl:
+            isPressed = flags.contains(.control)
+        case MacKeyCode.capsLock:
+            isPressed = flags.contains(.capsLock)
+        default:
+            isPressed = false
+        }
+
+        return isPressed ? modifierKey.symbol : nil
+    }
+
     private static func specialSymbol(for keyCode: UInt16) -> Int64? {
         switch keyCode {
         case MacKeyCode.keypad0:
