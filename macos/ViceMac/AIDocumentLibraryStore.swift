@@ -1,5 +1,4 @@
 import Combine
-import CryptoKit
 import Foundation
 import PDFKit
 import SQLite3
@@ -374,7 +373,7 @@ final class AIDocumentLibraryStore: ObservableObject {
             }
         }
 
-        let sha256 = try Self.sha256Hex(for: sourceURL)
+        let sha256 = try sourceURL.sha256HexString()
         if let existing = try document(matchingSHA256: sha256, machineID: machineID) {
             return existing
         }
@@ -905,12 +904,6 @@ final class AIDocumentLibraryStore: ObservableObject {
         return sanitized.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? "document.pdf"
             : sanitized
-    }
-
-    private static func sha256Hex(for url: URL) throws -> String {
-        let data = try Data(contentsOf: url)
-        let digest = SHA256.hash(data: data)
-        return digest.map { String(format: "%02x", $0) }.joined()
     }
 
     private static let minimumSearchableCharacterCount = 100

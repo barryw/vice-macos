@@ -2,6 +2,27 @@ import CryptoKit
 import Foundation
 import SQLite3
 
+// MARK: - SHA-256 Hashing
+//
+// Shared by MediaLibraryStore, AIDocumentLibraryStore, and MediaConfiguration
+// (QLinkReloadedDiskPatcher's disk fingerprinting).
+
+extension Data {
+    /// Lowercase hex-encoded SHA-256 digest of this data.
+    var sha256HexString: String {
+        SHA256.hash(data: self)
+            .map { String(format: "%02x", $0) }
+            .joined()
+    }
+}
+
+extension URL {
+    /// Lowercase hex-encoded SHA-256 digest of the file at this URL.
+    func sha256HexString() throws -> String {
+        try Data(contentsOf: self).sha256HexString
+    }
+}
+
 enum MediaLibraryMediaKind: String, CaseIterable, Equatable, Identifiable {
     case disk
     case program
@@ -404,7 +425,7 @@ final class MediaLibraryStore {
             bind(kind.rawValue, to: statement, at: 2)
             bind(relativePath, to: statement, at: 3)
             bind(sourceURL?.absoluteString, to: statement, at: 4)
-            bind(Self.sha256Hex(for: data), to: statement, at: 5)
+            bind(data.sha256HexString, to: statement, at: 5)
             sqlite3_bind_int64(statement, 6, Int64(data.count))
             bind(width, to: statement, at: 7)
             bind(height, to: statement, at: 8)
@@ -447,7 +468,7 @@ final class MediaLibraryStore {
         }
 
         let now = Date()
-        let sha256 = try Self.sha256Hex(for: fileURL)
+        let sha256 = try fileURL.sha256HexString()
         let byteCount = try Self.byteCount(for: fileURL)
         let entries = directoryEntries(itemID: item.id,
                                        fileID: item.primaryFile.id,
@@ -556,7 +577,7 @@ final class MediaLibraryStore {
             throw MediaLibraryImportError.unsupportedMedia(sourceURL.lastPathComponent)
         }
 
-        let sha256 = try Self.sha256Hex(for: sourceURL)
+        let sha256 = try sourceURL.sha256HexString()
         if let existing = try item(matchingSHA256: sha256) {
             try restoreManagedFileIfNeeded(for: existing,
                                            from: sourceURL)
@@ -1000,16 +1021,6 @@ final class MediaLibraryStore {
     private static func byteCount(for url: URL) throws -> Int64 {
         let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
         return (attributes[.size] as? NSNumber)?.int64Value ?? 0
-    }
-
-    private static func sha256Hex(for url: URL) throws -> String {
-        let data = try Data(contentsOf: url)
-        return sha256Hex(for: data)
-    }
-
-    private static func sha256Hex(for data: Data) -> String {
-        let digest = SHA256.hash(data: data)
-        return digest.map { String(format: "%02x", $0) }.joined()
     }
 
     private func bind(_ value: String?, to statement: OpaquePointer?, at index: Int32) {

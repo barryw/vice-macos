@@ -1,4 +1,3 @@
-import CryptoKit
 import Foundation
 import MacVICEKit
 import Network
@@ -474,6 +473,71 @@ struct QLinkReloadedDiskVersion: Equatable {
     var requiresLegacyPatch = true
 }
 
+// MARK: - Q-Link PETSCII / Screen-Code Decoding
+//
+// Shared by QLinkReloadedRegistrationProfile (in-memory profile bytes) and
+// QLinkReloadedDiskPatcher (the legacy on-disk profile sector). Both decode
+// the same profile layout: the access code lives at bytes 9..<13 terminated
+// by 0 or 0x80, and a user record's screen name lives at bytes 5..<15 of the
+// 15-byte record. (QLinkReloadedDiskPatcher's named constants
+// accessCodeProfileRange and userRecordNameRange were confirmed equal to
+// these literals before consolidation.)
+enum QLinkScreenCodec {
+    static func screenCodeCharacter(for byte: UInt8) -> Character? {
+        let screenCode = byte & 0x3f
+        switch screenCode {
+        case 1...26:
+            return Character(UnicodeScalar(UInt8(64 + screenCode)))
+        case 48...57:
+            return Character(UnicodeScalar(screenCode))
+        case 32:
+            return " "
+        default:
+            return nil
+        }
+    }
+
+    static func accessCode(in profile: [UInt8]) -> String? {
+        let range = 9..<13
+        guard profile.count >= range.upperBound else {
+            return nil
+        }
+
+        var bytes: [UInt8] = []
+        for byte in profile[range] {
+            if byte == 0 || byte == 0x80 {
+                break
+            }
+
+            if (32...126).contains(byte) {
+                bytes.append(byte)
+            }
+        }
+
+        guard let rawAccessCode = String(bytes: bytes, encoding: .ascii) else {
+            return nil
+        }
+
+        let accessCode = rawAccessCode.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard accessCode.count > 1 else {
+            return nil
+        }
+        return accessCode
+    }
+
+    static func screenName(inUserRecord userRecord: [UInt8]) -> String? {
+        let range = 5..<15
+        guard userRecord.count >= range.upperBound else {
+            return nil
+        }
+
+        let characters = userRecord[range].compactMap(screenCodeCharacter(for:))
+        let screenName = String(characters)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return screenName.isEmpty ? nil : screenName
+    }
+}
+
 struct QLinkReloadedRegistrationProfile: Codable, Equatable, Identifiable {
     var accessNumber: String
     var handle: String?
@@ -501,7 +565,7 @@ struct QLinkReloadedRegistrationProfile: Codable, Equatable, Identifiable {
     }
 
     var accessCode: String {
-        Self.accessCode(in: decryptedProfile) ?? accessNumber
+        QLinkScreenCodec.accessCode(in: decryptedProfile) ?? accessNumber
     }
 
     var accountID: String? {
@@ -534,9 +598,9 @@ struct QLinkReloadedRegistrationProfile: Codable, Equatable, Identifiable {
     }
 
     init(accessNumber: String, handle: String? = nil, decryptedProfile: [UInt8], userRecord: [UInt8]? = nil) {
-        self.accessNumber = Self.accessCode(in: decryptedProfile) ?? accessNumber
+        self.accessNumber = QLinkScreenCodec.accessCode(in: decryptedProfile) ?? accessNumber
         self.handle = handle
-            ?? userRecord.flatMap(Self.screenName(inUserRecord:))
+            ?? userRecord.flatMap(QLinkScreenCodec.screenName(inUserRecord:))
             ?? Self.screenName(in: decryptedProfile)
         self.decryptedProfileData = Data(decryptedProfile)
         self.userRecordData = userRecord.map { Data($0) }
@@ -577,9 +641,9 @@ struct QLinkReloadedRegistrationProfile: Codable, Equatable, Identifiable {
             ?? Self.firstUserRecord(in: decodedProfile).map { Data($0) }
         let decodedUserRecord = decodedUserRecordData.map { Array($0) }
 
-        accessNumber = Self.accessCode(in: decodedProfile) ?? decodedAccessNumber
+        accessNumber = QLinkScreenCodec.accessCode(in: decodedProfile) ?? decodedAccessNumber
         handle = try container.decodeIfPresent(String.self, forKey: .handle)
-            ?? decodedUserRecord.flatMap(Self.screenName(inUserRecord:))
+            ?? decodedUserRecord.flatMap(QLinkScreenCodec.screenName(inUserRecord:))
             ?? Self.screenName(in: decodedProfile)
         decryptedProfileData = decodedProfileData
         userRecordData = decodedUserRecordData
@@ -594,40 +658,12 @@ struct QLinkReloadedRegistrationProfile: Codable, Equatable, Identifiable {
         try container.encodeIfPresent(userRecordData, forKey: .userRecordData)
     }
 
-    private static func accessCode(in profile: [UInt8]) -> String? {
-        let range = 9..<13
-        guard profile.count >= range.upperBound else {
-            return nil
-        }
-
-        var bytes: [UInt8] = []
-        for byte in profile[range] {
-            if byte == 0 || byte == 0x80 {
-                break
-            }
-
-            if (32...126).contains(byte) {
-                bytes.append(byte)
-            }
-        }
-
-        guard let rawAccessCode = String(bytes: bytes, encoding: .ascii) else {
-            return nil
-        }
-
-        let accessCode = rawAccessCode.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard accessCode.count > 1 else {
-            return nil
-        }
-        return accessCode
-    }
-
     private static func screenName(in profile: [UInt8]) -> String? {
         guard let userRecord = firstUserRecord(in: profile) else {
             return nil
         }
 
-        return screenName(inUserRecord: userRecord)
+        return QLinkScreenCodec.screenName(inUserRecord: userRecord)
     }
 
     private static func firstUserRecord(in profile: [UInt8]) -> [UInt8]? {
@@ -638,18 +674,6 @@ struct QLinkReloadedRegistrationProfile: Codable, Equatable, Identifiable {
         }
 
         return Array(profile[range])
-    }
-
-    private static func screenName(inUserRecord userRecord: [UInt8]) -> String? {
-        let range = 5..<15
-        guard userRecord.count >= range.upperBound else {
-            return nil
-        }
-
-        let characters = userRecord[range].compactMap(screenCodeCharacter(for:))
-        let screenName = String(characters)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return screenName.isEmpty ? nil : screenName
     }
 
     private static func accountID(inUserRecord userRecord: [UInt8]) -> String? {
@@ -670,20 +694,6 @@ struct QLinkReloadedRegistrationProfile: Codable, Equatable, Identifiable {
         }
 
         return String(bytes: digits, encoding: .ascii)
-    }
-
-    private static func screenCodeCharacter(for byte: UInt8) -> Character? {
-        let screenCode = byte & 0x3f
-        switch screenCode {
-        case 1...26:
-            return Character(UnicodeScalar(UInt8(64 + screenCode)))
-        case 48...57:
-            return Character(UnicodeScalar(screenCode))
-        case 32:
-            return " "
-        default:
-            return nil
-        }
     }
 }
 
@@ -822,13 +832,11 @@ enum QLinkReloadedDiskPatcher {
     private static let automaticDialProfileValue: UInt8 = 1
     private static let qLinkReloadedPhoneDigits: [UInt8] = [5, 5, 5, 1, 2, 1, 2]
     private static let encodedPhoneTerminator: UInt8 = 0x80
-    private static let accessCodeProfileRange = 9..<13
     private static let registrationProfileStorageRange = 9..<30
     private static let userRecordBlockRange = 50..<201
     private static let userRecordCountOffset = 50
     private static let userRecordStorageRange = 51..<201
     private static let userRecordLength = 15
-    private static let userRecordNameRange = 5..<15
     private static let factoryBlankAccessNumberProfile = [0x31, 0x20, 0x20, 0x20]
         + Array(repeating: UInt8(0), count: 17)
     private static let factoryBlankUserRecord = [0x58, 0x89, 0x34, 0x95, 0x67]
@@ -1059,7 +1067,7 @@ enum QLinkReloadedDiskPatcher {
 
     static func registrationProfiles(from data: Data) throws -> [QLinkReloadedRegistrationProfile] {
         let profile = try decryptedProfileSector(from: data)
-        guard let accessCode = registrationAccessCode(in: profile) else {
+        guard let accessCode = QLinkScreenCodec.accessCode(in: profile) else {
             return []
         }
 
@@ -1071,7 +1079,7 @@ enum QLinkReloadedDiskPatcher {
         var fingerprintData = data
         let profileRange = try sectorRange(track: profileSectorTrack, sector: profileSector)
         fingerprintData.replaceSubrange(profileRange, with: Data(repeating: 0, count: profileRange.count))
-        return sha256Hex(for: fingerprintData)
+        return fingerprintData.sha256HexString
     }
 
     private static func directoryNames(in data: Data) throws -> Set<String> {
@@ -1134,33 +1142,6 @@ enum QLinkReloadedDiskPatcher {
         }
 
         return false
-    }
-
-    private static func registrationAccessCode(in profile: [UInt8]) -> String? {
-        guard profile.count >= accessCodeProfileRange.upperBound else {
-            return nil
-        }
-
-        var bytes: [UInt8] = []
-        for byte in profile[accessCodeProfileRange] {
-            if byte == 0 || byte == encodedPhoneTerminator {
-                break
-            }
-
-            if (32...126).contains(byte) {
-                bytes.append(byte)
-            }
-        }
-
-        guard let rawAccessCode = String(bytes: bytes, encoding: .ascii) else {
-            return nil
-        }
-
-        let accessCode = rawAccessCode.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard accessCode.count > 1 else {
-            return nil
-        }
-        return accessCode
     }
 
     private static func restoreRegistrationFields(from storedProfile: [UInt8],
@@ -1243,7 +1224,7 @@ enum QLinkReloadedDiskPatcher {
     private static func removeUserRecord(id: String,
                                          from profile: inout [UInt8]) {
         let normalizedID = QLinkReloadedRegistrationProfile.key(forID: id)
-        let accessCode = registrationAccessCode(in: profile) ?? ""
+        let accessCode = QLinkScreenCodec.accessCode(in: profile) ?? ""
         var records = userRecords(in: profile)
         records.removeAll { key(forUserRecord: $0, accessCode: accessCode) == normalizedID }
 
@@ -1281,36 +1262,11 @@ enum QLinkReloadedDiskPatcher {
     private static func key(forUserRecord record: [UInt8],
                             accessCode: String) -> String {
         QLinkReloadedRegistrationProfile.key(accessNumber: accessCode,
-                                             handle: screenName(inUserRecord: record))
-    }
-
-    private static func screenName(inUserRecord record: [UInt8]) -> String? {
-        guard record.count >= userRecordNameRange.upperBound else {
-            return nil
-        }
-
-        let characters = record[userRecordNameRange].compactMap(screenCodeCharacter(for:))
-        let screenName = String(characters)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return screenName.isEmpty ? nil : screenName
-    }
-
-    private static func screenCodeCharacter(for byte: UInt8) -> Character? {
-        let screenCode = byte & 0x3f
-        switch screenCode {
-        case 1...26:
-            return Character(UnicodeScalar(UInt8(64 + screenCode)))
-        case 48...57:
-            return Character(UnicodeScalar(screenCode))
-        case 32:
-            return " "
-        default:
-            return nil
-        }
+                                             handle: QLinkScreenCodec.screenName(inUserRecord: record))
     }
 
     private static func isPlaceholderUserRecord(_ record: [UInt8]) -> Bool {
-        record.allSatisfy { $0 == 0 } || record == factoryBlankUserRecord || screenName(inUserRecord: record) == "QLINK"
+        record.allSatisfy { $0 == 0 } || record == factoryBlankUserRecord || QLinkScreenCodec.screenName(inUserRecord: record) == "QLINK"
     }
 
     private static func configureReloadedConnectionFields(in profile: inout [UInt8]) {
@@ -1331,7 +1287,7 @@ enum QLinkReloadedDiskPatcher {
     }
 
     private static func restoreFactoryBlankRegistrationFieldsIfNeeded(in profile: inout [UInt8]) {
-        guard registrationAccessCode(in: profile) == nil,
+        guard QLinkScreenCodec.accessCode(in: profile) == nil,
               profile.indices.contains(userRecordBlockRange.upperBound - 1),
               profile[userRecordBlockRange].allSatisfy({ $0 == 0 }) else {
             return
@@ -1396,11 +1352,6 @@ enum QLinkReloadedDiskPatcher {
         }
     }
 
-    private static func sha256Hex(for data: Data) -> String {
-        SHA256.hash(data: data)
-            .map { String(format: "%02x", $0) }
-            .joined()
-    }
 }
 
 enum EmulatorMediaFile: Equatable {
