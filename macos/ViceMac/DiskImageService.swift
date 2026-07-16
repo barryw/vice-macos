@@ -484,7 +484,7 @@ enum DiskImageService {
     }
 }
 
-private enum DiskImageFilename {
+enum DiskImageFilename {
     static func safe(_ string: String) -> String {
         let invalid = CharacterSet(charactersIn: "/:")
             .union(.controlCharacters)

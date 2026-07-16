@@ -245,7 +245,7 @@ final class DiskImageManagerModel: ObservableObject {
         panel.prompt = "Create"
         panel.allowedContentTypes = [UTType(filenameExtension: draft.format.rawValue)].compactMap { $0 }
         panel.canCreateDirectories = true
-        panel.nameFieldStringValue = "\(Self.safeFilename(draft.diskName)).\(draft.format.rawValue)"
+        panel.nameFieldStringValue = "\(DiskImageFilename.safe(draft.diskName)).\(draft.format.rawValue)"
 
         NSApp.activate(ignoringOtherApps: true)
         panel.center()
@@ -384,7 +384,7 @@ final class DiskImageManagerModel: ObservableObject {
         panel.prompt = "Export"
         panel.allowedContentTypes = [UTType(filenameExtension: "grc")].compactMap { $0 }
         panel.canCreateDirectories = true
-        panel.nameFieldStringValue = "\(Self.safeFilename(draft.metadata.dosName)).grc"
+        panel.nameFieldStringValue = "\(DiskImageFilename.safe(draft.metadata.dosName)).grc"
 
         NSApp.activate(ignoringOtherApps: true)
         panel.center()
@@ -417,7 +417,7 @@ final class DiskImageManagerModel: ObservableObject {
         panel.prompt = "Export"
         panel.allowedContentTypes = [UTType(filenameExtension: "cvt")].compactMap { $0 }
         panel.canCreateDirectories = true
-        panel.nameFieldStringValue = "\(Self.safeFilename(draft.metadata.dosName)).cvt"
+        panel.nameFieldStringValue = "\(DiskImageFilename.safe(draft.metadata.dosName)).cvt"
 
         NSApp.activate(ignoringOtherApps: true)
         panel.center()
@@ -893,17 +893,7 @@ final class DiskImageManagerModel: ObservableObject {
 
     private static func optimizedFilename(for image: DiskImageDocument) -> String {
         let stem = image.url.deletingPathExtension().lastPathComponent
-        return "\(safeFilename(stem))-optimized.\(image.format.rawValue)"
-    }
-
-    private static func safeFilename(_ string: String) -> String {
-        let invalid = CharacterSet(charactersIn: "/:")
-            .union(.controlCharacters)
-        let cleaned = string
-            .components(separatedBy: invalid)
-            .joined(separator: "-")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return cleaned.isEmpty ? "UNTITLED" : cleaned
+        return "\(DiskImageFilename.safe(stem))-optimized.\(image.format.rawValue)"
     }
 
     #if DEBUG
