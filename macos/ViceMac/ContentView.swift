@@ -59,6 +59,10 @@ struct ContentView: View {
             }
 
             ToolbarItemGroup {
+                if emulator.machine.supportsDisplayOutputSelection {
+                    DisplayOutputToolbarPicker()
+                }
+
                 DisplayToolbarControls()
             }
 
@@ -1453,6 +1457,22 @@ private struct MachineToolbarControls: View {
             .help("Emulation speed")
         }
         .fixedSize()
+    }
+}
+
+private struct DisplayOutputToolbarPicker: View {
+    @EnvironmentObject private var emulator: EmulatorSession
+
+    var body: some View {
+        Picker("Display Output", selection: $emulator.displayOutput) {
+            ForEach(emulator.machine.displayOutputs) { output in
+                Label(output.toolbarTitle, systemImage: output.systemImage)
+                    .tag(output)
+            }
+        }
+        .pickerStyle(.segmented)
+        .frame(width: 96)
+        .help("40 / 80 column display")
     }
 }
 
