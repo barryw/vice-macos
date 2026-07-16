@@ -225,16 +225,10 @@ final class VSIDSession: ObservableObject {
     }
 
     func openSIDPanel() {
-        let panel = NSOpenPanel()
-        panel.title = "Open SID Tune"
-        panel.message = "Choose a PSID, RSID, MUS, or STR tune."
-        panel.allowedContentTypes = Self.sidContentTypes
-        panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = false
-        panel.canCreateDirectories = false
-
-        guard panel.runModal() == .OK,
-              let url = panel.url else {
+        guard let url = AppFilePanel.chooseFiles(title: "Open SID Tune",
+                                                  message: "Choose a PSID, RSID, MUS, or STR tune.",
+                                                  allowedContentTypes: Self.sidContentTypes,
+                                                  canCreateDirectories: false)?.first else {
             return
         }
 

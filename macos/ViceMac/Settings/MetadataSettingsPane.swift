@@ -293,29 +293,14 @@ private struct MetadataImportedDatabaseSection: View {
     }
 
     private func chooseDatabase() {
-        let panel = NSOpenPanel()
-        panel.title = "Choose \(snapshot.providerID.title) Source"
-        panel.message = importPanelMessage
-        panel.prompt = "Choose"
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-
         let contentTypes = snapshot.providerID.importFilenameExtensions
             .compactMap { UTType(filenameExtension: $0) }
-        if !contentTypes.isEmpty {
-            panel.allowedContentTypes = contentTypes
-        }
 
-        if let databasePath = snapshot.configuration.databasePath {
-            panel.directoryURL = URL(fileURLWithPath: databasePath).deletingLastPathComponent()
-        }
-
-        NSApp.activate(ignoringOtherApps: true)
-        panel.center()
-
-        guard panel.runModal() == .OK,
-              let url = panel.url else {
+        guard let url = AppFilePanel.chooseFiles(title: "Choose \(snapshot.providerID.title) Source",
+                                                  message: importPanelMessage,
+                                                  prompt: "Choose",
+                                                  allowedContentTypes: contentTypes,
+                                                  directoryURL: snapshot.configuration.databasePath.map { URL(fileURLWithPath: $0).deletingLastPathComponent() })?.first else {
             return
         }
 

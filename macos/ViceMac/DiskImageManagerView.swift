@@ -420,20 +420,10 @@ private struct GEOSPackageAssistantSheet: View {
     }
 
     private func choosePRG() {
-        let panel = NSOpenPanel()
-        panel.title = "Choose Linked PRG"
-        panel.message = "Choose the built GEOS PRG payload. Raw object files are not accepted here."
-        panel.prompt = "Choose"
-        panel.allowedContentTypes = [UTType(filenameExtension: "prg")].compactMap { $0 }
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-
-        NSApp.activate(ignoringOtherApps: true)
-        panel.center()
-
-        guard panel.runModal() == .OK,
-              let url = panel.url else {
+        guard let url = AppFilePanel.chooseFiles(title: "Choose Linked PRG",
+                                                  message: "Choose the built GEOS PRG payload. Raw object files are not accepted here.",
+                                                  prompt: "Choose",
+                                                  allowedContentTypes: [UTType(filenameExtension: "prg")].compactMap { $0 })?.first else {
             return
         }
 

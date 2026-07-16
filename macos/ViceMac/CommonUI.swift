@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct VMCStatusBadge: View {
     let text: String
@@ -179,5 +180,96 @@ struct VMCEmptyState: View {
             ContentUnavailableView(title,
                                    systemImage: systemImage)
         }
+    }
+}
+
+/// Shared NSOpenPanel / NSSavePanel configuration so every file picker in the
+/// app activates and centers itself the same way. Pass `nil` for a property
+/// to leave the panel's own default untouched, and an empty
+/// `allowedContentTypes` to allow every file type.
+@MainActor
+enum AppFilePanel {
+    /// Configures and runs an `NSOpenPanel` modally.
+    /// - Returns: the chosen URLs, or `nil` if the panel was cancelled.
+    @discardableResult
+    static func chooseFiles(title: String,
+                            message: String? = nil,
+                            prompt: String? = nil,
+                            canChooseFiles: Bool = true,
+                            canChooseDirectories: Bool = false,
+                            allowsMultipleSelection: Bool = false,
+                            allowedContentTypes: [UTType] = [],
+                            canCreateDirectories: Bool? = nil,
+                            directoryURL: URL? = nil) -> [URL]? {
+        let panel = NSOpenPanel()
+        panel.title = title
+        if let message {
+            panel.message = message
+        }
+        if let prompt {
+            panel.prompt = prompt
+        }
+        panel.canChooseFiles = canChooseFiles
+        panel.canChooseDirectories = canChooseDirectories
+        panel.allowsMultipleSelection = allowsMultipleSelection
+        if !allowedContentTypes.isEmpty {
+            panel.allowedContentTypes = allowedContentTypes
+        }
+        if let canCreateDirectories {
+            panel.canCreateDirectories = canCreateDirectories
+        }
+        if let directoryURL {
+            panel.directoryURL = directoryURL
+        }
+
+        NSApp.activate(ignoringOtherApps: true)
+        panel.center()
+
+        guard panel.runModal() == .OK else {
+            return nil
+        }
+
+        return panel.urls
+    }
+
+    /// Configures and runs an `NSSavePanel` modally.
+    /// - Returns: the destination URL, or `nil` if the panel was cancelled.
+    @discardableResult
+    static func chooseSaveURL(title: String,
+                              message: String? = nil,
+                              prompt: String? = nil,
+                              nameFieldStringValue: String? = nil,
+                              allowedContentTypes: [UTType] = [],
+                              canCreateDirectories: Bool? = nil,
+                              directoryURL: URL? = nil) -> URL? {
+        let panel = NSSavePanel()
+        panel.title = title
+        if let message {
+            panel.message = message
+        }
+        if let prompt {
+            panel.prompt = prompt
+        }
+        if let nameFieldStringValue {
+            panel.nameFieldStringValue = nameFieldStringValue
+        }
+        if !allowedContentTypes.isEmpty {
+            panel.allowedContentTypes = allowedContentTypes
+        }
+        if let canCreateDirectories {
+            panel.canCreateDirectories = canCreateDirectories
+        }
+        if let directoryURL {
+            panel.directoryURL = directoryURL
+        }
+
+        NSApp.activate(ignoringOtherApps: true)
+        panel.center()
+
+        guard panel.runModal() == .OK else {
+            return nil
+        }
+
+        return panel.url
     }
 }

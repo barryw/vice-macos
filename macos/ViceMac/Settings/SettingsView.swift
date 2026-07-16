@@ -561,24 +561,16 @@ private struct AIAssistantSettingsPane: View {
     }
 
     private func chooseDocuments() {
-        let panel = NSOpenPanel()
-        panel.title = "Add Documentation"
-        panel.prompt = "Add"
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = true
-        panel.allowedContentTypes = [.pdf]
-
-        NSApp.activate(ignoringOtherApps: true)
-        panel.center()
-
-        guard panel.runModal() == .OK,
-              !panel.urls.isEmpty else {
+        guard let urls = AppFilePanel.chooseFiles(title: "Add Documentation",
+                                                   prompt: "Add",
+                                                   allowsMultipleSelection: true,
+                                                   allowedContentTypes: [.pdf]),
+              !urls.isEmpty else {
             return
         }
 
         Task {
-            await aiDocumentLibrary.importPDFs(panel.urls,
+            await aiDocumentLibrary.importPDFs(urls,
                                                machineID: currentMachineID)
             if let message = aiDocumentLibrary.lastErrorMessage {
                 importErrorMessage = message
@@ -890,23 +882,10 @@ private struct ROMImageSettingsRow: View {
     }
 
     private func chooseROM() {
-        let panel = NSOpenPanel()
-        panel.title = "Choose \(image.title) ROM"
-        panel.message = "Choose a \(image.title) ROM image."
-        panel.prompt = "Choose"
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-
-        if let path {
-            panel.directoryURL = URL(fileURLWithPath: path).deletingLastPathComponent()
-        }
-
-        NSApp.activate(ignoringOtherApps: true)
-        panel.center()
-
-        guard panel.runModal() == .OK,
-              let url = panel.url else {
+        guard let url = AppFilePanel.chooseFiles(title: "Choose \(image.title) ROM",
+                                                  message: "Choose a \(image.title) ROM image.",
+                                                  prompt: "Choose",
+                                                  directoryURL: path.map { URL(fileURLWithPath: $0).deletingLastPathComponent() })?.first else {
             return
         }
 
@@ -1005,21 +984,11 @@ private struct MediaSettingsPane: View {
     }
 
     private func chooseCartridge() {
-        let panel = NSOpenPanel()
-        panel.title = "Choose Cartridge"
-        panel.message = "Choose a CRT cartridge image."
-        panel.prompt = "Choose"
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = CartridgeImageFileType.allCases
-            .compactMap { UTType(filenameExtension: $0.rawValue) }
-
-        NSApp.activate(ignoringOtherApps: true)
-        panel.center()
-
-        guard panel.runModal() == .OK,
-              let url = panel.url else {
+        guard let url = AppFilePanel.chooseFiles(title: "Choose Cartridge",
+                                                  message: "Choose a CRT cartridge image.",
+                                                  prompt: "Choose",
+                                                  allowedContentTypes: CartridgeImageFileType.allCases
+                                                      .compactMap { UTType(filenameExtension: $0.rawValue) })?.first else {
             return
         }
 
@@ -1094,21 +1063,11 @@ private struct TapeSettingsSection: View {
     }
 
     private func chooseTape() {
-        let panel = NSOpenPanel()
-        panel.title = "Choose Tape"
-        panel.message = "Choose a TAP tape image."
-        panel.prompt = "Choose"
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = [UTType(filenameExtension: AutostartMediaFileType.tap.rawValue)]
-            .compactMap { $0 }
-
-        NSApp.activate(ignoringOtherApps: true)
-        panel.center()
-
-        guard panel.runModal() == .OK,
-              let url = panel.url else {
+        guard let url = AppFilePanel.chooseFiles(title: "Choose Tape",
+                                                  message: "Choose a TAP tape image.",
+                                                  prompt: "Choose",
+                                                  allowedContentTypes: [UTType(filenameExtension: AutostartMediaFileType.tap.rawValue)]
+                                                      .compactMap { $0 })?.first else {
             return
         }
 
@@ -3375,23 +3334,12 @@ private struct DriveSettingsSection: View {
     }
 
     private func chooseSharedFolder() {
-        let panel = NSOpenPanel()
-        panel.title = "Choose Shared Mac Folder"
-        panel.message = "Choose the Finder folder this machine sees as drive \(drive.unit)."
-        panel.prompt = "Choose"
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = false
-
-        if let path = drive.sharedFolderPath {
-            panel.directoryURL = URL(fileURLWithPath: path)
-        }
-
-        NSApp.activate(ignoringOtherApps: true)
-        panel.center()
-
-        guard panel.runModal() == .OK,
-              let url = panel.url else {
+        guard let url = AppFilePanel.chooseFiles(title: "Choose Shared Mac Folder",
+                                                  message: "Choose the Finder folder this machine sees as drive \(drive.unit).",
+                                                  prompt: "Choose",
+                                                  canChooseFiles: false,
+                                                  canChooseDirectories: true,
+                                                  directoryURL: drive.sharedFolderPath.map { URL(fileURLWithPath: $0) })?.first else {
             return
         }
 

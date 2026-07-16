@@ -982,18 +982,11 @@ private struct PrintQueueView: View {
     }
 
     private func savePDF() {
-        let panel = NSSavePanel()
-        panel.title = "Save Printout"
-        panel.message = "Save the queued printer pages as a PDF."
-        panel.prompt = "Save"
-        panel.allowedContentTypes = [.pdf]
-        panel.nameFieldStringValue = "\(emulator.machine.shortName)-printout.pdf"
-
-        NSApp.activate(ignoringOtherApps: true)
-        panel.center()
-
-        guard panel.runModal() == .OK,
-              let url = panel.url else {
+        guard let url = AppFilePanel.chooseSaveURL(title: "Save Printout",
+                                                    message: "Save the queued printer pages as a PDF.",
+                                                    prompt: "Save",
+                                                    nameFieldStringValue: "\(emulator.machine.shortName)-printout.pdf",
+                                                    allowedContentTypes: [.pdf]) else {
             return
         }
 
@@ -1477,20 +1470,10 @@ final class QLinkReloadedService: ObservableObject {
     }
 
     private func importDisk(for machine: EmulatedMachine) throws -> URL? {
-        let panel = NSOpenPanel()
-        panel.title = "Choose Q-Link Disk"
-        panel.message = "Choose your Quantum Link disk image. VICE Mac will copy it into the media library and use it for one-click Q-Link Reloaded connections."
-        panel.prompt = "Use Disk"
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = diskContentTypes(for: machine)
-
-        NSApp.activate(ignoringOtherApps: true)
-        panel.center()
-
-        guard panel.runModal() == .OK,
-              let sourceURL = panel.url else {
+        guard let sourceURL = AppFilePanel.chooseFiles(title: "Choose Q-Link Disk",
+                                                        message: "Choose your Quantum Link disk image. VICE Mac will copy it into the media library and use it for one-click Q-Link Reloaded connections.",
+                                                        prompt: "Use Disk",
+                                                        allowedContentTypes: diskContentTypes(for: machine))?.first else {
             return nil
         }
 
@@ -1755,19 +1738,12 @@ private enum MediaOpenPanel {
     }
 
     static func saveSnapshot(for emulator: EmulatorSession) {
-        let panel = NSSavePanel()
-        panel.title = "Save Snapshot"
-        panel.message = "Save the current \(emulator.machineDisplayName) machine state. \(emulator.snapshotConfiguration.summaryTitle)."
-        panel.prompt = "Save"
-        panel.canCreateDirectories = true
-        panel.nameFieldStringValue = "\(emulator.machine.shortName)-Snapshot.vsf"
-        panel.allowedContentTypes = contentTypes(for: SnapshotFileType.allCases.map(\.rawValue))
-
-        NSApp.activate(ignoringOtherApps: true)
-        panel.center()
-
-        guard panel.runModal() == .OK,
-              let url = panel.url else {
+        guard let url = AppFilePanel.chooseSaveURL(title: "Save Snapshot",
+                                                    message: "Save the current \(emulator.machineDisplayName) machine state. \(emulator.snapshotConfiguration.summaryTitle).",
+                                                    prompt: "Save",
+                                                    nameFieldStringValue: "\(emulator.machine.shortName)-Snapshot.vsf",
+                                                    allowedContentTypes: contentTypes(for: SnapshotFileType.allCases.map(\.rawValue)),
+                                                    canCreateDirectories: true) else {
             return
         }
 
@@ -1778,19 +1754,12 @@ private enum MediaOpenPanel {
     }
 
     static func exportScreenshot(for emulator: EmulatorSession) {
-        let panel = NSSavePanel()
-        panel.title = "Export Screenshot"
-        panel.message = "Export the current \(emulator.machineDisplayName) screen as a PNG image."
-        panel.prompt = "Export"
-        panel.canCreateDirectories = true
-        panel.nameFieldStringValue = "\(emulator.machine.shortName)-Screenshot.png"
-        panel.allowedContentTypes = [.png]
-
-        NSApp.activate(ignoringOtherApps: true)
-        panel.center()
-
-        guard panel.runModal() == .OK,
-              let url = panel.url else {
+        guard let url = AppFilePanel.chooseSaveURL(title: "Export Screenshot",
+                                                    message: "Export the current \(emulator.machineDisplayName) screen as a PNG image.",
+                                                    prompt: "Export",
+                                                    nameFieldStringValue: "\(emulator.machine.shortName)-Screenshot.png",
+                                                    allowedContentTypes: [.png],
+                                                    canCreateDirectories: true) else {
             return
         }
 

@@ -2561,21 +2561,12 @@ private struct CartridgePopover: View {
     }
 
     private func openCartridgePanel() {
-        let panel = NSOpenPanel()
-        panel.title = "Attach Cartridge"
-        panel.message = "Choose a CRT cartridge image."
-        panel.prompt = "Attach"
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = Self.cartridgeImageTypes
-
         isPresented = false
-        NSApp.activate(ignoringOtherApps: true)
-        panel.center()
 
-        guard panel.runModal() == .OK,
-              let url = panel.url else {
+        guard let url = AppFilePanel.chooseFiles(title: "Attach Cartridge",
+                                                  message: "Choose a CRT cartridge image.",
+                                                  prompt: "Attach",
+                                                  allowedContentTypes: Self.cartridgeImageTypes)?.first else {
             return
         }
 

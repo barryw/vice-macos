@@ -297,21 +297,12 @@ private struct DrivePopover: View {
     }
 
     private func openDiskPanel(for driveNumber: Int) {
-        let panel = NSOpenPanel()
-        panel.title = drive.storageKind == .hardDriveImage ? "Attach Hard Drive Image" : "Attach Disk"
-        panel.message = "Choose a \(diskImageFormatDescription) image for \(driveAddress(for: driveNumber))."
-        panel.prompt = "Attach"
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = allowedDiskImageTypes
-
         isPresented = false
-        NSApp.activate(ignoringOtherApps: true)
-        panel.center()
 
-        guard panel.runModal() == .OK,
-              let url = panel.url else {
+        guard let url = AppFilePanel.chooseFiles(title: drive.storageKind == .hardDriveImage ? "Attach Hard Drive Image" : "Attach Disk",
+                                                  message: "Choose a \(diskImageFormatDescription) image for \(driveAddress(for: driveNumber)).",
+                                                  prompt: "Attach",
+                                                  allowedContentTypes: allowedDiskImageTypes)?.first else {
             return
         }
 

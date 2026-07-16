@@ -181,20 +181,10 @@ final class DiskImageManagerModel: ObservableObject {
     }
 
     func openImage(in pane: Pane) {
-        let panel = NSOpenPanel()
-        panel.title = "Open Disk Image"
-        panel.message = "Choose a Commodore or CP/M disk image."
-        panel.prompt = "Open"
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = Self.openableContentTypes
-
-        NSApp.activate(ignoringOtherApps: true)
-        panel.center()
-
-        guard panel.runModal() == .OK,
-              let url = panel.url else {
+        guard let url = AppFilePanel.chooseFiles(title: "Open Disk Image",
+                                                  message: "Choose a Commodore or CP/M disk image.",
+                                                  prompt: "Open",
+                                                  allowedContentTypes: Self.openableContentTypes)?.first else {
             return
         }
 
@@ -239,19 +229,12 @@ final class DiskImageManagerModel: ObservableObject {
     }
 
     func createImage(from draft: NewImageDraft) {
-        let panel = NSSavePanel()
-        panel.title = "Create Disk Image"
-        panel.message = "Create a blank Commodore disk image."
-        panel.prompt = "Create"
-        panel.allowedContentTypes = [UTType(filenameExtension: draft.format.rawValue)].compactMap { $0 }
-        panel.canCreateDirectories = true
-        panel.nameFieldStringValue = "\(DiskImageFilename.safe(draft.diskName)).\(draft.format.rawValue)"
-
-        NSApp.activate(ignoringOtherApps: true)
-        panel.center()
-
-        guard panel.runModal() == .OK,
-              let url = panel.url else {
+        guard let url = AppFilePanel.chooseSaveURL(title: "Create Disk Image",
+                                                    message: "Create a blank Commodore disk image.",
+                                                    prompt: "Create",
+                                                    nameFieldStringValue: "\(DiskImageFilename.safe(draft.diskName)).\(draft.format.rawValue)",
+                                                    allowedContentTypes: [UTType(filenameExtension: draft.format.rawValue)].compactMap { $0 },
+                                                    canCreateDirectories: true) else {
             return
         }
 
@@ -322,24 +305,12 @@ final class DiskImageManagerModel: ObservableObject {
             return
         }
 
-        let panel = NSOpenPanel()
-        panel.title = "Import File"
-        panel.message = activeImage.filesystemKind == .cpm
-            ? "Choose a host file to add to the CP/M disk image."
-            : "Choose a PRG file to add to the disk image."
-        panel.prompt = "Import"
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        if activeImage.filesystemKind == .cbmDOS {
-            panel.allowedContentTypes = Self.programContentTypes
-        }
-
-        NSApp.activate(ignoringOtherApps: true)
-        panel.center()
-
-        guard panel.runModal() == .OK,
-              let url = panel.url else {
+        guard let url = AppFilePanel.chooseFiles(title: "Import File",
+                                                  message: activeImage.filesystemKind == .cpm
+                                                      ? "Choose a host file to add to the CP/M disk image."
+                                                      : "Choose a PRG file to add to the disk image.",
+                                                  prompt: "Import",
+                                                  allowedContentTypes: activeImage.filesystemKind == .cbmDOS ? Self.programContentTypes : [])?.first else {
             return
         }
 
@@ -378,19 +349,12 @@ final class DiskImageManagerModel: ObservableObject {
             return false
         }
 
-        let panel = NSSavePanel()
-        panel.title = "Export GEOS Resource File"
-        panel.message = "Save a generated GRC header for the validated PRG payload."
-        panel.prompt = "Export"
-        panel.allowedContentTypes = [UTType(filenameExtension: "grc")].compactMap { $0 }
-        panel.canCreateDirectories = true
-        panel.nameFieldStringValue = "\(DiskImageFilename.safe(draft.metadata.dosName)).grc"
-
-        NSApp.activate(ignoringOtherApps: true)
-        panel.center()
-
-        guard panel.runModal() == .OK,
-              let url = panel.url else {
+        guard let url = AppFilePanel.chooseSaveURL(title: "Export GEOS Resource File",
+                                                    message: "Save a generated GRC header for the validated PRG payload.",
+                                                    prompt: "Export",
+                                                    nameFieldStringValue: "\(DiskImageFilename.safe(draft.metadata.dosName)).grc",
+                                                    allowedContentTypes: [UTType(filenameExtension: "grc")].compactMap { $0 },
+                                                    canCreateDirectories: true) else {
             return false
         }
 
@@ -411,19 +375,12 @@ final class DiskImageManagerModel: ObservableObject {
             return false
         }
 
-        let panel = NSSavePanel()
-        panel.title = "Export GEOS Convert File"
-        panel.message = "Save a GEOS CVT package that can be copied onto a GEOS disk."
-        panel.prompt = "Export"
-        panel.allowedContentTypes = [UTType(filenameExtension: "cvt")].compactMap { $0 }
-        panel.canCreateDirectories = true
-        panel.nameFieldStringValue = "\(DiskImageFilename.safe(draft.metadata.dosName)).cvt"
-
-        NSApp.activate(ignoringOtherApps: true)
-        panel.center()
-
-        guard panel.runModal() == .OK,
-              let url = panel.url else {
+        guard let url = AppFilePanel.chooseSaveURL(title: "Export GEOS Convert File",
+                                                    message: "Save a GEOS CVT package that can be copied onto a GEOS disk.",
+                                                    prompt: "Export",
+                                                    nameFieldStringValue: "\(DiskImageFilename.safe(draft.metadata.dosName)).cvt",
+                                                    allowedContentTypes: [UTType(filenameExtension: "cvt")].compactMap { $0 },
+                                                    canCreateDirectories: true) else {
             return false
         }
 
@@ -467,18 +424,11 @@ final class DiskImageManagerModel: ObservableObject {
             return
         }
 
-        let panel = NSSavePanel()
-        panel.title = "Export File"
-        panel.message = "Export \(entry.name) from the disk image."
-        panel.prompt = "Export"
-        panel.canCreateDirectories = true
-        panel.nameFieldStringValue = Self.exportFilename(for: entry)
-
-        NSApp.activate(ignoringOtherApps: true)
-        panel.center()
-
-        guard panel.runModal() == .OK,
-              let url = panel.url else {
+        guard let url = AppFilePanel.chooseSaveURL(title: "Export File",
+                                                    message: "Export \(entry.name) from the disk image.",
+                                                    prompt: "Export",
+                                                    nameFieldStringValue: Self.exportFilename(for: entry),
+                                                    canCreateDirectories: true) else {
             return
         }
 
@@ -522,19 +472,12 @@ final class DiskImageManagerModel: ObservableObject {
             return
         }
 
-        let panel = NSSavePanel()
-        panel.title = "Clone Optimized Disk Image"
-        panel.message = "Create a rebuilt copy with drive-aware sector interleave. The original image is not modified."
-        panel.prompt = "Clone"
-        panel.allowedContentTypes = [UTType(filenameExtension: image.format.rawValue)].compactMap { $0 }
-        panel.canCreateDirectories = true
-        panel.nameFieldStringValue = Self.optimizedFilename(for: image)
-
-        NSApp.activate(ignoringOtherApps: true)
-        panel.center()
-
-        guard panel.runModal() == .OK,
-              let url = panel.url else {
+        guard let url = AppFilePanel.chooseSaveURL(title: "Clone Optimized Disk Image",
+                                                    message: "Create a rebuilt copy with drive-aware sector interleave. The original image is not modified.",
+                                                    prompt: "Clone",
+                                                    nameFieldStringValue: Self.optimizedFilename(for: image),
+                                                    allowedContentTypes: [UTType(filenameExtension: image.format.rawValue)].compactMap { $0 },
+                                                    canCreateDirectories: true) else {
             return
         }
 

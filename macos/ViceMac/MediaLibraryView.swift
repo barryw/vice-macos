@@ -294,21 +294,17 @@ private final class MediaLibraryViewModel: ObservableObject {
     }
 
     func importMedia() {
-        let panel = NSOpenPanel()
-        panel.title = "Import Media"
-        panel.prompt = "Import"
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = true
-        panel.allowedContentTypes = Self.allowedContentTypes
-
-        guard panel.runModal() == .OK else {
+        guard let urls = AppFilePanel.chooseFiles(title: "Import Media",
+                                                   prompt: "Import",
+                                                   canChooseDirectories: true,
+                                                   allowsMultipleSelection: true,
+                                                   allowedContentTypes: Self.allowedContentTypes) else {
             return
         }
 
         do {
             let store = try libraryStore()
-            let imported = try store.importURLs(panel.urls)
+            let imported = try store.importURLs(urls)
             items = try store.items()
             selectedItemID = imported.first?.id ?? selectedItemID ?? items.first?.id
         } catch {
