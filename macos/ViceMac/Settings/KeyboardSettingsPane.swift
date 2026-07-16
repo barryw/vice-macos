@@ -420,6 +420,7 @@ struct KeyboardSettingsPane: View {
 
     private func removeMapping(_ entry: VICEKeymapEntry) {
         guard emulator.removeKeyboardMapEntry(entry) else {
+            errorMessage = "This keyboard mapping couldn't be removed."
             return
         }
 
