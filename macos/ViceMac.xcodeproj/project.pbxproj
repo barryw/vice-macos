@@ -218,6 +218,7 @@
 		1A0000000000000000000073 /* SIDFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000020 /* SIDFile.swift */; };
 		1A0000000000000000000074 /* VSIDPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000021 /* VSIDPlayerView.swift */; };
 		F60000000000000000000010 /* ModelConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000020 /* ModelConfigurationTests.swift */; };
+		F60000000000000000000073 /* SIDFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000020 /* SIDFile.swift */; };
 		F60000000000000000000011 /* EmulatorSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000021 /* EmulatorSession.swift */; };
 		F60000000000000000000012 /* EmulatedMachine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000037 /* EmulatedMachine.swift */; };
 		F60000000000000000000014 /* VideoFilterSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002B /* VideoFilterSettings.swift */; };
@@ -1897,6 +1898,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F60000000000000000000010 /* ModelConfigurationTests.swift in Sources */,
+				F60000000000000000000073 /* SIDFile.swift in Sources */,
 				F60000000000000000000056 /* AIAssistantConfiguration.swift in Sources */,
 				AC10300A0000000000000000 /* AIDocumentLibraryStore.swift in Sources */,
 				AC0C0A000000000000000000 /* DebuggerModels.swift in Sources */,

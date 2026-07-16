@@ -3171,8 +3171,8 @@ private struct DriveSettingsPane: View {
 
     var body: some View {
         SettingsPane {
-            ForEach(emulator.driveConfigurations.indices, id: \.self) { index in
-                DriveSettingsSection(drive: $emulator.driveConfigurations[index])
+            ForEach($emulator.driveConfigurations, id: \.unit) { $drive in
+                DriveSettingsSection(drive: $drive)
             }
         }
     }
