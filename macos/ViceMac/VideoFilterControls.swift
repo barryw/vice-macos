@@ -83,6 +83,7 @@ struct FilterSlider: View {
                 .frame(width: 112, alignment: .leading)
 
             Slider(value: $value, in: range)
+                .accessibilityLabel(title)
 
             Text(value, format: .number.precision(.fractionLength(2)))
                 .monospacedDigit()

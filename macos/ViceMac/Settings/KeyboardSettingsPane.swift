@@ -25,6 +25,7 @@ struct KeyboardSettingsPane: View {
                         }
                     }
                     .labelsHidden()
+                    .accessibilityLabel("Mode")
                     .pickerStyle(.segmented)
                     .frame(width: 280)
 
@@ -38,6 +39,7 @@ struct KeyboardSettingsPane: View {
                         }
                     }
                     .labelsHidden()
+                    .accessibilityLabel("Profile")
                     .pickerStyle(.segmented)
                     .frame(width: 210)
 
