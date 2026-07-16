@@ -3,24 +3,28 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>mac VICE - Native Commodore emulation for macOS</title>
+    <title>VICE Mac - Native Commodore emulation for macOS</title>
     <meta
       name="description"
-      content="mac VICE packages the VICE emulator as native Apple Silicon Mac apps with Metal display output, media library, disk tools, controller setup, Q-Link Reloaded setup, and signed DMG releases."
+      content="VICE Mac packages the VICE emulator as native Apple Silicon Mac apps with Metal display output, media library, disk tools, controller setup, Q-Link Reloaded setup, and signed DMG releases."
     >
-    <meta property="og:title" content="mac VICE">
+    <meta property="og:title" content="VICE Mac">
     <meta property="og:description" content="VICE emulator apps for Apple Silicon Macs.">
     <meta property="og:type" content="website">
     <meta property="og:image" content="assets/mac-vice-icon.png">
     <link rel="icon" href="assets/mac-vice-icon.png">
     <link rel="stylesheet" href="styles.css?v=20260618a">
+    <!-- Scoped WHI brand slice (tokens + components) for the shared download
+         control; deliberately omits the house base reset so it can't restyle
+         this bespoke page. See brand/css/whi.css. -->
+    <link rel="stylesheet" href="brand/css/whi.css">
     <script src="site.js" defer></script>
   </head>
   <body>
     <header class="site-header">
-      <a class="brand" href="#top" aria-label="mac VICE home">
+      <a class="brand" href="#top" aria-label="VICE Mac home">
         <img src="assets/mac-vice-icon.png" width="36" height="36" alt="">
-        <span>mac VICE</span>
+        <span>VICE Mac</span>
       </a>
       <nav class="site-nav" aria-label="Primary">
         <a href="#features">Features</a>
@@ -36,7 +40,7 @@
       <section class="hero" aria-labelledby="hero-title">
         <div class="hero-copy">
           <p class="eyebrow">VICE, packaged for macOS</p>
-          <h1 id="hero-title">mac VICE</h1>
+          <h1 id="hero-title">VICE Mac</h1>
           <p class="hero-subtitle">
             Current VICE, packaged for Apple Silicon Macs with Metal display
             output, Mac settings, media tools, controller setup, Q-Link
@@ -55,13 +59,13 @@
           </p>
         </div>
 
-        <div class="hero-stage" aria-label="mac VICE app preview">
+        <div class="hero-stage" aria-label="VICE Mac app preview">
           <figure class="hero-shot">
             <img
               src="assets/screenshots/x64sc-hvsc.png"
               width="1800"
               height="930"
-              alt="x64sc running the HVSC intro disk in a native mac VICE window"
+              alt="x64sc running the HVSC intro disk in a native VICE Mac window"
             >
             <figcaption>x64sc running the HVSC intro disk.</figcaption>
           </figure>
@@ -243,7 +247,7 @@
               width="1400"
               height="1091"
               loading="lazy"
-              alt="Machine settings in a native mac VICE settings window"
+              alt="Machine settings in a native VICE Mac settings window"
             >
             <div class="caption">
               <h3>Machine settings</h3>
@@ -258,7 +262,7 @@
               width="1400"
               height="1091"
               loading="lazy"
-              alt="Display settings for video filter profiles in mac VICE"
+              alt="Display settings for video filter profiles in VICE Mac"
             >
             <div class="caption">
               <h3>Display profiles</h3>
@@ -337,14 +341,14 @@
             >
             <div class="caption">
               <p class="machine-name">Online</p>
-              <h3>Q-Link Reloaded, launched from mac VICE.</h3>
+              <h3>Q-Link Reloaded, launched from VICE Mac.</h3>
               <p>Known disk versions get copied, patched, checked, and started from one native command.</p>
             </div>
           </article>
 
           <div class="qlink-copy">
             <p>
-              Choose a Quantum Link D64 you already own and mac VICE copies it
+              Choose a Quantum Link D64 you already own and VICE Mac copies it
               into the media library, fingerprints the known disk version, and
               patches only that managed copy for Q-Link Reloaded.
             </p>
@@ -359,7 +363,7 @@
               <li>Original disk image stays untouched.</li>
               <li>Unknown Q-Link disks are rejected instead of guessed.</li>
               <li>Required modem and writable drive settings are checked before launch.</li>
-              <li>If existing settings conflict, mac VICE asks before changing anything.</li>
+              <li>If existing settings conflict, VICE Mac asks before changing anything.</li>
             </ul>
           </div>
         </div>
@@ -375,16 +379,24 @@
         </div>
 
         <div class="download-panel">
-          <div class="download-meta">
-            <span id="release-version">GitHub latest release</span>
-            <strong id="release-asset">VICE Mac DMG</strong>
-            <span id="release-published">Signed Apple Silicon build</span>
+          <!--
+            WHI shared "Download latest" control (WAL-39 / WAL-48, Build &
+            Release Standard §6) — identical markup on every product site; only
+            the data-* attributes change. brand/js/download-latest.js resolves
+            the current GitHub Release .dmg client-side and fills the meta line;
+            with no JS the static href links the public releases page.
+            whi-line-commodore themes the house button with the Commodore accent.
+          -->
+          <div class="whi-download whi-download--center whi-line-commodore" data-whi-download
+               data-repo="barryw/vice-macos" data-asset="dmg"
+               data-platform="macOS" data-product="VICE Mac">
+            <a class="whi-btn whi-btn--line" data-whi-download-link
+               href="https://github.com/barryw/vice-macos/releases/latest">
+              <svg class="whi-icon" aria-hidden="true"><use href="brand/icons/icons.svg#whi-download"></use></svg>
+              <span data-whi-download-label>Download latest DMG</span>
+            </a>
+            <p class="whi-download__meta" data-whi-download-meta></p>
           </div>
-          <a
-            class="button primary download-button"
-            id="download-link"
-            href="https://github.com/barryw/vice-macos/releases/latest"
-          >Download latest DMG</a>
           <div class="release-links" aria-label="Release links">
             <a id="release-notes-link" href="https://github.com/barryw/vice-macos/releases/latest">Release notes</a>
             <a id="checksums-link" href="https://github.com/barryw/vice-macos/releases/latest">Checksums</a>
@@ -395,24 +407,24 @@
       <section class="notices-section" id="notices" aria-labelledby="notices-title">
         <div class="notices-heading">
           <p class="eyebrow">Credits and notices</p>
-          <h2 id="notices-title">mac VICE builds on decades of work.</h2>
+          <h2 id="notices-title">VICE Mac builds on decades of work.</h2>
         </div>
         <div class="notices-copy">
           <p>
-            Original mac VICE website, macOS integration, packaging, and native
+            Original VICE Mac website, macOS integration, packaging, and native
             UI work © 2026 Barry Walker and contributors, licensed under the
             GNU GPL version 2 or later.
           </p>
           <p>
             VICE, the Versatile Commodore Emulator, is the work of the VICE
             Team and contributors and is distributed under the GNU General
-            Public License, version 2 or later. mac VICE exists because of that
+            Public License, version 2 or later. VICE Mac exists because of that
             project.
           </p>
           <p>
             Commodore is an active company and brand. Commodore, Quantum Link,
             Q-Link, and other product or service names are names or marks of
-            their respective owners. mac VICE is not affiliated with those
+            their respective owners. VICE Mac is not affiliated with those
             owners.
           </p>
           <div class="notices-links" aria-label="Notice links">
@@ -426,12 +438,15 @@
     </main>
 
     <footer class="site-footer">
-      <span>© 2026 Barry Walker for original mac VICE work. GPL-2.0-or-later. Built on VICE.</span>
+      <span>© 2026 Barry Walker for original VICE Mac work. GPL-2.0-or-later. Built on VICE.</span>
       <div class="footer-links">
         <a href="#notices">Notices</a>
         <a href="https://github.com/barryw/vice-macos/blob/main/LICENSE">License</a>
         <a href="https://github.com/barryw/vice-macos">GitHub</a>
       </div>
     </footer>
+
+    <!-- Shared WHI "Download latest" enhancer (load once, end of body). -->
+    <script src="brand/js/download-latest.js" defer></script>
   </body>
 </html>

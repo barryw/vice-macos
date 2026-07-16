@@ -1,0 +1,25 @@
+# macvice.com (VICE Mac marketing site) — deploy via the release-static-site
+# house template. Build & Release Standard §5 (WAL-32 / WAL-39 / WAL-48): every
+# product/marketing site adopts the same kaniko -> GHCR -> k8s -> Cloudflare flow.
+# The config service (woodpecker-release) expands this into the full pipeline.
+#
+# Replaces the former hand-maintained .woodpecker/website.yaml. Behavioral deltas
+# vs. that pipeline, all intentional and house-standard:
+#   - Triggers on website/** + deploy/** (the template's fixed `when` path) — the
+#     k8s/ dir was renamed to deploy/ so manifest changes still trigger a deploy.
+#   - Adds the Cloudflare cache purge step (Standard §5 step 3).
+#   - Drops the bespoke validate-static / validate-k8s / wait-for-release steps.
+#     Release freshness is handled client-side: site.js + the shared
+#     download-latest.js resolve the current GitHub Release on page load, so the
+#     site never needs a server-side redeploy to surface a new release.
+#
+# Defaults that already match this repo (so they're omitted below):
+#   website_context -> website/ ; image_name/deployment_name -> macvice-website ;
+#   container_name -> website ; deploy_path -> deploy/ ;
+#   cloudflare_zone secret -> cloudflare_zone_id (set per-repo to the macvice.com zone).
+template: release-static-site
+data:
+  site: macvice
+  k8s_namespace: macvice
+  # The site image uses a Containerfile (not the default website/Dockerfile).
+  dockerfile: website/Containerfile

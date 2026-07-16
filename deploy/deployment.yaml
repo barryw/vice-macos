@@ -11,6 +11,11 @@ spec:
     matchLabels:
       app.kubernetes.io/name: macvice-website
       app.kubernetes.io/component: website
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   template:
     metadata:
       labels:
@@ -19,6 +24,13 @@ spec:
     spec:
       imagePullSecrets:
         - name: ghcr-secret
+      # Drain grace on voluntary disruption / rollout: give Traefik time to stop
+      # routing to a terminating pod, then quit nginx gracefully. Matches the
+      # ArgoCD-managed manifest this overlay is taking over from (WAL-163
+      # de-ArgoCD cutover) so the single-owner CI deploy preserves ADR-0007
+      # item 8 (never-down) — without it the cutover would regress to ~1.4% 502
+      # on rollout. (ADR 0007 / WAL-148)
+      terminationGracePeriodSeconds: 35
       securityContext:
         runAsNonRoot: true
         seccompProfile:
@@ -27,6 +39,10 @@ spec:
         - name: website
           image: ghcr.io/barryw/macvice-website:latest
           imagePullPolicy: IfNotPresent
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 8; nginx -s quit"]
           ports:
             - name: http
               containerPort: 8080
