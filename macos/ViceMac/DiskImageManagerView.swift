@@ -201,21 +201,11 @@ private struct NewDiskImageSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(spacing: 12) {
-                Image(systemName: "externaldrive.badge.plus")
-                    .font(.system(size: 28, weight: .semibold))
-                    .foregroundStyle(Color.accentColor)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("New Disk Image")
-                        .font(.title3.weight(.semibold))
-                    Text("Create a blank Commodore disk for the \(draft.pane.title.lowercased()).")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
+        SettingsSheetLayout(width: 420) {
+            VMCSheetHeader(systemImage: "externaldrive.badge.plus",
+                           title: "New Disk Image",
+                           subtitle: "Create a blank Commodore disk for the \(draft.pane.title.lowercased()).")
+        } content: {
             Form {
                 Picker("Format", selection: $draft.format) {
                     ForEach(CommodoreDiskImageFormat.allCases.filter(\.supportsBlankImageCreation)) { format in
@@ -227,23 +217,18 @@ private struct NewDiskImageSheet: View {
                 TextField("Disk ID", text: $draft.diskID)
             }
             .formStyle(.grouped)
-
-            HStack {
-                Spacer()
-                Button("Cancel") {
-                    onCancel()
-                }
-                .keyboardShortcut(.cancelAction)
-
-                Button("Create") {
-                    onCreate(draft)
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(draft.diskName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        } actions: {
+            Button("Cancel") {
+                onCancel()
             }
+            .keyboardShortcut(.cancelAction)
+
+            Button("Create") {
+                onCreate(draft)
+            }
+            .keyboardShortcut(.defaultAction)
+            .disabled(draft.diskName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
-        .padding(24)
-        .frame(width: 420)
     }
 }
 
@@ -268,9 +253,11 @@ private struct GEOSPackageAssistantSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            header
-
+        SettingsSheetLayout(width: 620) {
+            VMCSheetHeader(systemImage: "doc.text.magnifyingglass",
+                           title: "GEOS Package Assistant",
+                           subtitle: "Validate a linked PRG, export a CVT, or install it on the open GEOS disk.")
+        } content: {
             Form {
                 Section("Payload") {
                     HStack(spacing: 10) {
@@ -289,7 +276,7 @@ private struct GEOSPackageAssistantSheet: View {
 
                         Spacer()
 
-                        Button("Choose PRG...") {
+                        Button("Choose PRG…") {
                             choosePRG()
                         }
                     }
@@ -357,50 +344,28 @@ private struct GEOSPackageAssistantSheet: View {
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
-
-            HStack {
-                Spacer()
-
-                Button("Cancel") {
-                    onCancel()
-                }
-                .keyboardShortcut(.cancelAction)
-
-                Button("Export GRC...") {
-                    onExport(draft)
-                }
-                .disabled(!draft.canBuildPackage)
-
-                Button("Export CVT...") {
-                    onExportCVT(draft)
-                }
-                .disabled(!draft.canBuildPackage)
-
-                Button("Install") {
-                    onInstall(draft)
-                }
-                .buttonStyle(.borderedProminent)
-                .keyboardShortcut(.defaultAction)
-                .disabled(!draft.canExportGRC)
+        } actions: {
+            Button("Cancel") {
+                onCancel()
             }
-        }
-        .padding(24)
-        .frame(width: 620)
-    }
+            .keyboardShortcut(.cancelAction)
 
-    private var header: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "doc.text.magnifyingglass")
-                .font(.system(size: 28, weight: .semibold))
-                .foregroundStyle(Color.accentColor)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text("GEOS Package Assistant")
-                    .font(.title3.weight(.semibold))
-                Text("Validate a linked PRG, export a CVT, or install it on the open GEOS disk.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+            Button("Export GRC…") {
+                onExport(draft)
             }
+            .disabled(!draft.canBuildPackage)
+
+            Button("Export CVT…") {
+                onExportCVT(draft)
+            }
+            .disabled(!draft.canBuildPackage)
+
+            Button("Install") {
+                onInstall(draft)
+            }
+            .buttonStyle(.borderedProminent)
+            .keyboardShortcut(.defaultAction)
+            .disabled(!draft.canExportGRC)
         }
     }
 
@@ -480,40 +445,25 @@ private struct RenameDiskFileSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(spacing: 12) {
-                Image(systemName: "character.cursor.ibeam")
-                    .font(.system(size: 28, weight: .semibold))
-                    .foregroundStyle(Color.accentColor)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Rename File")
-                        .font(.title3.weight(.semibold))
-                    Text("Commodore filenames are stored as PETSCII and limited to 16 characters.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
+        SettingsSheetLayout(width: 420) {
+            VMCSheetHeader(systemImage: "character.cursor.ibeam",
+                           title: "Rename File",
+                           subtitle: "Commodore filenames are stored as PETSCII and limited to 16 characters.")
+        } content: {
             TextField("Name", text: $draft.fileName)
                 .textFieldStyle(.roundedBorder)
-
-            HStack {
-                Spacer()
-                Button("Cancel") {
-                    onCancel()
-                }
-                .keyboardShortcut(.cancelAction)
-
-                Button("Rename") {
-                    onRename(draft)
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(draft.fileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        } actions: {
+            Button("Cancel") {
+                onCancel()
             }
+            .keyboardShortcut(.cancelAction)
+
+            Button("Rename") {
+                onRename(draft)
+            }
+            .keyboardShortcut(.defaultAction)
+            .disabled(draft.fileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
-        .padding(24)
-        .frame(width: 420)
     }
 }
 
@@ -613,7 +563,7 @@ private struct CloneOptimizedReviewSheet: View {
                 .keyboardShortcut(.cancelAction)
 
                 if analysis.canRebuild {
-                    Button("Clone Copy...") {
+                    Button("Clone Copy…") {
                         onClone()
                     }
                     .buttonStyle(.borderedProminent)
@@ -690,12 +640,7 @@ private struct RebuildIssueGroupView: View {
                 HStack(spacing: 6) {
                     Text(title)
                         .font(.caption.weight(.semibold))
-                    Text("\(issues.count)")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(.secondary.opacity(0.13), in: Capsule())
+                    VMCStatusBadge("\(issues.count)")
                 }
 
                 VStack(spacing: 6) {
@@ -821,12 +766,10 @@ private struct DiskImagePaneView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .layoutPriority(1)
             } else {
-                ContentUnavailableView {
-                    Label("No Disk Image", systemImage: "externaldrive")
-                } description: {
-                    Text("Open a CBM DOS or CP/M D64, D67, D71, D80, D81, or D82 image.")
-                } actions: {
-                    Button("Open Image...") {
+                VMCEmptyState("No Disk Image",
+                              systemImage: "externaldrive",
+                              description: "Open a CBM DOS or CP/M D64, D67, D71, D80, D81, or D82 image.") {
+                    Button("Open Image…") {
                         model.openImage(in: pane)
                     }
                     .keyboardShortcut(.defaultAction)
@@ -875,12 +818,7 @@ private struct DiskImagePaneHeader: View {
             .accessibilityLabel(pane.title)
 
             if model.activePane == pane {
-                Text("Active")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(.secondary.opacity(0.14), in: Capsule())
+                VMCStatusBadge("Active")
                     .fixedSize(horizontal: true, vertical: false)
                     .layoutPriority(1)
             }
@@ -888,50 +826,30 @@ private struct DiskImagePaneHeader: View {
             Spacer(minLength: 8)
 
             HStack(spacing: 3) {
-                DiskImagePaneHeaderButton(systemImage: "document.badge.plus",
-                                          title: "Create a blank disk image") {
+                VMCIconButton("document.badge.plus",
+                              help: "Create a blank disk image") {
                     model.presentNewImage(in: pane)
                 }
 
-                DiskImagePaneHeaderButton(systemImage: "folder",
-                                          title: "Open image") {
+                VMCIconButton("folder",
+                              help: "Open image") {
                     model.openImage(in: pane)
                 }
 
-                DiskImagePaneHeaderButton(systemImage: "square.and.arrow.down",
-                                          title: "Save image",
-                                          isDisabled: state.image?.isModified != true) {
+                VMCIconButton("square.and.arrow.down",
+                              help: "Save image") {
                     model.saveImage(in: pane)
                 }
+                .disabled(state.image?.isModified != true)
 
-                DiskImagePaneHeaderButton(systemImage: "wand.and.stars",
-                                          title: "Clone optimized copy",
-                                          isDisabled: state.image?.supportsOptimizedClone != true) {
+                VMCIconButton("wand.and.stars",
+                              help: "Clone optimized copy") {
                     model.cloneOptimizedImage(in: pane)
                 }
+                .disabled(state.image?.supportsOptimizedClone != true)
             }
             .fixedSize(horizontal: true, vertical: false)
         }
-    }
-}
-
-private struct DiskImagePaneHeaderButton: View {
-    var systemImage: String
-    var title: String
-    var isDisabled = false
-    var action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.system(size: 13, weight: .semibold))
-                .frame(width: 28, height: 26)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.borderless)
-        .disabled(isDisabled)
-        .help(title)
-        .accessibilityLabel(title)
     }
 }
 
@@ -968,12 +886,7 @@ private struct DiskImageSummaryView: View {
 
                 Spacer()
 
-                Text(image.format.title)
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(.secondary.opacity(0.14), in: Capsule())
+                VMCStatusBadge(image.format.title)
             }
 
             if let usedFraction {
@@ -1009,12 +922,7 @@ private struct GEOSDiskToolsView: View {
                 HStack(spacing: 6) {
                     Text("GEOS Input")
                         .font(.system(size: 12.5, weight: .semibold))
-                    Text(defaultDriverTitle)
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(statusTint)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 2)
-                        .background(statusTint.opacity(0.12), in: Capsule())
+                    VMCStatusBadge(defaultDriverTitle, color: statusTint)
                 }
 
                 Text(detailText)
@@ -1316,12 +1224,12 @@ private struct DirectoryBrowserView: View {
                     .width(54)
                 }
                 .contextMenu {
-                    Button("Export File...") {
+                    Button("Export File…") {
                         model.exportSelectedFile(from: pane)
                     }
                     .disabled(state.selectedEntry == nil)
 
-                    Button("Rename File...") {
+                    Button("Rename File…") {
                         model.presentRenameSelectedFile(in: pane)
                     }
                     .disabled(state.selectedEntry == nil || state.image?.supportsFileWrites != true)
@@ -1391,7 +1299,7 @@ private struct SelectedFileInspectorView: View {
                 .help("Export file")
 
                 Menu {
-                    Button("Rename...") {
+                    Button("Rename…") {
                         model.presentRenameSelectedFile(in: pane)
                     }
                     .disabled(state.image?.supportsFileWrites != true)

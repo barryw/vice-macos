@@ -49,23 +49,6 @@ struct VideoFilterSliders: View {
     }
 }
 
-struct VideoFilterToolbarPanel: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Display")
-                .font(.headline)
-
-            VideoFilterPresetPicker()
-
-            Divider()
-
-            VideoFilterSliders()
-        }
-        .padding(16)
-        .frame(width: 360)
-    }
-}
-
 struct FilterSlider: View {
     let title: String
     @Binding var value: Double
@@ -78,17 +61,9 @@ struct FilterSlider: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
-            Text(title)
-                .frame(width: 112, alignment: .leading)
-
-            Slider(value: $value, in: range)
-                .accessibilityLabel(title)
-
-            Text(value, format: .number.precision(.fractionLength(2)))
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
-                .frame(width: 42, alignment: .trailing)
-        }
+        SettingsSliderControl(value: $value,
+                              range: range,
+                              valueTitle: value.formatted(.number.precision(.fractionLength(2))),
+                              leadingTitle: title)
     }
 }

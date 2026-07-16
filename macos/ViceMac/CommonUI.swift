@@ -154,31 +154,117 @@ struct VMCIconButton: View {
         }
         .buttonStyle(.borderless)
         .help(help)
+        .accessibilityLabel(help)
     }
 }
 
-struct VMCEmptyState: View {
+struct VMCEmptyState<Actions: View>: View {
     let title: String
     let systemImage: String
     let description: String?
+    let actions: Actions
 
     init(_ title: String,
          systemImage: String,
-         description: String? = nil) {
+         description: String? = nil,
+         @ViewBuilder actions: () -> Actions = { EmptyView() }) {
         self.title = title
         self.systemImage = systemImage
         self.description = description
+        self.actions = actions()
     }
 
-    @ViewBuilder
     var body: some View {
-        if let description {
-            ContentUnavailableView(title,
-                                   systemImage: systemImage,
-                                   description: Text(description))
-        } else {
-            ContentUnavailableView(title,
-                                   systemImage: systemImage)
+        ContentUnavailableView {
+            Label(title, systemImage: systemImage)
+        } description: {
+            if let description {
+                Text(description)
+            }
+        } actions: {
+            actions
+        }
+    }
+}
+
+struct VMCPopoverHeader: View {
+    let systemImage: String
+    let title: String
+    let subtitle: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: systemImage)
+                .font(.title3)
+                .foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.headline)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+        }
+    }
+}
+
+/// Icon + title + subtitle header shared by the hand-rolled modal sheets
+/// (new disk image, GEOS package assistant, rename file, …). Matches the
+/// `HStack(spacing: 12) { Image…; VStack(title, subtitle) }` markup those
+/// sheets previously hand-rolled identically.
+struct VMCSheetHeader: View {
+    let systemImage: String
+    let title: String
+    var subtitle: String? = nil
+    var tint: Color = .accentColor
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.system(size: 28, weight: .semibold))
+                .foregroundStyle(tint)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.title3.weight(.semibold))
+
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+}
+
+/// The status-chip-that-opens-a-popover pattern shared by the drive and
+/// cartridge indicators. Owns the capsule padding/shape, plain button style,
+/// `isPresented` background tint, help text, and popover wiring; callers
+/// supply their own LED/glyph + text content and popover body.
+struct VMCIndicatorChip<Label: View, Popover: View>: View {
+    @Binding var isPresented: Bool
+    let help: String
+    @ViewBuilder var label: () -> Label
+    @ViewBuilder var popover: () -> Popover
+
+    var body: some View {
+        Button {
+            isPresented.toggle()
+        } label: {
+            label()
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .background(isPresented ? Color.secondary.opacity(0.18) : Color.clear, in: Capsule())
+        .help(help)
+        .popover(isPresented: $isPresented, arrowEdge: .bottom) {
+            popover()
         }
     }
 }

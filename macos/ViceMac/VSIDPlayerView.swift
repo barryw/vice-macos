@@ -816,18 +816,18 @@ private struct VSIDStageView: View {
                 .frame(height: 82)
 
             HStack(spacing: 10) {
-                VSIDStatusChip(title: session.loadedTune?.format.rawValue ?? "SID",
+                VMCStatusBadge(session.loadedTune?.format.rawValue ?? "SID",
                                systemImage: "music.note")
-                VSIDStatusChip(title: session.engineState.sidModelName,
+                VMCStatusBadge(session.engineState.sidModelName,
                                systemImage: "waveform")
-                VSIDStatusChip(title: session.loadedTune?.clockName ?? "Clock",
+                VMCStatusBadge(session.loadedTune?.clockName ?? "Clock",
                                systemImage: "metronome")
                 if let secondSID = session.loadedTune?.secondSIDAddress {
-                    VSIDStatusChip(title: "2SID \(hex(secondSID))",
+                    VMCStatusBadge("2SID \(hex(secondSID))",
                                    systemImage: "speaker.wave.2")
                 }
                 if let thirdSID = session.loadedTune?.thirdSIDAddress {
-                    VSIDStatusChip(title: "3SID \(hex(thirdSID))",
+                    VMCStatusBadge("3SID \(hex(thirdSID))",
                                    systemImage: "speaker.wave.3")
                 }
                 Spacer()
@@ -1294,6 +1294,7 @@ private struct VSIDTransportBar: View {
             }
             .disabled(!session.canSelectPreviousTune)
             .help("Previous tune")
+            .accessibilityLabel("Previous tune")
 
             Button {
                 session.isPlaying ? session.pause() : session.playOrResume()
@@ -1303,6 +1304,7 @@ private struct VSIDTransportBar: View {
             }
             .keyboardShortcut(.space, modifiers: [])
             .help(session.isPlaying ? "Pause" : "Play")
+            .accessibilityLabel(session.isPlaying ? "Pause" : "Play")
 
             Button {
                 session.stop()
@@ -1311,6 +1313,7 @@ private struct VSIDTransportBar: View {
             }
             .disabled(session.loadedTune == nil)
             .help("Stop")
+            .accessibilityLabel("Stop")
 
             Button {
                 session.selectNextTune()
@@ -1319,6 +1322,7 @@ private struct VSIDTransportBar: View {
             }
             .disabled(!session.canSelectNextTune)
             .help("Next tune")
+            .accessibilityLabel("Next tune")
 
             Stepper("Tune \(session.currentTune)", value: Binding {
                 session.currentTune
@@ -1332,33 +1336,17 @@ private struct VSIDTransportBar: View {
 
             Image(systemName: "speaker.wave.2.fill")
                 .foregroundStyle(.secondary)
-            Slider(value: Binding {
-                Double(session.soundVolume)
-            } set: { value in
-                session.soundVolume = Int(value.rounded())
-            }, in: 0...100)
-            .frame(width: 132)
-            Text("\(session.soundVolume)%")
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
-                .frame(width: 38, alignment: .trailing)
+                .accessibilityHidden(true)
+            SettingsPercentSlider(value: Binding {
+                session.soundVolume
+            } set: { volume in
+                session.soundVolume = volume
+            }, valueWidth: 38)
+                .frame(width: 180)
+                .accessibilityLabel("Volume")
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 12)
-    }
-}
-
-private struct VSIDStatusChip: View {
-    let title: String
-    let systemImage: String
-
-    var body: some View {
-        Label(title, systemImage: systemImage)
-            .font(.caption.weight(.medium))
-            .lineLimit(1)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 5)
-            .background(Color.secondary.opacity(0.14), in: Capsule())
     }
 }
 
@@ -1383,16 +1371,9 @@ private struct VSIDMetadataRow: View {
     let value: String
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(label)
-                .foregroundStyle(.secondary)
-                .frame(width: 82, alignment: .leading)
-            Text(value.isEmpty ? "-" : value)
-                .lineLimit(1)
-                .truncationMode(.middle)
-            Spacer(minLength: 0)
+        VMCInfoRow(label, labelWidth: 82) {
+            SettingsValueText(value.isEmpty ? "-" : value, truncationMode: .middle)
         }
-        .font(.callout)
     }
 }
 

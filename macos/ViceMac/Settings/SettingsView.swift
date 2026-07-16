@@ -109,10 +109,23 @@ private struct SettingsSidebar: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 4) {
-                ForEach(panes) { pane in
-                    SettingsSidebarRow(pane: pane,
-                                       isSelected: selection == pane.rawValue) {
-                        selection = pane.rawValue
+                ForEach(panes.filter { !$0.isAdvanced }) { pane in
+                    row(for: pane)
+                }
+
+                let advancedPanes = panes.filter(\.isAdvanced)
+                if !advancedPanes.isEmpty {
+                    Text("Advanced")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .textCase(.uppercase)
+                        .padding(.horizontal, 12)
+                        .padding(.top, 12)
+                        .padding(.bottom, 2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    ForEach(advancedPanes) { pane in
+                        row(for: pane)
                     }
                 }
             }
@@ -121,6 +134,13 @@ private struct SettingsSidebar: View {
         }
         .frame(width: 206)
         .background(.bar)
+    }
+
+    private func row(for pane: SettingsPaneID) -> some View {
+        SettingsSidebarRow(pane: pane,
+                           isSelected: selection == pane.rawValue) {
+            selection = pane.rawValue
+        }
     }
 }
 
@@ -271,9 +291,7 @@ private struct AIAssistantSettingsPane: View {
     private var modelSettingsForm: some View {
         Form {
             Section("AI Agent") {
-                LabeledContent("AI features") {
-                    Toggle("Enable assistant", isOn: enabledBinding)
-                }
+                Toggle("Enable AI features", isOn: enabledBinding)
 
                 if aiSettings.isEnabled {
                     LabeledContent("Model type") {
@@ -314,10 +332,12 @@ private struct AIAssistantSettingsPane: View {
                         .frame(width: 220)
                     }
 
-                    LabeledContent("Base URL") {
-                        TextField("Base URL", text: remoteBaseURLBinding)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(minWidth: 320)
+                    DisclosureGroup("Custom endpoint") {
+                        LabeledContent("Base URL") {
+                            TextField("Base URL", text: remoteBaseURLBinding)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(minWidth: 320)
+                        }
                     }
 
                     LabeledContent("API key") {
@@ -780,7 +800,7 @@ private struct MachineSettingsPane: View {
             }
 
             if !emulator.machine.romSlots.isEmpty {
-                Section("ROM images") {
+                Section("ROM Images") {
                     ForEach(emulator.machine.romSlots) { image in
                         ROMImageSettingsRow(image: image)
                     }
@@ -898,7 +918,7 @@ private struct MediaSettingsPane: View {
 
     var body: some View {
         SettingsPane {
-            Section("Opening media") {
+            Section("Opening Media") {
                 Picker("Dropped files", selection: $emulator.mediaBehavior.openBehavior) {
                     ForEach(MediaOpenBehavior.allCases) { behavior in
                         Text(behavior.title).tag(behavior)
@@ -925,22 +945,16 @@ private struct MediaSettingsPane: View {
                         SettingsValueText(cartridgeStatusTitle, truncationMode: .middle)
                     }
 
-                    LabeledContent("Image") {
-                        HStack(spacing: 8) {
-                            SettingsValueText(cartridgeImageTitle, truncationMode: .middle)
-
-                            Spacer(minLength: 8)
-
-                            Button("Choose...") {
-                                chooseCartridge()
-                            }
-
-                            Button("Eject") {
+                    SettingsFilePathRow(
+                        title: "Image",
+                        value: cartridgeImageTitle,
+                        onChoose: chooseCartridge,
+                        trailing: [
+                            .init(title: "Eject", isEnabled: emulator.cartridgeStatus.isAttached) {
                                 emulator.detachCartridge()
                             }
-                            .disabled(!emulator.cartridgeStatus.isAttached)
-                        }
-                    }
+                        ]
+                    )
                 }
             }
 
@@ -1003,38 +1017,26 @@ private struct TapeSettingsSection: View {
         Section("Tape") {
             Toggle("Datasette", isOn: $emulator.tapeConfiguration.isDatasetteEnabled)
 
-            LabeledContent("Tape image") {
-                HStack(spacing: 8) {
-                    SettingsValueText(tapeImageTitle, truncationMode: .middle)
-
-                    Spacer(minLength: 8)
-
-                    Button("Choose...") {
-                        chooseTape()
-                    }
-                    .disabled(!emulator.tapeConfiguration.isDatasetteEnabled)
-
-                    Button("Eject") {
+            SettingsFilePathRow(
+                title: "Tape image",
+                value: tapeImageTitle,
+                onChoose: chooseTape,
+                trailing: [
+                    .init(title: "Eject", isEnabled: emulator.tapeImagePath != nil) {
                         emulator.detachTape()
                     }
-                    .disabled(emulator.tapeImagePath == nil)
-                }
-            }
+                ]
+            )
             .disabled(!emulator.tapeConfiguration.isDatasetteEnabled)
 
             LabeledContent("Transport") {
                 HStack(spacing: 6) {
                     ForEach(transportCommands) { command in
-                        Button {
+                        VMCIconButton(command.systemImage, help: command.title) {
                             emulator.controlTape(command)
-                        } label: {
-                            Image(systemName: command.systemImage)
-                                .frame(width: 18, height: 18)
                         }
-                        .help(command.title)
                     }
                 }
-                .buttonStyle(.borderless)
             }
             .disabled(!emulator.tapeConfiguration.isDatasetteEnabled)
 
@@ -1119,7 +1121,7 @@ private struct PrintingSettingsPane: View {
 
                         Spacer(minLength: 8)
 
-                        Button("Open Queue...") {
+                        Button("Open Queue…") {
                             openWindow(id: "print-queue")
                             emulator.refreshPrintQueue()
                         }
@@ -1329,19 +1331,17 @@ private struct NetworkSettingsPane: View {
                 }
             }
 
-            LabeledContent("Disk") {
-                HStack(spacing: 8) {
-                    SettingsValueText(qLinkDiskTitle,
-                                      lineLimit: 2,
-                                      truncationMode: .middle)
-                    Button {
-                        qLinkReloaded.chooseDisk(for: emulator.machine)
-                    } label: {
-                        Label("Choose Disk", systemImage: "externaldrive")
-                    }
-                    .disabled(qLinkReloaded.isConnecting)
+            SettingsFilePathRow(
+                title: "Disk",
+                value: qLinkDiskTitle,
+                valueLineLimit: 2,
+                chooseTitle: "Choose Disk",
+                chooseSystemImage: "externaldrive",
+                onChoose: {
+                    qLinkReloaded.chooseDisk(for: emulator.machine)
                 }
-            }
+            )
+            .disabled(qLinkReloaded.isConnecting)
 
             LabeledContent("Profiles") {
                 HStack(spacing: 8) {
@@ -1616,13 +1616,9 @@ private struct QLinkProfileManagerSheet: View {
             }
             .disabled(qLinkReloaded.isConnecting)
 
-            Button {
+            VMCIconButton("arrow.clockwise", help: "Refresh Q-Link profiles") {
                 refreshProfiles()
-            } label: {
-                Image(systemName: "arrow.clockwise")
-                    .frame(width: 18, height: 18)
             }
-            .help("Refresh Q-Link profiles")
         }
     }
 
@@ -2374,32 +2370,24 @@ private struct ControlSettingsPane: View {
                             }
                         } label: {
                             Image(systemName: "plus")
-                                .frame(width: 18, height: 18)
+                                .frame(width: 28, height: 26)
                         }
                         .menuStyle(.button)
+                        .buttonStyle(.borderless)
                         .help("Add control device")
 
-                        Button {
+                        VMCIconButton("minus", help: "Remove selected device") {
                             removalCandidate = selectedDevice
-                        } label: {
-                            Image(systemName: "minus")
-                                .frame(width: 18, height: 18)
                         }
                         .disabled(selectedDevice == nil)
-                        .help("Remove selected device")
 
-                        Button {
+                        VMCIconButton("pencil", help: "Edit selected device") {
                             editSelectedDevice()
-                        } label: {
-                            Image(systemName: "pencil")
-                                .frame(width: 18, height: 18)
                         }
                         .disabled(selectedDevice == nil)
-                        .help("Edit selected device")
 
                         Spacer()
                     }
-                    .buttonStyle(.borderless)
                 }
 
                 Spacer(minLength: 0)
@@ -2770,14 +2758,10 @@ private struct GameControllerJoystickMappingEditor: View {
         }
 
         LabeledContent("Dead zone") {
-            HStack(spacing: 10) {
-                Slider(value: $mapping.deadZone, in: 0.05...0.95)
-
-                Text(deadZoneText)
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-                    .frame(width: 44, alignment: .trailing)
-            }
+            SettingsSliderControl(value: $mapping.deadZone,
+                                  range: 0.05...0.95,
+                                  valueTitle: deadZoneText,
+                                  valueWidth: 44)
         }
 
         ForEach(JoystickAction.allCases) { action in
@@ -3117,7 +3101,7 @@ private struct DisplaySettingsPane: View {
                 }
             }
 
-            Section("Display chain") {
+            Section("Display Chain") {
                 VideoFilterPresetPicker(labelTitle: "Profile", labelSystemImage: "camera.filters")
                 VideoFilterSliders()
             }
@@ -3214,27 +3198,19 @@ private struct DriveSettingsSection: View {
 
     private var sharedFolderControls: some View {
         Group {
-            LabeledContent("Folder") {
-                HStack(spacing: 8) {
-                    SettingsValueText(sharedFolderTitle, truncationMode: .middle)
-
-                    Spacer(minLength: 8)
-
-                    Button("Choose...") {
-                        chooseSharedFolder()
-                    }
-
-                    Button("Reveal") {
+            SettingsFilePathRow(
+                title: "Folder",
+                value: sharedFolderTitle,
+                onChoose: chooseSharedFolder,
+                trailing: [
+                    .init(title: "Reveal", isEnabled: drive.sharedFolderPath != nil) {
                         revealSharedFolder()
-                    }
-                    .disabled(drive.sharedFolderPath == nil)
-
-                    Button("Clear") {
+                    },
+                    .init(title: "Clear", isEnabled: drive.sharedFolderPath != nil) {
                         drive.sharedFolderPath = nil
                     }
-                    .disabled(drive.sharedFolderPath == nil)
-                }
-            }
+                ]
+            )
             .disabled(!drive.isAttached)
 
             LabeledContent("Machine sees") {

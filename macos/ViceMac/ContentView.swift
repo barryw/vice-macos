@@ -7,7 +7,6 @@ struct ContentView: View {
     @EnvironmentObject private var emulator: EmulatorSession
     @EnvironmentObject private var aiSettings: AIAssistantSettings
     @EnvironmentObject private var qLinkReloaded: QLinkReloadedService
-    @State private var showingFilterPanel = false
     @State private var isFullScreen = false
     @State private var topChromeActive = false
     @State private var bottomChromeActive = false
@@ -52,21 +51,6 @@ struct ContentView: View {
 
                 InputToolbarControls()
 
-                if emulator.machine.capabilities.supportsVideoStandardSelection {
-                    Picker("Video", selection: $emulator.videoStandard) {
-                        ForEach(EmulatorSession.VideoStandard.allCases) { standard in
-                            Text(standard.rawValue).tag(standard)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(width: 118)
-                    .help("Video standard")
-                }
-
-                if emulator.machine.supportsDisplayOutputSelection {
-                    DisplayOutputToolbarPicker()
-                }
-
                 if emulator.machine.usesVIC20MemoryExpansion {
                     VIC20MemoryToolbarMenu()
                 }
@@ -75,7 +59,7 @@ struct ContentView: View {
             }
 
             ToolbarItemGroup {
-                DisplaySettingsToolbarControls(showingFilterPanel: $showingFilterPanel)
+                DisplayToolbarControls()
             }
 
             if qLinkReloaded.supports(machine: emulator.machine) {
@@ -214,12 +198,10 @@ private struct AIAssistantToolbarButton: View {
     @Binding var isVisible: Bool
 
     var body: some View {
-        Button {
-            isVisible.toggle()
-        } label: {
+        Toggle(isOn: $isVisible) {
             Label("Assistant", systemImage: "sparkles")
         }
-        .foregroundStyle(isVisible ? Color.accentColor : Color.primary)
+        .toggleStyle(.button)
         .help(isVisible ? "Hide assistant" : "Open assistant for \(emulator.machineDisplayName)")
     }
 }
@@ -360,7 +342,7 @@ private struct AIAssistantChatSidebar: View {
                                                toolUseCount: 0))
         draft = ""
         isRunning = true
-        statusText = "Working..."
+        statusText = "Working…"
 
         do {
             let result = try await activeConversationService().run(prompt: submittedPrompt,
@@ -513,7 +495,7 @@ private struct AIAssistantWorkingMessageRow: View {
         HStack(spacing: 10) {
             AIAssistantKITTScannerView()
 
-            Text("Working...")
+            Text("Working…")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -888,26 +870,14 @@ private struct EmulatorStatusBar: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            Label(emulator.machine.shortName, systemImage: "cpu")
-                .lineLimit(1)
-            if let modelTitle = emulator.machineModelStatusTitle {
-                StatusPill(text: modelTitle)
-                    .help(emulator.machineDisplayName)
+            HStack(spacing: 6) {
+                Label(emulator.machine.shortName, systemImage: "cpu")
+                    .lineLimit(1)
+
+                MachineInfoChip()
             }
-            if emulator.machine.capabilities.supportsVideoStandardSelection {
-                StatusPill(text: emulator.videoStandard.rawValue)
-            }
-            if emulator.machine.capabilities.supportsSIDModelSelection {
-                StatusPill(text: emulator.sidModel.title)
-            }
-            if emulator.machine.supportsDisplayOutputSelection {
-                StatusPill(text: emulator.displayOutput.statusTitle)
-            }
-            StatusPill(text: emulator.isPaused ? "Paused" : "READY")
-            StatusPill(text: emulator.filterSettings.preset.toolbarTitle)
-            if emulator.isRAMExpansionConfigured {
-                RAMExpansionStatusChip()
-            }
+            .help(emulator.machineDisplayName)
+
             ForEach(emulator.availableControlPorts) { port in
                 ControlPortStatusIndicator(port: port)
             }
@@ -925,6 +895,64 @@ private struct EmulatorStatusBar: View {
         .font(.callout)
         .padding(.horizontal, 14)
         .frame(height: MainWindowLayoutMetrics.statusBarHeight)
+    }
+}
+
+/// A single opt-in affordance for the machine's static configuration. The
+/// status bar used to permanently show model / video / SID / output / filter /
+/// RAM badges — all either duplicated by toolbar controls or by the emulated
+/// screen itself. They now live one tap away here, so the always-visible bar
+/// carries only what's live and actionable (ports, cartridge, drive LEDs).
+private struct MachineInfoChip: View {
+    @EnvironmentObject private var emulator: EmulatorSession
+    @State private var isPresented = false
+
+    var body: some View {
+        VMCIndicatorChip(isPresented: $isPresented, help: "Machine details") {
+            Image(systemName: "info.circle")
+                .foregroundStyle(.secondary)
+        } popover: {
+            MachineInfoPopover()
+        }
+    }
+}
+
+private struct MachineInfoPopover: View {
+    @EnvironmentObject private var emulator: EmulatorSession
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            VMCPopoverHeader(systemImage: "cpu",
+                             title: emulator.machineDisplayName,
+                             subtitle: "Current configuration")
+
+            VStack(alignment: .leading, spacing: 8) {
+                if let modelTitle = emulator.machineModelStatusTitle {
+                    infoRow("Model", modelTitle)
+                }
+                if emulator.machine.capabilities.supportsVideoStandardSelection {
+                    infoRow("Video", emulator.videoStandard.rawValue)
+                }
+                if emulator.machine.capabilities.supportsSIDModelSelection {
+                    infoRow("SID", emulator.sidModel.title)
+                }
+                if emulator.machine.supportsDisplayOutputSelection {
+                    infoRow("Output", emulator.displayOutput.statusTitle)
+                }
+                infoRow("Filter", emulator.filterSettings.preset.toolbarTitle)
+                if emulator.isRAMExpansionConfigured {
+                    infoRow("RAM", emulator.ramExpansion.displayTitle(for: emulator.machine))
+                }
+            }
+        }
+        .padding(16)
+        .frame(width: 260)
+    }
+
+    private func infoRow(_ title: String, _ value: String) -> some View {
+        VMCInfoRow(title, labelWidth: 60) {
+            SettingsValueText(value, color: .primary)
+        }
     }
 }
 
@@ -1458,48 +1486,6 @@ private struct DisplayToolbarControls: View {
         }
         .frame(width: 58)
         .help("Display size")
-    }
-}
-
-private struct DisplaySettingsToolbarControls: View {
-    @Binding var showingFilterPanel: Bool
-
-    var body: some View {
-        HStack(spacing: 8) {
-            DisplayToolbarControls()
-
-            VideoFilterPresetPicker()
-                .fixedSize()
-                .help("Display profile")
-
-            Button {
-                showingFilterPanel.toggle()
-            } label: {
-                ToolbarIconLabel(title: "Tune Display", systemImage: "slider.horizontal.3")
-            }
-            .frame(width: 58)
-            .help("Custom display settings")
-            .popover(isPresented: $showingFilterPanel, arrowEdge: .bottom) {
-                VideoFilterToolbarPanel()
-            }
-        }
-        .fixedSize()
-    }
-}
-
-private struct DisplayOutputToolbarPicker: View {
-    @EnvironmentObject private var emulator: EmulatorSession
-
-    var body: some View {
-        Picker("Display Output", selection: $emulator.displayOutput) {
-            ForEach(emulator.machine.displayOutputs) { output in
-                Label(output.toolbarTitle, systemImage: output.systemImage)
-                    .tag(output)
-            }
-        }
-        .pickerStyle(.segmented)
-        .frame(width: 96)
-        .help("C128 display output")
     }
 }
 
@@ -2196,17 +2182,6 @@ private struct SoundToolbarControls: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            if emulator.machine.capabilities.supportsSIDModelSelection {
-                Picker("SID", selection: $emulator.sidModel) {
-                    ForEach(EmulatorSession.SIDModel.allCases) { model in
-                        Text(model.title).tag(model)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 104)
-                .help("SID model")
-            }
-
             Button {
                 showingVolumePopover.toggle()
             } label: {
@@ -2329,59 +2304,13 @@ private struct VerticalVolumeSlider: NSViewRepresentable {
     }
 }
 
-private struct StatusPill: View {
-    let text: String
-
-    var body: some View {
-        Text(text)
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(.quaternary, in: Capsule())
-    }
-}
-
-private struct RAMExpansionStatusChip: View {
-    @EnvironmentObject private var emulator: EmulatorSession
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "memorychip")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(activityColor)
-                .symbolRenderingMode(.hierarchical)
-
-            Text(emulator.ramExpansion.chipTitle)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 3)
-        .background(Color.secondary.opacity(0.13), in: Capsule())
-        .help(helpText)
-    }
-
-    private var activityColor: Color {
-        .secondary.opacity(0.55)
-    }
-
-    private var helpText: String {
-        "\(emulator.ramExpansion.displayTitle(for: emulator.machine)) configured"
-    }
-}
-
 private struct CartridgeIndicator: View {
     @EnvironmentObject private var emulator: EmulatorSession
     @State private var isPresented = false
 
     var body: some View {
-        Button {
-            isPresented.toggle()
-        } label: {
+        VMCIndicatorChip(isPresented: $isPresented,
+                         help: emulator.cartridgeStatus.isAttached ? "Cartridge attached" : "No cartridge attached") {
             HStack(spacing: 6) {
                 Circle()
                     .fill(emulator.cartridgeStatus.isAttached ? .green : Color.secondary.opacity(0.32))
@@ -2395,14 +2324,7 @@ private struct CartridgeIndicator: View {
                 Text("Cart")
                     .foregroundStyle(.secondary)
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .background(isPresented ? Color.secondary.opacity(0.18) : Color.clear, in: Capsule())
-        .help(emulator.cartridgeStatus.isAttached ? "Cartridge attached" : "No cartridge attached")
-        .popover(isPresented: $isPresented, arrowEdge: .bottom) {
+        } popover: {
             CartridgePopover(isPresented: $isPresented)
         }
     }
@@ -2414,21 +2336,9 @@ private struct CartridgePopover: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 10) {
-                Image(systemName: "memorychip")
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Cartridge")
-                        .font(.headline)
-                    Text(statusTitle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-            }
+            VMCPopoverHeader(systemImage: "memorychip",
+                             title: "Cartridge",
+                             subtitle: statusTitle)
 
             VStack(alignment: .leading, spacing: 8) {
                 VMCInfoRow("Image") {
@@ -2472,7 +2382,7 @@ private struct CartridgePopover: View {
                 Button {
                     openCartridgePanel()
                 } label: {
-                    Label(emulator.cartridgeStatus.isAttached ? "Replace..." : "Attach...",
+                    Label(emulator.cartridgeStatus.isAttached ? "Replace…" : "Attach…",
                           systemImage: "memorychip")
                 }
                 .buttonStyle(.borderedProminent)

@@ -51,14 +51,14 @@ struct ViceMacApp: App {
             }
 
             CommandGroup(after: .appInfo) {
-                Button("Check for Updates...") {
+                Button("Check for Updates…") {
                     updaterController.checkForUpdates(nil)
                 }
                 .disabled(!updaterController.updater.canCheckForUpdates)
             }
 
             CommandGroup(replacing: .newItem) {
-                Button("Open SID...") {
+                Button("Open SID…") {
                     vsid.openSIDPanel()
                 }
                 .keyboardShortcut("o", modifiers: [.command])
@@ -113,7 +113,7 @@ struct ViceMacApp: App {
             }
 
             CommandGroup(after: .appInfo) {
-                Button("Check for Updates...") {
+                Button("Check for Updates…") {
                     updaterController.checkForUpdates(nil)
                 }
                 .disabled(!updaterController.updater.canCheckForUpdates)
@@ -121,27 +121,27 @@ struct ViceMacApp: App {
 
             CommandGroup(replacing: .newItem) {
                 if let diskImageManagerActions {
-                    Button("New Disk Image...") {
+                    Button("New Disk Image…") {
                         diskImageManagerActions.createImage()
                     }
                     .keyboardShortcut("n", modifiers: [.command])
 
-                    Button("Open Disk Image...") {
+                    Button("Open Disk Image…") {
                         diskImageManagerActions.openImage()
                     }
                     .keyboardShortcut("o", modifiers: [.command])
                 } else {
-                    Button("Open Media...") {
+                    Button("Open Media…") {
                         MediaOpenPanel.openMedia(for: emulator, autorun: false)
                     }
                     .keyboardShortcut("o", modifiers: [.command])
 
-                    Button("Open and Run Media...") {
+                    Button("Open and Run Media…") {
                         MediaOpenPanel.openMedia(for: emulator, autorun: true)
                     }
                     .keyboardShortcut("o", modifiers: [.command, .option])
 
-                    Button("Load Snapshot...") {
+                    Button("Load Snapshot…") {
                         MediaOpenPanel.loadSnapshot(for: emulator)
                     }
                     .keyboardShortcut("o", modifiers: [.command, .shift])
@@ -155,12 +155,12 @@ struct ViceMacApp: App {
                 .keyboardShortcut("s", modifiers: [.command])
                 .disabled(diskImageManagerActions?.canSaveActiveImage != true)
 
-                Button("Save Snapshot...") {
+                Button("Save Snapshot…") {
                     MediaOpenPanel.saveSnapshot(for: emulator)
                 }
                 .keyboardShortcut("s", modifiers: [.command, .option])
 
-                Button("Export Screenshot...") {
+                Button("Export Screenshot…") {
                     MediaOpenPanel.exportScreenshot(for: emulator)
                 }
             }
@@ -208,17 +208,17 @@ struct ViceMacApp: App {
             }
 
             CommandMenu("Media") {
-                Button("Media Library...") {
+                Button("Media Library…") {
                     openWindow(id: MediaLibraryWindow.id)
                 }
                 .keyboardShortcut("l", modifiers: [.command, .shift])
 
-                Button("Disk Image Manager...") {
+                Button("Disk Image Manager…") {
                     openWindow(id: DiskImageManagerWindow.id)
                 }
                 .keyboardShortcut("d", modifiers: [.command, .shift])
 
-                Button("Print Queue...") {
+                Button("Print Queue…") {
                     openWindow(id: PrintQueueWindow.id)
                     emulator.refreshPrintQueue()
                 }
@@ -227,22 +227,22 @@ struct ViceMacApp: App {
                 if let diskImageManagerActions {
                     Divider()
 
-                    Button("Import File...") {
+                    Button("Import File…") {
                         diskImageManagerActions.importProgram()
                     }
                     .disabled(!diskImageManagerActions.canImportProgram)
 
-                    Button("Export Selected File...") {
+                    Button("Export Selected File…") {
                         diskImageManagerActions.exportSelectedFile()
                     }
                     .disabled(!diskImageManagerActions.canExportSelectedFile)
 
-                    Button("Clone Optimized Image...") {
+                    Button("Clone Optimized Image…") {
                         diskImageManagerActions.cloneOptimizedImage()
                     }
                     .disabled(!diskImageManagerActions.canCloneOptimizedImage)
 
-                    Button("Rename Selected File...") {
+                    Button("Rename Selected File…") {
                         diskImageManagerActions.renameSelectedFile()
                     }
                     .disabled(!diskImageManagerActions.canRenameSelectedFile)
@@ -265,7 +265,7 @@ struct ViceMacApp: App {
                         } else if configuration.driveType.slotCount > 1 {
                             Menu("Attach Disk") {
                                 ForEach(configuration.driveType.driveNumbers, id: \.self) { driveNumber in
-                                    Button("Drive \(configuration.unit):\(driveNumber)...") {
+                                    Button("Drive \(configuration.unit):\(driveNumber)…") {
                                         MediaOpenPanel.openDisk(for: emulator,
                                                                 unit: configuration.unit,
                                                                 driveNumber: driveNumber,
@@ -276,7 +276,7 @@ struct ViceMacApp: App {
 
                             Menu("Attach and Run Disk") {
                                 ForEach(configuration.driveType.driveNumbers, id: \.self) { driveNumber in
-                                    Button("Drive \(configuration.unit):\(driveNumber)...") {
+                                    Button("Drive \(configuration.unit):\(driveNumber)…") {
                                         MediaOpenPanel.openDisk(for: emulator,
                                                                 unit: configuration.unit,
                                                                 driveNumber: driveNumber,
@@ -285,13 +285,13 @@ struct ViceMacApp: App {
                                 }
                             }
                         } else {
-                            Button("Attach Disk...") {
+                            Button("Attach Disk…") {
                                 MediaOpenPanel.openDisk(for: emulator,
                                                         unit: configuration.unit,
                                                         autorun: false)
                             }
 
-                            Button("Attach and Run Disk...") {
+                            Button("Attach and Run Disk…") {
                                 MediaOpenPanel.openDisk(for: emulator,
                                                         unit: configuration.unit,
                                                         autorun: true)
@@ -339,7 +339,7 @@ struct ViceMacApp: App {
                 if emulator.machine.capabilities.supportsCartridges {
                     Divider()
 
-                    Button(emulator.cartridgeStatus.isAttached ? "Replace Cartridge..." : "Attach Cartridge...") {
+                    Button(emulator.cartridgeStatus.isAttached ? "Replace Cartridge…" : "Attach Cartridge…") {
                         MediaOpenPanel.openCartridge(for: emulator)
                     }
 
@@ -360,7 +360,7 @@ struct ViceMacApp: App {
                 .keyboardShortcut("q", modifiers: [.command, .shift])
                 .disabled(!qLinkReloaded.canConnect(machine: emulator.machine))
 
-                Button("Choose Q-Link Disk...") {
+                Button("Choose Q-Link Disk…") {
                     qLinkReloaded.chooseDisk(for: emulator.machine)
                 }
                 .disabled(!qLinkReloaded.supports(machine: emulator.machine) || qLinkReloaded.isConnecting)
@@ -372,7 +372,7 @@ struct ViceMacApp: App {
             }
 
             CommandMenu("Debug") {
-                Button("Debugger...") {
+                Button("Debugger…") {
                     openWindow(id: DebuggerWindow.id)
                 }
                 .keyboardShortcut("y", modifiers: [.command, .shift])
@@ -413,10 +413,10 @@ struct ViceMacApp: App {
 
                 Divider()
 
-                Button("Toggle Full Screen") {
+                Button("Full Screen") {
                     WindowActions.toggleFullScreen()
                 }
-                .keyboardShortcut("f", modifiers: [.command])
+                .keyboardShortcut("f", modifiers: [.control, .command])
             }
         }
 
@@ -852,6 +852,7 @@ private enum PrintQueueWindow {
 private struct PrintQueueView: View {
     @EnvironmentObject private var emulator: EmulatorSession
     @State private var selectedPageID: PrinterSpoolPage.ID?
+    @State private var showingClearConfirmation = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -886,21 +887,30 @@ private struct PrintQueueView: View {
 
             Spacer()
 
-            Button("Save as PDF...") {
+            Button("Save as PDF…") {
                 savePDF()
             }
             .disabled(emulator.printSpoolPages.isEmpty)
 
-            Button("Print...") {
+            Button("Print…") {
                 emulator.printQueuedPages()
             }
             .disabled(emulator.printSpoolPages.isEmpty)
 
             Button("Clear") {
-                emulator.clearPrintQueue()
-                selectedPageID = nil
+                showingClearConfirmation = true
             }
             .disabled(emulator.printSpoolPages.isEmpty)
+            .confirmationDialog("Clear the print queue?",
+                                isPresented: $showingClearConfirmation,
+                                titleVisibility: .visible) {
+                Button("Clear Queue", role: .destructive) {
+                    emulator.clearPrintQueue()
+                    selectedPageID = nil
+                }
+            } message: {
+                Text("This permanently discards all pages waiting in the print queue.")
+            }
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 12)
@@ -1662,16 +1672,15 @@ private enum QLinkReloadedDrivePreparation: Equatable {
 private enum MediaOpenPanel {
     static func openMedia(for emulator: EmulatorSession, autorun: Bool) {
         let extensions = EmulatorMediaFile.supportedFilenameExtensions(for: emulator.machine)
-        let panel = openPanel(title: autorun ? "Open and Run Media" : "Open Media",
-                              message: "Choose media for \(emulator.machineDisplayName).",
-                              prompt: autorun ? "Open and Run" : "Open",
-                              filenameExtensions: extensions)
-
-        guard panel.runModal() == .OK else {
+        guard let urls = AppFilePanel.chooseFiles(title: autorun ? "Open and Run Media" : "Open Media",
+                                                  message: "Choose media for \(emulator.machineDisplayName).",
+                                                  prompt: autorun ? "Open and Run" : "Open",
+                                                  allowsMultipleSelection: true,
+                                                  allowedContentTypes: contentTypes(for: extensions)) else {
             return
         }
 
-        emulator.openMedia(urls: panel.urls, autorun: autorun)
+        emulator.openMedia(urls: urls, autorun: autorun)
     }
 
     static func openDisk(for emulator: EmulatorSession,
@@ -1691,13 +1700,10 @@ private enum MediaOpenPanel {
         let destinationTitle = configuration.driveType.slotCount > 1
             ? "drive \(unit):\(driveNumber)"
             : "drive \(unit)"
-        let panel = openPanel(title: configuration.storageKind == .hardDriveImage ? "Attach Hard Drive Image" : "Attach Disk",
-                              message: "Choose a \(configuration.driveType.supportedDiskImageDescription) image for \(destinationTitle).",
-                              prompt: autorun ? "Attach and Run" : "Attach",
-                              filenameExtensions: extensions)
-
-        guard panel.runModal() == .OK,
-              let url = panel.url else {
+        guard let url = AppFilePanel.chooseFiles(title: configuration.storageKind == .hardDriveImage ? "Attach Hard Drive Image" : "Attach Disk",
+                                                 message: "Choose a \(configuration.driveType.supportedDiskImageDescription) image for \(destinationTitle).",
+                                                 prompt: autorun ? "Attach and Run" : "Attach",
+                                                 allowedContentTypes: contentTypes(for: extensions))?.first else {
             return
         }
 
@@ -1708,13 +1714,10 @@ private enum MediaOpenPanel {
     }
 
     static func openCartridge(for emulator: EmulatorSession) {
-        let panel = openPanel(title: "Attach Cartridge",
-                              message: "Choose a CRT cartridge image for \(emulator.machineDisplayName).",
-                              prompt: "Attach",
-                              filenameExtensions: CartridgeImageFileType.allCases.map(\.rawValue))
-
-        guard panel.runModal() == .OK,
-              let url = panel.url else {
+        guard let url = AppFilePanel.chooseFiles(title: "Attach Cartridge",
+                                                 message: "Choose a CRT cartridge image for \(emulator.machineDisplayName).",
+                                                 prompt: "Attach",
+                                                 allowedContentTypes: contentTypes(for: CartridgeImageFileType.allCases.map(\.rawValue)))?.first else {
             return
         }
 
@@ -1722,13 +1725,10 @@ private enum MediaOpenPanel {
     }
 
     static func loadSnapshot(for emulator: EmulatorSession) {
-        let panel = openPanel(title: "Load Snapshot",
-                              message: "Choose a VICE snapshot for \(emulator.machineDisplayName).",
-                              prompt: "Load",
-                              filenameExtensions: SnapshotFileType.allCases.map(\.rawValue))
-
-        guard panel.runModal() == .OK,
-              let url = panel.url else {
+        guard let url = AppFilePanel.chooseFiles(title: "Load Snapshot",
+                                                 message: "Choose a VICE snapshot for \(emulator.machineDisplayName).",
+                                                 prompt: "Load",
+                                                 allowedContentTypes: contentTypes(for: SnapshotFileType.allCases.map(\.rawValue)))?.first else {
             return
         }
 
@@ -1765,25 +1765,6 @@ private enum MediaOpenPanel {
             ? url
             : url.appendingPathExtension("png")
         emulator.exportScreenshot(url: screenshotURL)
-    }
-
-    private static func openPanel(title: String,
-                                  message: String,
-                                  prompt: String,
-                                  filenameExtensions: [String]) -> NSOpenPanel {
-        let panel = NSOpenPanel()
-        panel.title = title
-        panel.message = message
-        panel.prompt = prompt
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = title.hasPrefix("Open")
-        panel.allowedContentTypes = contentTypes(for: filenameExtensions)
-
-        NSApp.activate(ignoringOtherApps: true)
-        panel.center()
-
-        return panel
     }
 
     private static func contentTypes(for filenameExtensions: [String]) -> [UTType] {

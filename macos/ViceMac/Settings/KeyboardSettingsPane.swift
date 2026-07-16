@@ -95,23 +95,23 @@ struct KeyboardSettingsPane: View {
 
                 SettingsTableContainer(minHeight: 255) {
                     Table(filteredEntries, selection: $selectedEntryID) {
-                        TableColumn("Mac key") { entry in
+                        TableColumn("Mac Key") { entry in
                             Text(ViceMacKeyMapper.displayTitle(forKeySymbol: entry.symbol))
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
 
-                        TableColumn("VICE key") { entry in
+                        TableColumn("VICE Key") { entry in
                             Text(document?.targetDisplayTitle(for: entry) ?? "")
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
 
-                        TableColumn("Mac modifiers") { entry in
+                        TableColumn("Mac Modifiers") { entry in
                             Text(entry.hostModifierTitle.isEmpty ? "-" : entry.hostModifierTitle)
                                 .foregroundStyle(entry.hostModifierTitle.isEmpty ? .tertiary : .secondary)
                         }
                         .width(min: 105, ideal: 112)
 
-                        TableColumn("VICE modifiers") { entry in
+                        TableColumn("VICE Modifiers") { entry in
                             Text(entry.emulatedModifierTitle.isEmpty ? "-" : entry.emulatedModifierTitle)
                                 .foregroundStyle(entry.emulatedModifierTitle.isEmpty ? .tertiary : .secondary)
                         }
@@ -974,7 +974,7 @@ private struct KeyboardMapEntryEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var entry: VICEKeymapEntry
     @State private var flags: Int
-    @State private var showsVICECompatibility = false
+    @State private var showsAdvanced = false
     @State private var saveErrorMessage: String?
 
     let document: VICEKeymapDocument
@@ -995,9 +995,9 @@ private struct KeyboardMapEntryEditorSheet: View {
     var body: some View {
         SettingsSheetLayout(title: isNew ? "Add keyboard mapping" : "Edit keyboard mapping",
                             width: 680,
-                            height: 680) {
+                            minHeight: 460) {
             Form {
-                Section("Mac key") {
+                Section("Mac Key") {
                     LabeledContent("Key") {
                         HStack(spacing: 10) {
                             KeySymbolCaptureButton(symbol: $entry.symbol)
@@ -1009,27 +1009,38 @@ private struct KeyboardMapEntryEditorSheet: View {
                     }
                 }
 
-                Section("VICE key") {
+                Section("VICE Key") {
                     KeyboardTargetPicker(machine: machine,
                                          document: document,
                                          entry: $entry)
                 }
 
-                Section("Mac modifiers") {
-                    Toggle("Shift must be held on the Mac", isOn: flagBinding(VICEKeymapFlags.hostShift))
-                    Toggle("Option must be held on the Mac", isOn: flagBinding(VICEKeymapFlags.hostOption))
-                    Toggle("Control must be held on the Mac", isOn: flagBinding(VICEKeymapFlags.hostControl))
-                }
-
-                Section("VICE modifiers") {
-                    Toggle("Hold VICE Shift with this key", isOn: flagBinding(VICEKeymapFlags.emulatedShift))
-                    Toggle("Hold Commodore with this key", isOn: flagBinding(VICEKeymapFlags.emulatedCBM))
-                    Toggle("Hold VICE Control with this key", isOn: flagBinding(VICEKeymapFlags.emulatedControl))
-                }
-
                 Section("Behavior") {
-                    Toggle("Works in either Mac shift state", isOn: flagBinding(VICEKeymapFlags.anyShiftState))
-                    DisclosureGroup("VICE compatibility", isExpanded: $showsVICECompatibility) {
+                    LabeledContent("Summary") {
+                        Text(decodedFlagsTitle)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    DisclosureGroup("Advanced options", isExpanded: $showsAdvanced) {
+                        Text("Hold on the Mac")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        Toggle("Shift must be held on the Mac", isOn: flagBinding(VICEKeymapFlags.hostShift))
+                        Toggle("Option must be held on the Mac", isOn: flagBinding(VICEKeymapFlags.hostOption))
+                        Toggle("Control must be held on the Mac", isOn: flagBinding(VICEKeymapFlags.hostControl))
+
+                        Text("Hold on the emulated machine")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        Toggle("Hold VICE Shift with this key", isOn: flagBinding(VICEKeymapFlags.emulatedShift))
+                        Toggle("Hold Commodore with this key", isOn: flagBinding(VICEKeymapFlags.emulatedCBM))
+                        Toggle("Hold VICE Control with this key", isOn: flagBinding(VICEKeymapFlags.emulatedControl))
+
+                        Text("Compatibility")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        Toggle("Works in either Mac shift state", isOn: flagBinding(VICEKeymapFlags.anyShiftState))
                         Toggle("Deshift when needed", isOn: flagBinding(VICEKeymapFlags.deshift))
                         Toggle("Alternate mapping continues below", isOn: flagBinding(VICEKeymapFlags.continues))
                         Toggle("This is Shift Lock", isOn: flagBinding(VICEKeymapFlags.shiftLock))
@@ -1048,12 +1059,6 @@ private struct KeyboardMapEntryEditorSheet: View {
                                 .font(.caption.monospaced())
                                 .foregroundStyle(.secondary)
                         }
-                    }
-
-                    LabeledContent("Summary") {
-                        Text(decodedFlagsTitle)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
 

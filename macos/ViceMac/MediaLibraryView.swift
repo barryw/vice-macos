@@ -93,9 +93,6 @@ struct MediaLibraryView: View {
                         MediaLibraryItemRow(item: item)
                             .tag(item.id)
                             .contentShape(Rectangle())
-                            .onTapGesture {
-                                model.selectedItemID = item.id
-                            }
                             .onTapGesture(count: 2) {
                                 model.launch(item, behavior: .run, emulator: emulator)
                             }
@@ -165,7 +162,7 @@ struct MediaLibraryView: View {
             Button {
                 model.beginMetadataUpdate(item)
             } label: {
-                Label("Update Metadata...", systemImage: "sparkle.magnifyingglass")
+                Label("Update Metadata…", systemImage: "sparkle.magnifyingglass")
             }
             .disabled(!canUpdateMetadata)
 
@@ -186,7 +183,7 @@ struct MediaLibraryView: View {
             model.reveal(item)
         }
 
-        Button("Remove from Library...", role: .destructive) {
+        Button("Remove from Library…", role: .destructive) {
             model.confirmRemove(item)
         }
     }
@@ -595,9 +592,9 @@ private struct MediaLibraryMetadataUpdateSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        SettingsSheetLayout(width: 680, minHeight: 500) {
             header
-
+        } content: {
             if availableSnapshots.isEmpty {
                 VMCEmptyState("No Metadata Provider",
                               systemImage: "network.slash",
@@ -606,12 +603,36 @@ private struct MediaLibraryMetadataUpdateSheet: View {
             } else {
                 searchControls
                 resultsList
-                footer
+            }
+        } actionsLeading: {
+            if !availableSnapshots.isEmpty {
+                Text("Artwork: \(artworkPreference.title)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        } actions: {
+            if !availableSnapshots.isEmpty {
+                Button("Cancel", role: .cancel) {
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
+
+                Button {
+                    Task {
+                        await applySelectedResult(nil)
+                    }
+                } label: {
+                    if isApplying {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Text("Apply")
+                    }
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(selectedResult == nil || isSearching || isApplying)
             }
         }
-        .padding(20)
-        .frame(width: 680)
-        .frame(minHeight: 500)
         .task(id: searchRequest) {
             await debouncedSearch(for: searchRequest)
         }
@@ -668,7 +689,7 @@ private struct MediaLibraryMetadataUpdateSheet: View {
     private var resultsList: some View {
         Group {
             if isSearching {
-                ProgressView("Searching...")
+                ProgressView("Searching…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if results.isEmpty {
                 VMCEmptyState("No Matches",
@@ -696,36 +717,6 @@ private struct MediaLibraryMetadataUpdateSheet: View {
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .strokeBorder(.separator.opacity(0.55))
-        }
-    }
-
-    private var footer: some View {
-        HStack(spacing: 10) {
-            Text("Artwork: \(artworkPreference.title)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            Spacer()
-
-            Button("Cancel", role: .cancel) {
-                dismiss()
-            }
-            .keyboardShortcut(.cancelAction)
-
-            Button {
-                Task {
-                    await applySelectedResult(nil)
-                }
-            } label: {
-                if isApplying {
-                    ProgressView()
-                        .controlSize(.small)
-                } else {
-                    Text("Apply")
-                }
-            }
-            .keyboardShortcut(.defaultAction)
-            .disabled(selectedResult == nil || isSearching || isApplying)
         }
     }
 
@@ -843,7 +834,7 @@ private struct MediaLibraryMetadataUpdateSheet: View {
 
         isApplying = true
         errorText = nil
-        statusText = "Applying metadata..."
+        statusText = "Applying metadata…"
 
         do {
             let client = try metadataClient(for: result.providerID)
@@ -992,7 +983,7 @@ private struct MediaLibraryDetailView: View {
             .help(item.isFavorite ? "Remove favorite" : "Favorite")
 
             Menu {
-                Button("Import Media...") {
+                Button("Import Media…") {
                     onImport()
                 }
 
@@ -1004,7 +995,7 @@ private struct MediaLibraryDetailView: View {
                     Button {
                         onUpdateMetadata()
                     } label: {
-                        Label("Update Metadata...", systemImage: "sparkle.magnifyingglass")
+                        Label("Update Metadata…", systemImage: "sparkle.magnifyingglass")
                     }
                 }
 
@@ -1016,7 +1007,7 @@ private struct MediaLibraryDetailView: View {
                     }
                 }
 
-                Button("Remove from Library...", role: .destructive) {
+                Button("Remove from Library…", role: .destructive) {
                     onRemove()
                 }
             } label: {
@@ -1143,22 +1134,12 @@ private struct MediaLibraryEmptyListView: View {
     let onImport: () -> Void
 
     var body: some View {
-        VStack(spacing: 10) {
-            Spacer()
-
-            Image(systemName: "externaldrive.badge.plus")
-                .font(.system(size: 34, weight: .semibold))
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(.secondary)
-
-            Text("No Media")
-                .font(.headline)
-
-            Button("Import Media...") {
+        VMCEmptyState("No Media",
+                      systemImage: "externaldrive.badge.plus",
+                      description: "Import disk images, tapes, or programs to build your library.") {
+            Button("Import Media…") {
                 onImport()
             }
-
-            Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -1168,16 +1149,10 @@ private struct MediaLibraryEmptyDetailView: View {
     let onImport: () -> Void
 
     var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "books.vertical")
-                .font(.system(size: 42, weight: .semibold))
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(.secondary)
-
-            Text("Media Library")
-                .font(.title3.weight(.semibold))
-
-            Button("Import Media...") {
+        VMCEmptyState("Media Library",
+                      systemImage: "books.vertical",
+                      description: "Select an item to see its details, or import new media.") {
+            Button("Import Media…") {
                 onImport()
             }
         }

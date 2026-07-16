@@ -11,9 +11,8 @@ struct DriveIndicator: View {
         TimelineView(.periodic(from: .now, by: 0.35)) { context in
             let blinkOn = Int(context.date.timeIntervalSinceReferenceDate / 0.35).isMultiple(of: 2)
 
-            Button {
-                isPresented.toggle()
-            } label: {
+            VMCIndicatorChip(isPresented: $isPresented,
+                             help: drive.isSharedFolder ? "Drive \(drive.unit) Shared Mac Folder" : "Drive \(drive.unit)") {
                 HStack(spacing: 6) {
                     if drive.isSharedFolder {
                         Image(systemName: "folder.fill")
@@ -49,14 +48,7 @@ struct DriveIndicator: View {
                             .baselineOffset(-1)
                     }
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .contentShape(Capsule())
-            }
-            .buttonStyle(.plain)
-            .background(isPresented ? Color.secondary.opacity(0.18) : Color.clear, in: Capsule())
-            .help(drive.isSharedFolder ? "Drive \(drive.unit) Shared Mac Folder" : "Drive \(drive.unit)")
-            .popover(isPresented: $isPresented, arrowEdge: .bottom) {
+            } popover: {
                 DrivePopover(isPresented: $isPresented, drive: drive)
             }
         }
@@ -118,21 +110,9 @@ private struct DrivePopover: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 10) {
-                Image(systemName: drive.isSharedFolder ? "folder" : "externaldrive")
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Drive \(drive.unit)")
-                        .font(.headline)
-                    Text(subtitle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-            }
+            VMCPopoverHeader(systemImage: drive.isSharedFolder ? "folder" : "externaldrive",
+                             title: "Drive \(drive.unit)",
+                             subtitle: subtitle)
 
             if drive.isSharedFolder {
                 sharedFolderContent
@@ -357,12 +337,7 @@ private struct DriveSlotPopoverRow: View {
             Spacer(minLength: 8)
 
             if let diskKind {
-                Text(diskKind)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
-                    .background(.quaternary, in: Capsule())
+                VMCStatusBadge(diskKind)
             }
 
             Button {

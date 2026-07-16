@@ -106,12 +106,7 @@ private struct MetadataProviderListRow: View {
 
             Spacer(minLength: 8)
 
-            Text(snapshot.statusTitle)
-                .font(.caption2.weight(.medium))
-                .foregroundStyle(statusColor)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 3)
-                .background(statusColor.opacity(0.12), in: Capsule())
+            VMCStatusBadge(snapshot.statusTitle, color: statusColor)
         }
         .padding(.vertical, 4)
     }
@@ -239,22 +234,16 @@ private struct MetadataImportedDatabaseSection: View {
 
     var body: some View {
         Section("Database") {
-            LabeledContent("File") {
-                HStack(spacing: 8) {
-                    SettingsValueText(databaseTitle, truncationMode: .middle)
-
-                    Spacer(minLength: 8)
-
-                    Button("Choose...") {
-                        chooseDatabase()
-                    }
-
-                    Button("Clear") {
+            SettingsFilePathRow(
+                title: "File",
+                value: databaseTitle,
+                onChoose: chooseDatabase,
+                trailing: [
+                    .init(title: "Clear", isEnabled: snapshot.configuration.databasePath != nil) {
                         metadataSettings.setDatabaseURL(nil, for: snapshot.providerID)
                     }
-                    .disabled(snapshot.configuration.databasePath == nil)
-                }
-            }
+                ]
+            )
 
             LabeledContent("Last import") {
                 SettingsValueText(lastImportTitle)
@@ -334,14 +323,10 @@ private struct MetadataAPISettingsSection: View {
                         credentialField(field)
                             .textFieldStyle(.roundedBorder)
 
-                        Button {
+                        VMCIconButton("xmark.circle", help: "Clear \(field.title)") {
                             metadataSettings.setCredential("", providerID: snapshot.providerID, field: field)
-                        } label: {
-                            Label("Clear \(field.title)", systemImage: "xmark.circle")
                         }
-                        .labelStyle(.iconOnly)
                         .disabled(metadataSettings.credential(providerID: snapshot.providerID, field: field).isEmpty)
-                        .help("Clear \(field.title)")
                     }
                 }
             }

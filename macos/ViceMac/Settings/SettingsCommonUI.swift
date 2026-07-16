@@ -97,6 +97,18 @@ enum SettingsPaneID: String, CaseIterable, Identifiable {
             return "sparkles"
         }
     }
+
+    /// Power-user / niche panes. Grouped under an "Advanced" heading in the
+    /// sidebar so everyday machine settings carry the visual weight and these
+    /// don't sit at the same depth as Machine or Sound.
+    var isAdvanced: Bool {
+        switch self {
+        case .metadata, .network, .ai:
+            return true
+        default:
+            return false
+        }
+    }
 }
 
 enum SettingsPaneCatalog {
@@ -208,36 +220,58 @@ struct SettingsTableContainer<Content: View, Footer: View>: View {
     }
 }
 
-struct SettingsSheetLayout<Content: View, Actions: View>: View {
-    let title: String
+struct SettingsSheetLayout<Header: View, Content: View, ActionsLeading: View, Actions: View>: View {
     let width: CGFloat
     let height: CGFloat?
     let minHeight: CGFloat?
+    private let header: Header
     private let content: Content
+    private let actionsLeading: ActionsLeading
     private let actions: Actions
 
+    /// Plain-title header, as used by every pre-existing caller.
     init(title: String,
          width: CGFloat,
          height: CGFloat? = nil,
          minHeight: CGFloat? = nil,
          @ViewBuilder content: () -> Content,
-         @ViewBuilder actions: () -> Actions) {
-        self.title = title
+         @ViewBuilder actionsLeading: () -> ActionsLeading = { EmptyView() },
+         @ViewBuilder actions: () -> Actions) where Header == Text {
         self.width = width
         self.height = height
         self.minHeight = minHeight
+        self.header = Text(title).font(.title3.weight(.semibold))
         self.content = content()
+        self.actionsLeading = actionsLeading()
+        self.actions = actions()
+    }
+
+    /// Custom header (e.g. `VMCSheetHeader`) for sheets whose header is more
+    /// than a bare title.
+    init(width: CGFloat,
+         height: CGFloat? = nil,
+         minHeight: CGFloat? = nil,
+         @ViewBuilder header: () -> Header,
+         @ViewBuilder content: () -> Content,
+         @ViewBuilder actionsLeading: () -> ActionsLeading = { EmptyView() },
+         @ViewBuilder actions: () -> Actions) {
+        self.width = width
+        self.height = height
+        self.minHeight = minHeight
+        self.header = header()
+        self.content = content()
+        self.actionsLeading = actionsLeading()
         self.actions = actions()
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(title)
-                .font(.title3.weight(.semibold))
+            header
 
             content
 
             HStack {
+                actionsLeading
                 Spacer()
                 actions
             }
@@ -273,20 +307,75 @@ struct SettingsValueText: View {
     }
 }
 
+struct SettingsFilePathRow: View {
+    struct Action: Identifiable {
+        let id = UUID()
+        let title: String
+        var isEnabled = true
+        var role: ButtonRole? = nil
+        let action: () -> Void
+    }
+
+    let title: String
+    let value: String
+    var valueLineLimit: Int? = 1
+    var chooseTitle: String = "Choose…"
+    // ponytail: no separate icon-only path here; the one row that needs an icon (Q-Link disk) opts in via chooseSystemImage.
+    var chooseSystemImage: String? = nil
+    let onChoose: () -> Void
+    var trailing: [Action] = []
+
+    var body: some View {
+        LabeledContent(title) {
+            HStack(spacing: 8) {
+                SettingsValueText(value, lineLimit: valueLineLimit, truncationMode: .middle)
+
+                Spacer(minLength: 8)
+
+                chooseButton
+
+                ForEach(trailing) { action in
+                    Button(action.title, role: action.role, action: action.action)
+                        .disabled(!action.isEnabled)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var chooseButton: some View {
+        if let chooseSystemImage {
+            Button(action: onChoose) {
+                Label(chooseTitle, systemImage: chooseSystemImage)
+            }
+        } else {
+            Button(chooseTitle, action: onChoose)
+        }
+    }
+}
+
 struct SettingsSliderControl: View {
     @Binding var value: Double
     let range: ClosedRange<Double>
     let valueTitle: String
+    var leadingTitle: String?
+    var leadingWidth: CGFloat = 112
     var isEnabled = true
     var valueWidth: CGFloat = 48
     var onEditingChanged: (Bool) -> Void = { _ in }
 
     var body: some View {
         HStack(spacing: 10) {
+            if let leadingTitle {
+                Text(leadingTitle)
+                    .frame(width: leadingWidth, alignment: .leading)
+            }
+
             Slider(value: $value,
                    in: range,
                    onEditingChanged: onEditingChanged)
                 .disabled(!isEnabled)
+                .accessibilityLabel(leadingTitle ?? valueTitle)
 
             Text(valueTitle)
                 .monospacedDigit()
