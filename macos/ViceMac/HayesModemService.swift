@@ -71,51 +71,9 @@ private enum HayesDialTarget {
     case tcp(host: String, port: NWEndpoint.Port)
 }
 
-private final class HayesModemListenerStartup: @unchecked Sendable {
-    let semaphore = DispatchSemaphore(value: 0)
-
-    private let lock = NSLock()
-    private var result: Result<Void, Error>?
-
-    func succeed() {
-        finish(.success(()))
-    }
-
-    func fail(_ error: Error) {
-        finish(.failure(error))
-    }
-
-    func wait(timeout: DispatchTime) -> Result<Void, Error>? {
-        guard semaphore.wait(timeout: timeout) == .success else {
-            return nil
-        }
-
-        lock.lock()
-        defer {
-            lock.unlock()
-        }
-
-        return result
-    }
-
-    private func finish(_ result: Result<Void, Error>) {
-        lock.lock()
-        let shouldSignal = self.result == nil
-        if shouldSignal {
-            self.result = result
-        }
-        lock.unlock()
-
-        if shouldSignal {
-            semaphore.signal()
-        }
-    }
-}
-
 final class HayesModemService: @unchecked Sendable {
     private static let defaultDialTimeout: DispatchTimeInterval = .seconds(15)
     private static let listenerStartupAttempts = 8
-    private static let listenerStartupTimeout: DispatchTimeInterval = .milliseconds(750)
     private static let ip232Magic: UInt8 = 0xff
     private static let ip232CarrierDetect: UInt8 = 0x01
     private static let ip232RingIndicator: UInt8 = 0x02
@@ -281,62 +239,49 @@ final class HayesModemService: @unchecked Sendable {
     private func makeLocalListener() throws -> (listener: NWListener, port: NWEndpoint.Port) {
         var lastFailure: Error?
 
+        // Retry only the (fast, synchronous) reserve + create step in case an
+        // ephemeral port is taken between reservation and NWListener creation.
+        // Do NOT block waiting for the listener to reach `.ready`: start() runs
+        // synchronously on the caller's (main) actor, so a blocking wait would
+        // freeze the UI. Readiness and failure are handled asynchronously in
+        // handleLocalListenerState().
         for _ in 0..<Self.listenerStartupAttempts {
-            let reservedPort = try Self.reserveLocalPort()
-            let listener = try NWListener(using: .tcp, on: reservedPort)
-            let startup = HayesModemListenerStartup()
+            do {
+                let reservedPort = try Self.reserveLocalPort()
+                let listener = try NWListener(using: .tcp, on: reservedPort)
 
-            listener.newConnectionHandler = { [weak self] connection in
-                guard let service = self else {
-                    return
-                }
-
-                service.queue.async {
-                    service.acceptSerialConnection(connection)
-                }
-            }
-            listener.stateUpdateHandler = { [weak self, weak listener] state in
-                switch state {
-                case .ready:
-                    startup.succeed()
-                case let .failed(error):
-                    startup.fail(error)
-                default:
-                    break
-                }
-
-                guard let service = self else {
-                    return
-                }
-
-                service.queue.async { [weak listener] in
-                    guard let listener,
-                          service.localListener === listener else {
+                listener.newConnectionHandler = { [weak self] connection in
+                    guard let service = self else {
                         return
                     }
 
-                    service.handleLocalListenerState(state)
+                    service.queue.async {
+                        service.acceptSerialConnection(connection)
+                    }
                 }
-            }
-            listener.start(queue: listenerQueue)
+                listener.stateUpdateHandler = { [weak self, weak listener] state in
+                    guard let service = self else {
+                        return
+                    }
 
-            switch startup.wait(timeout: .now() + Self.listenerStartupTimeout) {
-            case .success:
+                    service.queue.async { [weak listener] in
+                        guard let listener,
+                              service.localListener === listener else {
+                            return
+                        }
+
+                        service.handleLocalListenerState(state)
+                    }
+                }
+                listener.start(queue: listenerQueue)
+
                 return (listener, reservedPort)
-            case let .failure(error):
+            } catch {
                 lastFailure = error
-            case nil:
-                lastFailure = HayesModemServiceError.listenerUnavailable
             }
-
-            listener.cancel()
         }
 
-        if let lastFailure {
-            throw lastFailure
-        }
-
-        throw HayesModemServiceError.portReservationUnavailable
+        throw lastFailure ?? HayesModemServiceError.portReservationUnavailable
     }
 
     private func stopOnQueue(publish: Bool) {
@@ -406,6 +351,10 @@ final class HayesModemService: @unchecked Sendable {
         case .ready:
             publishCurrentStatus()
         case let .failed(error):
+            // Drop the dead listener so the start() fast-path can't later reuse
+            // it and keep reporting a modem that no longer listens.
+            localListener?.cancel()
+            localListener = nil
             publishError(error.localizedDescription)
         default:
             break
