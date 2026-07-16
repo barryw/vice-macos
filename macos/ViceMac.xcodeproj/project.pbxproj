@@ -13,6 +13,14 @@
 		A10000000000000000000015 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000025 /* SettingsView.swift */; };
 		A10000000000000000000016 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000026 /* Assets.xcassets */; };
 		A10000000000000000000019 /* x64sc-ready.png in Resources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002A /* x64sc-ready.png */; };
+		B20000000000000000000019 /* x64sc-ready.png in Resources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002A /* x64sc-ready.png */; };
+		C30000000000000000000019 /* x64sc-ready.png in Resources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002A /* x64sc-ready.png */; };
+		D40000000000000000000019 /* x64sc-ready.png in Resources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002A /* x64sc-ready.png */; };
+		E50000000000000000000019 /* x64sc-ready.png in Resources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002A /* x64sc-ready.png */; };
+		170000000000000000000019 /* x64sc-ready.png in Resources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002A /* x64sc-ready.png */; };
+		180000000000000000000019 /* x64sc-ready.png in Resources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002A /* x64sc-ready.png */; };
+		190000000000000000000019 /* x64sc-ready.png in Resources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002A /* x64sc-ready.png */; };
+		1A0000000000000000000019 /* x64sc-ready.png in Resources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002A /* x64sc-ready.png */; };
 		A1000000000000000000001A /* VideoFilterSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002B /* VideoFilterSettings.swift */; };
 		A1000000000000000000001B /* VideoFilterControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002C /* VideoFilterControls.swift */; };
 		A1000000000000000000001D /* EmulatedMachine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000037 /* EmulatedMachine.swift */; };
@@ -1178,6 +1186,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B20000000000000000000016 /* Assets.xcassets in Resources */,
+				B20000000000000000000019 /* x64sc-ready.png in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1186,6 +1195,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				C30000000000000000000016 /* Assets.xcassets in Resources */,
+				C30000000000000000000019 /* x64sc-ready.png in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1194,6 +1204,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				D40000000000000000000016 /* Assets.xcassets in Resources */,
+				D40000000000000000000019 /* x64sc-ready.png in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1202,6 +1213,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				E50000000000000000000016 /* Assets.xcassets in Resources */,
+				E50000000000000000000019 /* x64sc-ready.png in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1210,6 +1222,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				170000000000000000000016 /* Assets.xcassets in Resources */,
+				170000000000000000000019 /* x64sc-ready.png in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1218,6 +1231,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				180000000000000000000016 /* Assets.xcassets in Resources */,
+				180000000000000000000019 /* x64sc-ready.png in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1226,6 +1240,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				190000000000000000000016 /* Assets.xcassets in Resources */,
+				190000000000000000000019 /* x64sc-ready.png in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1234,6 +1249,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				1A0000000000000000000016 /* Assets.xcassets in Resources */,
+				1A0000000000000000000019 /* x64sc-ready.png in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

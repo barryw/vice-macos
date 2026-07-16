@@ -688,6 +688,9 @@ struct EmulatedMachine: Identifiable, Equatable {
     var bootImageURL: URL? {
         Bundle.main.url(forResource: displayProfile.bootFrame.resourceName,
                         withExtension: displayProfile.bootFrame.fileExtension)
+            // Machines without their own boot frame yet fall back to the shared
+            // frame so every app shows a boot splash instead of a blank screen.
+            ?? Bundle.main.url(forResource: "x64sc-ready", withExtension: "png")
     }
 
     var usesVIC20MemoryExpansion: Bool {
