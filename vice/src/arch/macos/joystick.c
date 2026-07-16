@@ -19,9 +19,10 @@ void joystick_arch_shutdown(void)
 {
 }
 
-void joystick_ui_event(void *input, joystick_input_t type, int32_t value)
+void joystick_ui_event(void *input, joystick_input_t type, int32_t value, bool major_change)
 {
     (void)input;
     (void)type;
     (void)value;
+    (void)major_change;
 }
