@@ -864,6 +864,71 @@ final class MacVICEKitTests: XCTestCase {
         XCTAssertTrue(loadedDirectory, "BASIC memory never showed a loaded disk directory from \(diskURL.path).")
     }
 
+    func testRuntimeC128BootsTurboCPMFromD71() throws {
+        // Regression proof for the drive-type fix: a Turbo CP/M boot D71
+        // attached through MacVICEDriveConfiguration must come up on a 1571
+        // (the old hardcoded 1541 died at the loader's burst-init stage with
+        // E1 on the VDC). The prompt-test image reports the whole boot -
+        // loader, 1571 kernel install, CP/M 3, first A> prompt - by writing
+        // $AA to bank-0 $2000 (the 8502 side turns that into the debug-cart
+        // exit 55 the headless harness sees). Run alone via
+        // `swift test --filter testRuntimeC128BootsTurboCPMFromD71`
+        // (one live VICE runtime per test process).
+        guard !MacVICEEngineSession.isRunning else {
+            throw XCTSkip("A VICE engine is already running in this process.")
+        }
+        try Self.claimLiveRuntimeTest()
+
+        let environment = ProcessInfo.processInfo.environment
+        let diskPath = environment["TURBOCPM128_PROMPT_D71"]
+            ?? ("\(NSHomeDirectory())/Git/turbocpm128/build/turbocpm128-cpm3-prompt-test.d71")
+        guard FileManager.default.fileExists(atPath: diskPath) else {
+            throw XCTSkip("Turbo CP/M prompt-test image not found at \(diskPath); build it with `make` in turbocpm128 or set TURBOCPM128_PROMPT_D71.")
+        }
+
+        let runtime = try builtRuntime()
+        let x128Library = runtime.dynamicLibraryURL(for: .c128)
+        guard FileManager.default.fileExists(atPath: x128Library.path) else {
+            throw XCTSkip("Build the VICE Mac C128 scheme first; missing \(x128Library.path).")
+        }
+
+        let diskURL = URL(fileURLWithPath: diskPath)
+        let configuration = MacVICEMachineConfiguration(
+            machine: .c128,
+            drives: [MacVICEDriveConfiguration(unit: 8, kind: .diskImage(diskURL, readOnly: true))],
+            soundEnabled: false,
+            warpEnabled: true
+        )
+
+        let session = MacVICEEngineSession(configuration: configuration)
+        try session.start(machineID: MacVICEMachine.c128.viceTarget,
+                          dynamicLibraryURL: x128Library,
+                          arguments: configuration.launchArguments(runtime: runtime))
+        addTeardownBlock {
+            Self.stopRunningEngine()
+        }
+
+        // Bank 4 is the monitor's ram00 view: physical bank-0 RAM no matter
+        // which CPU or MMU configuration is live when we look.
+        let bootResultAddress: UInt32 = 0x2000
+        let deadline = Date().addingTimeInterval(120)
+        var lastObserved: UInt8 = 0
+        while Date() < deadline {
+            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.25))
+            if let byte = try? session.debugger.peekByte(bank: 4, address: bootResultAddress) {
+                lastObserved = byte
+                if byte == 0xAA {
+                    return
+                }
+                if (byte & 0xF0) == 0xE0 {
+                    break
+                }
+            }
+        }
+
+        XCTFail(String(format: "Turbo CP/M did not reach its CP/M prompt; boot result byte is $%02X (expected $AA; $Ex = loader stage failure, $00 = still booting or Z80 never ran).", lastObserved))
+    }
+
     func testCStringArrayBridgesSwiftArgumentsToNullTerminatedArgv() {
         let arguments = ["x64sc", "-default", "-directory", "/tmp/runtime/VICEData"]
 
