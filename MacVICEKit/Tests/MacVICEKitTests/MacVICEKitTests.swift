@@ -418,6 +418,40 @@ final class MacVICEKitTests: XCTestCase {
         )
     }
 
+    func testDiskImageDriveTypeFollowsImageFamily() {
+        // A D71 on the old hardcoded 1541 reads far enough to look healthy,
+        // then dies in software that needs the real drive (C128 CP/M's 1571
+        // burst protocol). Every image family must map to a drive that can
+        // actually read it.
+        let expectations: [(String, String)] = [
+            ("game.d64", "1541"),
+            ("game.d67", "1541"),
+            ("game.g64", "1541"),
+            ("game.p64", "1541"),
+            ("game.x64", "1541"),
+            ("turbocpm128.d71", "1571"),
+            ("flux.g71", "1571"),
+            ("spacious.d81", "1581"),
+            ("cmd.d1m", "4000"),
+            ("cmd.d2m", "4000"),
+            ("cmd.d4m", "4000"),
+            ("pet.d80", "8050"),
+            ("pet.d82", "8250"),
+            ("big.d90", "9000"),
+            ("UPPER.D71", "1571"),
+            ("noextension", "1541")
+        ]
+
+        for (name, driveType) in expectations {
+            let url = URL(fileURLWithPath: "/tmp/\(name)")
+            XCTAssertEqual(
+                MacVICEDriveConfiguration(unit: 8, kind: .diskImage(url)).startupArguments,
+                ["-devicebackend8", "0", "-drive8type", driveType, "-attach8rw", url.path],
+                "wrong drive type for \(name)"
+            )
+        }
+    }
+
     func testStorageReadWriteArgumentsAreVICECompatible() {
         let diskURL = URL(fileURLWithPath: "/tmp/game.d64")
         let hdURL = URL(fileURLWithPath: "/tmp/hd.dhd")

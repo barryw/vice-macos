@@ -223,7 +223,7 @@ public struct MacVICEDriveConfiguration: Sendable, Equatable {
         case .diskImage(let url, let readOnly):
             return [
                 "-devicebackend\(unit)", "0",
-                "-drive\(unit)type", "1541",
+                "-drive\(unit)type", Self.driveType(forDiskImageAt: url),
                 readOnly ? "-attach\(unit)ro" : "-attach\(unit)rw",
                 url.path
             ]
@@ -245,6 +245,30 @@ public struct MacVICEDriveConfiguration: Sendable, Equatable {
                 "+fslongnames",
                 "+fsoverwrite"
             ]
+        }
+    }
+
+    /// The VICE drive type that can actually read the disk image, chosen by
+    /// file extension. A double-sided D71 attached to the previous hardcoded
+    /// 1541 booted far enough to look healthy and then failed in
+    /// software that needs the real drive (C128 CP/M's 1571 burst protocol),
+    /// so every image family maps to its canonical drive here.
+    static func driveType(forDiskImageAt url: URL) -> String {
+        switch url.pathExtension.lowercased() {
+        case "d71", "g71":
+            return "1571"
+        case "d81":
+            return "1581"
+        case "d1m", "d2m", "d4m":
+            return "4000"
+        case "d80":
+            return "8050"
+        case "d82":
+            return "8250"
+        case "d90":
+            return "9000"
+        default:
+            return "1541"
         }
     }
 }
