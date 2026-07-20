@@ -929,6 +929,152 @@ final class MacVICEKitTests: XCTestCase {
         XCTFail(String(format: "Turbo CP/M did not reach its CP/M prompt; boot result byte is $%02X (expected $AA; $Ex = loader stage failure, $00 = still booting or Z80 never ran).", lastObserved))
     }
 
+    func testRuntimeC128BootsTurboCPMFromPostBootAttach() throws {
+        // The app never attaches at launch: it boots the machine bare, sets
+        // the Storage-pane resources live (applyDriveConfigurations), then
+        // attaches the image and soft-resets.  This mirrors that exact
+        // sequence so a regression in the live-resource/attach/reset chain
+        // cannot hide behind the launch-argument path the other TurboCPM
+        // test uses.  Run alone via
+        // `swift test --filter testRuntimeC128BootsTurboCPMFromPostBootAttach`.
+        guard !MacVICEEngineSession.isRunning else {
+            throw XCTSkip("A VICE engine is already running in this process.")
+        }
+        try Self.claimLiveRuntimeTest()
+
+        let environment = ProcessInfo.processInfo.environment
+        let diskPath = environment["TURBOCPM128_PROMPT_D71"]
+            ?? ("\(NSHomeDirectory())/Git/turbocpm128/build/turbocpm128-cpm3-prompt-test.d71")
+        guard FileManager.default.fileExists(atPath: diskPath) else {
+            throw XCTSkip("Turbo CP/M prompt-test image not found at \(diskPath); build it with `make` in turbocpm128 or set TURBOCPM128_PROMPT_D71.")
+        }
+
+        let runtime = try builtRuntime()
+        let x128Library = runtime.dynamicLibraryURL(for: .c128)
+        guard FileManager.default.fileExists(atPath: x128Library.path) else {
+            throw XCTSkip("Build the VICE Mac C128 scheme first; missing \(x128Library.path).")
+        }
+
+        let configuration = MacVICEMachineConfiguration(machine: .c128,
+                                                        soundEnabled: false,
+                                                        warpEnabled: true)
+        let session = MacVICEEngineSession(configuration: configuration)
+        try session.start(machineID: MacVICEMachine.c128.viceTarget,
+                          dynamicLibraryURL: x128Library,
+                          arguments: configuration.launchArguments(runtime: runtime))
+        addTeardownBlock {
+            Self.stopRunningEngine()
+        }
+
+        // Let the bare machine come up before poking resources, like a user
+        // sitting at BASIC before opening a disk.
+        let settleDeadline = Date().addingTimeInterval(5)
+        while Date() < settleDeadline {
+            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.25))
+        }
+
+        // Exactly what EmulatorSession.applyDriveConfigurations sends for a
+        // native-access 1571 on unit 8.
+        XCTAssertTrue(session.setIntResource("FileSystemDevice8", value: 0))
+        XCTAssertTrue(session.setIntResource("Drive8Type", value: 1571))
+        XCTAssertTrue(session.setIntResource("Drive8TrueEmulation", value: 1))
+        XCTAssertTrue(session.setIntResource("TrapDevice8", value: 0))
+
+        XCTAssertTrue(session.attachDisk(unit: 8, drive: 0, url: URL(fileURLWithPath: diskPath)))
+        XCTAssertTrue(session.reset(hard: false))
+
+        let bootResultAddress: UInt32 = 0x2000
+        let deadline = Date().addingTimeInterval(120)
+        var lastObserved: UInt8 = 0
+        while Date() < deadline {
+            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.25))
+            if let byte = try? session.debugger.peekByte(bank: 4, address: bootResultAddress) {
+                lastObserved = byte
+                if byte == 0xAA {
+                    return
+                }
+                if (byte & 0xF0) == 0xE0 {
+                    break
+                }
+            }
+        }
+
+        XCTFail(String(format: "Turbo CP/M did not reach its CP/M prompt after a post-boot attach + reset; boot result byte is $%02X (expected $AA; $Ex = loader stage failure, $00 = still booting or Z80 never ran).", lastObserved))
+    }
+
+    func testRuntimeC128DCRBootsTurboCPMFromPostBootAttach() throws {
+        // The C128DCR machine model ships an internal 1571CR, and VICE's
+        // mos5710 emulation is a partial stub (only CIA regs $0C-$0E) that
+        // cannot carry the Turbo CP/M burst protocol.  A user who picked the
+        // DCR model but configured drive 8 as a plain 1571 must still get a
+        // plain 1571 after every attach AND reset - if the model preset
+        // re-clobbers the drive type, the boot dies at burst-init with E1.
+        // Run alone via
+        // `swift test --filter testRuntimeC128DCRBootsTurboCPMFromPostBootAttach`.
+        guard !MacVICEEngineSession.isRunning else {
+            throw XCTSkip("A VICE engine is already running in this process.")
+        }
+        try Self.claimLiveRuntimeTest()
+
+        let environment = ProcessInfo.processInfo.environment
+        let diskPath = environment["TURBOCPM128_PROMPT_D71"]
+            ?? ("\(NSHomeDirectory())/Git/turbocpm128/build/turbocpm128-cpm3-prompt-test.d71")
+        guard FileManager.default.fileExists(atPath: diskPath) else {
+            throw XCTSkip("Turbo CP/M prompt-test image not found at \(diskPath); build it with `make` in turbocpm128 or set TURBOCPM128_PROMPT_D71.")
+        }
+
+        let runtime = try builtRuntime()
+        let x128Library = runtime.dynamicLibraryURL(for: .c128)
+        guard FileManager.default.fileExists(atPath: x128Library.path) else {
+            throw XCTSkip("Build the VICE Mac C128 scheme first; missing \(x128Library.path).")
+        }
+
+        let configuration = MacVICEMachineConfiguration(machine: .c128,
+                                                        soundEnabled: false,
+                                                        warpEnabled: true,
+                                                        extraArguments: ["-model", "c128dcrntsc"])
+        let session = MacVICEEngineSession(configuration: configuration)
+        try session.start(machineID: MacVICEMachine.c128.viceTarget,
+                          dynamicLibraryURL: x128Library,
+                          arguments: configuration.launchArguments(runtime: runtime))
+        addTeardownBlock {
+            Self.stopRunningEngine()
+        }
+
+        let settleDeadline = Date().addingTimeInterval(5)
+        while Date() < settleDeadline {
+            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.25))
+        }
+        let launchDriveType = session.intResource("Drive8Type")
+
+        XCTAssertTrue(session.setIntResource("FileSystemDevice8", value: 0))
+        XCTAssertTrue(session.setIntResource("Drive8Type", value: 1571))
+        XCTAssertTrue(session.setIntResource("Drive8TrueEmulation", value: 1))
+        XCTAssertTrue(session.setIntResource("TrapDevice8", value: 0))
+
+        XCTAssertTrue(session.attachDisk(unit: 8, drive: 0, url: URL(fileURLWithPath: diskPath)))
+        XCTAssertTrue(session.reset(hard: false))
+
+        let bootResultAddress: UInt32 = 0x2000
+        let deadline = Date().addingTimeInterval(120)
+        var lastObserved: UInt8 = 0
+        while Date() < deadline {
+            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.25))
+            if let byte = try? session.debugger.peekByte(bank: 4, address: bootResultAddress) {
+                lastObserved = byte
+                if byte == 0xAA {
+                    return
+                }
+                if (byte & 0xF0) == 0xE0 {
+                    break
+                }
+            }
+        }
+
+        let postResetDriveType = session.intResource("Drive8Type") ?? -1
+        XCTFail(String(format: "Turbo CP/M did not boot on a C128DCR with drive 8 set to a plain 1571; boot result byte is $%02X, Drive8Type at launch %d, after reset %d (1573 means the DCR model preset clobbered the configured drive).", lastObserved, launchDriveType ?? -1, postResetDriveType))
+    }
+
     func testCStringArrayBridgesSwiftArgumentsToNullTerminatedArgv() {
         let arguments = ["x64sc", "-default", "-directory", "/tmp/runtime/VICEData"]
 
