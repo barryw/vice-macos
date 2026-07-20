@@ -100,6 +100,11 @@ struct ContentView: View {
                   message: Text(error.message),
                   dismissButton: .default(Text("OK")))
         }
+        .alert(item: $emulator.mediaAttachError) { error in
+            Alert(title: Text(error.title),
+                  message: Text(error.message),
+                  dismissButton: .default(Text("OK")))
+        }
         .alert(item: $qLinkReloaded.alert) { alert in
             switch alert.kind {
             case .message:

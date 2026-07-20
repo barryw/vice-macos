@@ -772,6 +772,17 @@ struct CommodoreDiskImage: Identifiable, Equatable {
         return Self.geosBootEntry(in: entries)?.name
     }
 
+    /// True when track 1, sector 0 carries the Commodore 128 KERNAL autoboot
+    /// signature ("CBM").  The C128 boots such a disk itself at reset, so it
+    /// must be attached to a real emulated drive — autostart's KERNAL traps
+    /// would leave the boot software without the drive hardware it expects.
+    var hasC128BootSector: Bool {
+        guard let sector = try? readSector(CommodoreDiskAddress(track: 1, sector: 0)) else {
+            return false
+        }
+        return sector.prefix(3) == Data("CBM".utf8)
+    }
+
     mutating func copyFile(_ entry: CommodoreDiskDirectoryEntry,
                            from source: CommodoreDiskImage) throws {
         let payload = try source.fileData(for: entry)

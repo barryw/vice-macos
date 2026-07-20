@@ -8,6 +8,7 @@ struct DiskImageLaunchPlan: Equatable {
     var programName: String?
     var keyboardText: String?
     var statusMessage: String?
+    var resetsMachine: Bool = false
 
     static func plan(for url: URL,
                      machine: EmulatedMachine,
@@ -18,12 +19,22 @@ struct DiskImageLaunchPlan: Equatable {
                      explicitProgramName: String? = nil) -> DiskImageLaunchPlan {
         let trimmedProgramName = explicitProgramName?.trimmingCharacters(in: .whitespacesAndNewlines)
         let selectedProgramName = trimmedProgramName?.isEmpty == false ? trimmedProgramName : nil
-        let geosBootProgramName: String?
-        if behavior == .attach {
-            geosBootProgramName = nil
-        } else {
-            geosBootProgramName = (try? CommodoreDiskImage(url: url))?.geosBootProgramName
+        let bootableImage = behavior == .attach ? nil : try? CommodoreDiskImage(url: url)
+
+        // A C128 boots a CBM-signed disk itself at reset, on the real
+        // configured drive.  Autostart's KERNAL traps must never see it:
+        // trap-served loads leave the boot software without the drive
+        // hardware it talks to (Turbo CP/M dies at burst init with E1).
+        if machine.family == .c128,
+           bootableImage?.hasC128BootSector == true {
+            return DiskImageLaunchPlan(runMode: .attach,
+                                       programName: nil,
+                                       keyboardText: nil,
+                                       statusMessage: "Bootable disk: restarting through drive \(unit)",
+                                       resetsMachine: true)
         }
+
+        let geosBootProgramName = bootableImage?.geosBootProgramName
 
         if let geosBootProgramName,
            selectedProgramName == nil || normalizedProgramName(selectedProgramName ?? "") == normalizedProgramName(geosBootProgramName) {
@@ -278,6 +289,12 @@ extension EmulatorSession {
             let fileType = DiskImageFileType(url: url)?.title
                 ?? (url.pathExtension.isEmpty ? "File" : url.pathExtension.uppercased())
             statusText = "\(fileType) is not supported by drive \(unit) (\(configuration.driveType.title))"
+            mediaAttachError = MediaAttachError(
+                title: "Disk Image Not Compatible",
+                message: "\(url.lastPathComponent) is a \(fileType) image, but drive \(unit) "
+                    + "is configured as a \(configuration.driveType.title), which cannot read it. "
+                    + "Change the drive model in Settings > Storage, or attach the image to a "
+                    + "compatible drive.")
             return false
         }
 
@@ -300,6 +317,11 @@ extension EmulatorSession {
 
         if didAttach {
             rememberMedia(url)
+            if launchPlan.resetsMachine {
+                // Bootable media: the machine boots it through the real
+                // configured drive, exactly as hardware would at power-on.
+                reset(kind: .soft)
+            }
             let attachedStatus = "\(url.lastPathComponent) \(behavior.statusVerb) on \(driveAddress(unit: unit, driveNumber: driveNumber))"
             if let keyboardText = launchPlan.keyboardText,
                !typeText(keyboardText) {
@@ -537,6 +559,15 @@ extension EmulatorSession {
                                                   behavior: MediaOpenBehavior) -> Bool {
         guard let target = firstCompatibleDriveTarget(for: diskImageType) else {
             statusText = "No enabled drive supports \(diskImageType.title) images"
+            let configured = driveConfigurations
+                .filter(\.isAttached)
+                .map { "drive \($0.unit) (\($0.driveType.title))" }
+                .joined(separator: ", ")
+            mediaAttachError = MediaAttachError(
+                title: "Disk Image Not Compatible",
+                message: "\(diskImageType.title) images are not supported by any configured drive"
+                    + (configured.isEmpty ? "." : ": \(configured).")
+                    + " Change a drive model in Settings > Storage.")
             return false
         }
 

@@ -13,6 +13,14 @@ struct EmulatorStartupError: Identifiable, Equatable {
     let message: String
 }
 
+/// A media problem the user must see, not merely a status-bar line —
+/// e.g. a disk image the configured drive model cannot read.
+struct MediaAttachError: Identifiable, Equatable {
+    let id = UUID()
+    let title: String
+    let message: String
+}
+
 enum MachineResetKind {
     case soft
     case hard
@@ -385,6 +393,7 @@ final class EmulatorSession: ObservableObject {
     }
     @Published var statusText: String
     @Published var startupError: EmulatorStartupError?
+    @Published var mediaAttachError: MediaAttachError?
     @Published var printSpoolPages: [PrinterSpoolPage] = []
     @Published var networkModemStatus: NetworkModemRuntimeStatus = .disabled
 

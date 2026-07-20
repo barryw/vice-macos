@@ -4786,3 +4786,73 @@ extension ModelConfigurationTests {
         return data
     }
 }
+
+final class DiskBootLaunchPlanTests: XCTestCase {
+    func testC128BootSectorDetection() throws {
+        let bootable = try XCTUnwrap(try? CommodoreDiskImage(url: makeD71(cbmBootSector: true)))
+        XCTAssertTrue(bootable.hasC128BootSector)
+
+        let blank = try XCTUnwrap(try? CommodoreDiskImage(url: makeD71(cbmBootSector: false)))
+        XCTAssertFalse(blank.hasC128BootSector)
+    }
+
+    func testBootableDiskPlansRealDriveBootOnC128() throws {
+        let plan = DiskImageLaunchPlan.plan(for: try makeD71(cbmBootSector: true),
+                                            machine: .x128,
+                                            unit: 8,
+                                            driveNumber: 0,
+                                            driveType: .c1571,
+                                            behavior: .run)
+        XCTAssertEqual(plan.runMode, .attach)
+        XCTAssertTrue(plan.resetsMachine)
+        XCTAssertNil(plan.programName)
+        XCTAssertNil(plan.keyboardText)
+    }
+
+    func testBootableDiskKeepsAutostartOffC128() throws {
+        let plan = DiskImageLaunchPlan.plan(for: try makeD71(cbmBootSector: true),
+                                            machine: .x64sc,
+                                            unit: 8,
+                                            driveNumber: 0,
+                                            driveType: .c1571,
+                                            behavior: .run)
+        XCTAssertEqual(plan.runMode, .run)
+        XCTAssertFalse(plan.resetsMachine)
+    }
+
+    func testPlainAttachNeverResets() throws {
+        let plan = DiskImageLaunchPlan.plan(for: try makeD71(cbmBootSector: true),
+                                            machine: .x128,
+                                            unit: 8,
+                                            driveNumber: 0,
+                                            driveType: .c1571,
+                                            behavior: .attach)
+        XCTAssertEqual(plan.runMode, .attach)
+        XCTAssertFalse(plan.resetsMachine)
+    }
+
+    func testNonBootableDiskKeepsRunBehaviorOnC128() throws {
+        let plan = DiskImageLaunchPlan.plan(for: try makeD71(cbmBootSector: false),
+                                            machine: .x128,
+                                            unit: 8,
+                                            driveNumber: 0,
+                                            driveType: .c1571,
+                                            behavior: .run)
+        XCTAssertEqual(plan.runMode, .run)
+        XCTAssertFalse(plan.resetsMachine)
+    }
+
+    // A D71 is 349,696 zero bytes; track 1 sector 0 sits at offset 0, so the
+    // C128 KERNAL autoboot signature is simply the first three bytes.
+    private func makeD71(cbmBootSector: Bool) throws -> URL {
+        var data = Data(count: 349_696)
+        if cbmBootSector {
+            data.replaceSubrange(0..<3, with: Array("CBM".utf8))
+        }
+        let url = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("d71")
+        try data.write(to: url)
+        return url
+    }
+}
