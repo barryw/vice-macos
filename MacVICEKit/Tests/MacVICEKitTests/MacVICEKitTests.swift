@@ -1075,6 +1075,76 @@ final class MacVICEKitTests: XCTestCase {
         XCTFail(String(format: "Turbo CP/M did not boot on a C128DCR with drive 8 set to a plain 1571; boot result byte is $%02X, Drive8Type at launch %d, after reset %d (1573 means the DCR model preset clobbered the configured drive).", lastObserved, launchDriveType ?? -1, postResetDriveType))
     }
 
+    func testRuntimeC128NTSCBootsTurboCPMWriteProtected() throws {
+        // The exact end-user stack that kept producing E1/E01: NTSC C128,
+        // drive 8 a plain 1571, media attached READ-ONLY (the app write-
+        // protects inserted disks by default), post-boot attach + reset.
+        // Guards turbocpm's INQUIRE write-protect mask + retry against this
+        // core.  Run alone via
+        // `swift test --filter testRuntimeC128NTSCBootsTurboCPMWriteProtected`.
+        guard !MacVICEEngineSession.isRunning else {
+            throw XCTSkip("A VICE engine is already running in this process.")
+        }
+        try Self.claimLiveRuntimeTest()
+
+        let environment = ProcessInfo.processInfo.environment
+        let diskPath = environment["TURBOCPM128_PROMPT_D71"]
+            ?? ("\(NSHomeDirectory())/Git/turbocpm128/build/turbocpm128-cpm3-prompt-test.d71")
+        guard FileManager.default.fileExists(atPath: diskPath) else {
+            throw XCTSkip("Turbo CP/M prompt-test image not found at \(diskPath); build it with `make` in turbocpm128 or set TURBOCPM128_PROMPT_D71.")
+        }
+
+        let runtime = try builtRuntime()
+        let x128Library = runtime.dynamicLibraryURL(for: .c128)
+        guard FileManager.default.fileExists(atPath: x128Library.path) else {
+            throw XCTSkip("Build the VICE Mac C128 scheme first; missing \(x128Library.path).")
+        }
+
+        let configuration = MacVICEMachineConfiguration(machine: .c128,
+                                                        soundEnabled: false,
+                                                        warpEnabled: true,
+                                                        extraArguments: ["-model", "ntsc"])
+        let session = MacVICEEngineSession(configuration: configuration)
+        try session.start(machineID: MacVICEMachine.c128.viceTarget,
+                          dynamicLibraryURL: x128Library,
+                          arguments: configuration.launchArguments(runtime: runtime))
+        addTeardownBlock {
+            Self.stopRunningEngine()
+        }
+
+        let settleDeadline = Date().addingTimeInterval(5)
+        while Date() < settleDeadline {
+            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.25))
+        }
+
+        XCTAssertTrue(session.setIntResource("FileSystemDevice8", value: 0))
+        XCTAssertTrue(session.setIntResource("Drive8Type", value: 1571))
+        XCTAssertTrue(session.setIntResource("Drive8TrueEmulation", value: 1))
+        XCTAssertTrue(session.setIntResource("TrapDevice8", value: 0))
+        XCTAssertTrue(session.setIntResource("AttachDevice8d0Readonly", value: 1))
+
+        XCTAssertTrue(session.attachDisk(unit: 8, drive: 0, url: URL(fileURLWithPath: diskPath)))
+        XCTAssertTrue(session.reset(hard: false))
+
+        let bootResultAddress: UInt32 = 0x2000
+        let deadline = Date().addingTimeInterval(120)
+        var lastObserved: UInt8 = 0
+        while Date() < deadline {
+            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.25))
+            if let byte = try? session.debugger.peekByte(bank: 4, address: bootResultAddress) {
+                lastObserved = byte
+                if byte == 0xAA {
+                    return
+                }
+                if (byte & 0xF0) == 0xE0 {
+                    break
+                }
+            }
+        }
+
+        XCTFail(String(format: "Write-protected NTSC Turbo CP/M boot failed; result byte $%02X (expected $AA; $E1 = burst-init/WP failure).", lastObserved))
+    }
+
     func testCStringArrayBridgesSwiftArgumentsToNullTerminatedArgv() {
         let arguments = ["x64sc", "-default", "-directory", "/tmp/runtime/VICEData"]
 
