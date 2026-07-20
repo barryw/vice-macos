@@ -158,6 +158,11 @@ typedef struct ViceEngineStartArguments {
     char *machineID;
     int argc;
     char **argv;
+    /* VICE's command-line and autostart machinery rewrites argv entries in
+     * place while it runs, so the pointers in argv are not trustworthy by
+     * the time the engine thread exits. ownedArgv keeps the original
+     * allocations so cleanup frees exactly what was strdup'ed. */
+    char **ownedArgv;
 } ViceEngineStartArguments;
 
 static pthread_t engineThread;
@@ -1079,12 +1084,13 @@ static void freeStartArguments(ViceEngineStartArguments *arguments)
     }
 
     free(arguments->machineID);
-    if (arguments->argv != NULL) {
+    if (arguments->ownedArgv != NULL) {
         for (index = 0; index < arguments->argc; index++) {
-            free(arguments->argv[index]);
+            free(arguments->ownedArgv[index]);
         }
-        free(arguments->argv);
+        free(arguments->ownedArgv);
     }
+    free(arguments->argv);
     free(arguments);
 }
 
@@ -1107,7 +1113,9 @@ static ViceEngineStartArguments *copyStartArguments(const char *machineID,
     arguments->machineID = strdup(machineID);
     arguments->argc = (int)argc;
     arguments->argv = (char **)calloc((size_t)argc + 1, sizeof(char *));
-    if (arguments->machineID == NULL || arguments->argv == NULL) {
+    arguments->ownedArgv = (char **)calloc((size_t)argc + 1, sizeof(char *));
+    if (arguments->machineID == NULL || arguments->argv == NULL
+        || arguments->ownedArgv == NULL) {
         freeStartArguments(arguments);
         return NULL;
     }
@@ -1118,13 +1126,15 @@ static ViceEngineStartArguments *copyStartArguments(const char *machineID,
             return NULL;
         }
 
-        arguments->argv[index] = strdup(argv[index]);
-        if (arguments->argv[index] == NULL) {
+        arguments->ownedArgv[index] = strdup(argv[index]);
+        if (arguments->ownedArgv[index] == NULL) {
             freeStartArguments(arguments);
             return NULL;
         }
+        arguments->argv[index] = arguments->ownedArgv[index];
     }
     arguments->argv[argc] = NULL;
+    arguments->ownedArgv[argc] = NULL;
 
     return arguments;
 }
