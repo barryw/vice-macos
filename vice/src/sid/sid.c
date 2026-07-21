@@ -1025,8 +1025,10 @@ char *sid_sound_machine_dump_state(sound_t *psid)
 int sid_sound_machine_cycle_based(void)
 {
     switch (sidengine) {
+#ifdef HAVE_FASTSID
         case SID_ENGINE_FASTSID:
             return 0;
+#endif
 #ifdef HAVE_RESID
         case SID_ENGINE_RESID:
             return 1;
@@ -1069,12 +1071,18 @@ int sid_sound_machine_channels(void)
 
 static void set_sound_func(void)
 {
+    sid_read_func = sid_read_off;
+    sid_store_func = sid_write_off;
+    sid_dump_func = NULL;
+
     if (sid_enable) {
+#ifdef HAVE_FASTSID
         if (sid_engine_type == SID_ENGINE_FASTSID) {
             sid_read_func = sound_read;
             sid_store_func = sound_store;
             sid_dump_func = sound_dump;
         }
+#endif
 #ifdef HAVE_RESID
         if (sid_engine_type == SID_ENGINE_RESID) {
             sid_read_func = sound_read;
@@ -1119,10 +1127,6 @@ static void set_sound_func(void)
             sid_dump_func = NULL; /* TODO: usbsid dump */
         }
 #endif
-    } else {
-        sid_read_func = sid_read_off;
-        sid_store_func = sid_write_off;
-        sid_dump_func = NULL;
     }
 }
 
@@ -1239,12 +1243,18 @@ void sid_set_machine_parameter(long clock_rate)
 int sid_engine_get_max_sids(int engine)
 {
     switch (engine) {
+#ifdef HAVE_FASTSID
         case SID_ENGINE_FASTSID:
             return SID_ENGINE_FASTSID_NUM_SIDS;
+#endif
+#if defined(HAVE_RESID) || defined(HAVE_RESID_DTV)
         case SID_ENGINE_RESID:
             return SID_ENGINE_RESID_NUM_SIDS;
+#endif
+#ifdef HAVE_RESIDFP
         case SID_ENGINE_RESIDFP:
             return SID_ENGINE_RESIDFP_NUM_SIDS;
+#endif
         case SID_ENGINE_CATWEASELMKIII:
             return SID_ENGINE_CATWEASELMKIII_NUM_SIDS;
         case SID_ENGINE_HARDSID:
