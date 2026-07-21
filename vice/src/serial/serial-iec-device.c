@@ -44,9 +44,6 @@
 #include "maincpu.h"
 #include "serial-iec-bus.h"
 
-/* TurboCPM E1 diagnostics — see docs/turbocpm-e1-investigation.md. */
-#include "turbodiag.h"
-
 /* [TurboCPM] This state machine used to advance only when the host CPU
    touched the IEC port ($DD00), which starves it whenever firmware
    programs the bus and then waits in an access-free delay loop (Turbo
@@ -322,32 +319,9 @@ static void serial_iec_device_exec_main(unsigned int devnr, CLOCK clk_value)
 {
     uint8_t bus;
     serial_iec_device_state_t *iec = &(serial_iec_device_state[devnr]);
-    /* TurboCPM E1 diagnostics: log every state/flag change of the emulated
-       IEC device so a wedged ATN handshake names its stuck state. */
-    static int td_last_state[IECBUS_NUM];
-    static int td_last_flags[IECBUS_NUM];
-    static int td_init = 0;
 
     /* read bus */
     bus = iecbus_device_read();
-
-    if (!td_init) {
-        int td_i;
-        for (td_i = 0; td_i < IECBUS_NUM; td_i++) {
-            td_last_state[td_i] = -1;
-            td_last_flags[td_i] = -1;
-        }
-        td_init = 1;
-    }
-    if (iec->state != td_last_state[devnr] || (int)iec->flags != td_last_flags[devnr]) {
-        turbodiag_log("iecdev%u state=%d->%d flags=$%02X->$%02X bus=$%02X pri=$%02X sec=$%02X",
-                      devnr, td_last_state[devnr], (int)iec->state,
-                      (unsigned int)(td_last_flags[devnr] < 0 ? 0xff : td_last_flags[devnr]),
-                      (unsigned int)iec->flags, (unsigned int)bus,
-                      (unsigned int)iec->primary, (unsigned int)iec->secondary);
-        td_last_state[devnr] = iec->state;
-        td_last_flags[devnr] = iec->flags;
-    }
 
 #if IEC_DEVICE_DEBUG > 4
     log_message(serial_iec_device_log,

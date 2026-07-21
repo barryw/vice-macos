@@ -104,17 +104,12 @@ Autopsy reread under the new theory: DISK_STATUS=$FF "drive answered
 nothing" was right for the wrong drive — drive 8 was healthy; the
 DATA line the Z80 was watching was held by the emulated *printer*.
 
-**Barry's in-app confirmation** (instrumentation stays until then, it
-is env-gated and free when off): rebuild the VICE Mac C128 scheme (the
-runtime dylibs in BuildProducts are already rebuilt with the fix),
-then launch from a terminal with
-`VICEMAC_TURBO_DIAG=1 /path/to/ViceMac.app/Contents/MacOS/ViceMac`,
-attach the D71, soft reset. Expected: CP/M boots where it used to E1.
-If anything still fails, `/tmp/vicemac-bridge-diag.log` now names the
-stuck component directly (`docs/turbodiag-diff.sh good.log bad.log`
-diffs two traces event-by-event). After confirmation: strip
-`turbodiag.h` and its call sites (grep `turbodiag`), keep the
-`[TurboCPM]` fixes and the repaired kit tests.
+**Confirmed in-app by Barry (2026-07-20): the app boots the disk.**
+The `[TurboDiag]` instrumentation was stripped afterwards (this
+commit); the `[TurboCPM]` fixes in serial-iec-device.c and the
+repaired kit tests remain. If tracing is ever needed again, the fix
+commit e2f3a266f5 carries the full harness (`turbodiag.h`, call
+sites, `docs/turbodiag-diff.sh`) — cherry-pick or use as reference.
 
 ## AUTHORIZED NEXT STEP (Barry, 2026-07-20): bridge diagnostics
 

@@ -37,9 +37,6 @@
 #include "types.h"
 #include "drive/iec/cmdhd.h"
 
-/* TurboCPM E1 diagnostics — see docs/turbocpm-e1-investigation.md. */
-#include "turbodiag.h"
-
 static int fast_cpu_direction, fast_drive_direction[NUM_DISK_UNITS];
 int burst_mod = 0;
 
@@ -58,15 +55,12 @@ void c128fastiec_fast_cpu_write(uint8_t data)
 {
     unsigned int dnr;
 
-    turbodiag_log("host-sdr-write $%02X dir=%d", data, fast_cpu_direction);
-
     if (fast_cpu_direction) {
         for (dnr = 0; dnr < NUM_DISK_UNITS; dnr++) {
             diskunit_context_t *unit = diskunit_context[dnr];
 
             if (unit->enable) {
                 drive_catch_up_one_hook(unit, maincpu_clk);
-                turbodiag_log("host-sdr-write -> unit%u type=%u", dnr + 8, unit->type);
                 switch (unit->type) {
                     case DRIVE_TYPE_1570:
                     case DRIVE_TYPE_1571:
@@ -91,8 +85,6 @@ void c128fastiec_fast_cpu_write(uint8_t data)
 
 void iec_fast_drive_write(uint8_t data, unsigned int dnr)
 {
-    turbodiag_log("drive%u-sdr-write $%02X dir=%d", dnr + 8, data,
-                  fast_drive_direction[dnr]);
     if (fast_drive_direction[dnr]) {
         ciacore_set_sdr(machine_context.cia1, data);
     }
@@ -101,18 +93,12 @@ void iec_fast_drive_write(uint8_t data, unsigned int dnr)
 void c128fastiec_fast_cpu_direction(int direction)
 {
     /* 0: input */
-    if (direction != fast_cpu_direction) {
-        turbodiag_log("host-fast-dir %d", direction);
-    }
     fast_cpu_direction = direction;
 }
 
 void iec_fast_drive_direction(int direction, unsigned int dnr)
 {
     /* 0: input */
-    if (direction != fast_drive_direction[dnr]) {
-        turbodiag_log("drive%u-fast-dir %d", dnr + 8, direction);
-    }
     fast_drive_direction[dnr] = direction;
 }
 
