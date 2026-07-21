@@ -44,6 +44,23 @@
 #include "maincpu.h"
 #include "serial-iec-bus.h"
 
+/* TurboCPM E1 diagnostics — see docs/turbocpm-e1-investigation.md. */
+#include "turbodiag.h"
+
+/* [TurboCPM] This state machine used to advance only when the host CPU
+   touched the IEC port ($DD00), which starves it whenever firmware
+   programs the bus and then waits in an access-free delay loop (Turbo
+   CP/M's Z80 burst init holds lines for ~56ms without a single access,
+   twice per handshake).  A real device watches the wires continuously;
+   emulate that with a periodic alarm while any IEC device is enabled. */
+#include "alarm.h"
+
+static alarm_t *serial_iec_device_alarm = NULL;
+static unsigned int serial_iec_device_enabled_count = 0;
+
+static void serial_iec_device_update_alarm(void);
+static void serial_iec_device_alarm_handler(CLOCK offset, void *data);
+
 #if IEC_DEVICE_DEBUG > 0
 #include <ctype.h>
 #endif
@@ -135,6 +152,15 @@ void serial_iec_device_init(void)
 
     serial_iec_device_inited = 1;
 
+    /* [TurboCPM] periodic tick so devices see bus edges the host sets up
+       without touching the IEC port (see comment at top of file) */
+    if (serial_iec_device_alarm == NULL && maincpu_alarm_context != NULL) {
+        serial_iec_device_alarm = alarm_new(maincpu_alarm_context,
+                                            "SerialIECDevice",
+                                            serial_iec_device_alarm_handler,
+                                            NULL);
+    }
+
     for (i = 0; i < IECBUS_NUM; i++) {
         if (iec_ieee_device_enabled[i]) {
             serial_iec_device_enable(i);
@@ -177,6 +203,8 @@ void serial_iec_device_enable(unsigned int devnr)
         serial_iec_device_state[devnr].flags = 0;
         serial_iec_device_state[devnr].timeout = 0;
         memset(&serial_iec_device_state[devnr].st, 0, 15);
+        serial_iec_device_enabled_count++;               /* [TurboCPM] */
+        serial_iec_device_update_alarm();
     }
 }
 
@@ -195,6 +223,10 @@ void serial_iec_device_disable(unsigned int devnr)
         iecbus_device_write(devnr, (uint8_t)(IECBUS_DEVICE_WRITE_CLK | IECBUS_DEVICE_WRITE_DATA));
         serial_iec_device_state[devnr].enabled = 0;
         serial_iec_device_state[devnr].timeout = 0;
+        if (serial_iec_device_enabled_count > 0) {       /* [TurboCPM] */
+            serial_iec_device_enabled_count--;
+        }
+        serial_iec_device_update_alarm();
     }
 }
 
@@ -236,6 +268,33 @@ void serial_iec_device_set_machine_parameter(long cycles_per_sec)
     serial_iec_device_cycles_per_us = ((double) cycles_per_sec) / 1000000.0;
 }
 
+/* [TurboCPM] periodic device tick (see comment at top of file).  25µs
+   keeps every IEC timing window (shortest is the 60µs EOI ack) sampled
+   several times over; host port accesses still tick exactly as before. */
+#define SERIAL_IEC_DEVICE_TICK_US 25
+
+static void serial_iec_device_alarm_handler(CLOCK offset, void *data)
+{
+    (void)offset;
+    (void)data;
+    serial_iec_device_exec(maincpu_clk);
+    alarm_set(serial_iec_device_alarm,
+              maincpu_clk + (CLOCK)US2CYCLES(SERIAL_IEC_DEVICE_TICK_US));
+}
+
+static void serial_iec_device_update_alarm(void)
+{
+    if (serial_iec_device_alarm == NULL) {
+        return;
+    }
+    if (serial_iec_device_enabled_count > 0) {
+        alarm_set(serial_iec_device_alarm,
+                  maincpu_clk + (CLOCK)US2CYCLES(SERIAL_IEC_DEVICE_TICK_US));
+    } else {
+        alarm_unset(serial_iec_device_alarm);
+    }
+}
+
 /* ------------------------------------------------------------------------- */
 
 enum {
@@ -263,9 +322,32 @@ static void serial_iec_device_exec_main(unsigned int devnr, CLOCK clk_value)
 {
     uint8_t bus;
     serial_iec_device_state_t *iec = &(serial_iec_device_state[devnr]);
+    /* TurboCPM E1 diagnostics: log every state/flag change of the emulated
+       IEC device so a wedged ATN handshake names its stuck state. */
+    static int td_last_state[IECBUS_NUM];
+    static int td_last_flags[IECBUS_NUM];
+    static int td_init = 0;
 
     /* read bus */
     bus = iecbus_device_read();
+
+    if (!td_init) {
+        int td_i;
+        for (td_i = 0; td_i < IECBUS_NUM; td_i++) {
+            td_last_state[td_i] = -1;
+            td_last_flags[td_i] = -1;
+        }
+        td_init = 1;
+    }
+    if (iec->state != td_last_state[devnr] || (int)iec->flags != td_last_flags[devnr]) {
+        turbodiag_log("iecdev%u state=%d->%d flags=$%02X->$%02X bus=$%02X pri=$%02X sec=$%02X",
+                      devnr, td_last_state[devnr], (int)iec->state,
+                      (unsigned int)(td_last_flags[devnr] < 0 ? 0xff : td_last_flags[devnr]),
+                      (unsigned int)iec->flags, (unsigned int)bus,
+                      (unsigned int)iec->primary, (unsigned int)iec->secondary);
+        td_last_state[devnr] = iec->state;
+        td_last_flags[devnr] = iec->flags;
+    }
 
 #if IEC_DEVICE_DEBUG > 4
     log_message(serial_iec_device_log,
@@ -383,6 +465,21 @@ static void serial_iec_device_exec_main(unsigned int devnr, CLOCK clk_value)
     if (iec->flags & (P_ATN | P_LISTENING)) {
         /* we are either under ATN or in "listening" mode */
 
+        /* [TurboCPM] Walk every transition the current bus state satisfies
+           instead of exactly one per call.  This state machine is only
+           ticked on host IEC-port accesses; firmware that sets up the bus
+           and then waits in an access-free CPU delay (Turbo CP/M's Z80
+           burst init holds ATN+CLK for ~56ms without touching $DD00)
+           otherwise starves the P_PRE0->P_PRE1->P_PRE2 walk of ticks while
+           CLK is low, leaving the device wedged in P_PRE1 holding DATA and
+           the bus master timing out (E1).  Adjacent states consume opposite
+           CLK levels or fresh timeouts, so the walk is self-terminating.
+           Ceiling: a master that never touches the port between edges still
+           starves the machine; the upgrade path is alarm-driven ticking. */
+        uint8_t td_walk_state;
+        do {
+        td_walk_state = iec->state;
+
         switch (iec->state) {
             case P_PRE0:
                 /* ignore anything that happens during first 100us after falling
@@ -397,6 +494,21 @@ static void serial_iec_device_exec_main(unsigned int devnr, CLOCK clk_value)
                    state P_PRE2 */
                 if (!(bus & IECBUS_DEVICE_READ_CLK)) {
                     iec->state = P_PRE2;
+                } else {
+                    /* [TurboCPM] CLK is already released ("ready-to-send"
+                       level).  A real listener reacts to the level after
+                       its ATN ack, not to an edge it happened to witness;
+                       demanding a low-then-high sequence here deadlocks
+                       masters that assert ATN with CLK released and send
+                       the command byte over fast serial (Turbo CP/M's
+                       burst init frame 2: device wedged in P_PRE1 holding
+                       DATA, host times out, E1).  The 100us P_PRE0 guard
+                       has already filtered post-ATN glitches.  Answer
+                       "ready-for-data" (DATA=1) exactly as P_PRE2 would. */
+                    iecbus_device_write(devnr, (uint8_t)(IECBUS_DEVICE_WRITE_CLK
+                                                      | IECBUS_DEVICE_WRITE_DATA));
+                    iec->timeout = clk_value + (CLOCK)US2CYCLES(200);
+                    iec->state = P_READY;
                 }
                 break;
             case P_PRE2:
@@ -546,6 +658,7 @@ static void serial_iec_device_exec_main(unsigned int devnr, CLOCK clk_value)
                 /* we're just waiting for the busmaster to set ATN back to 1 */
                 break;
         }
+        } while (iec->state != td_walk_state);   /* [TurboCPM] */
     } else if (iec->flags & P_TALKING) {
         /* we are in "talking" mode */
         switch (iec->state) {

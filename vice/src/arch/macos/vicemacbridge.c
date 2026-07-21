@@ -45,6 +45,9 @@
 #include "vicemacbridge.h"
 #include "vsync.h"
 
+/* TurboCPM E1 diagnostics — see docs/turbocpm-e1-investigation.md. */
+#include "turbodiag.h"
+
 #ifdef USE_SVN_REVISION
 #include "svnversion.h"
 #endif
@@ -2746,10 +2749,12 @@ static void vicemac_dispatch_queued_resources(void)
     vicemac_resource_string_event_t string_event;
 
     while (vicemac_pop_resource_int_event(&int_event)) {
+        turbodiag_log("res-int %s=%d", int_event.name, int_event.value);
         (void)resources_set_int(int_event.name, int_event.value);
     }
 
     while (vicemac_pop_resource_string_event(&string_event)) {
+        turbodiag_log("res-str %s=%s", string_event.name, string_event.value);
         if (strcmp(string_event.name, VICEMAC_MACHINE_MODEL_RESOURCE) == 0) {
             (void)vicemac_dispatch_machine_model(string_event.value);
         } else {
@@ -2799,6 +2804,8 @@ static void vicemac_dispatch_queued_input(void)
     vicemac_keyboard_text_event_t text_event;
 
     while (vicemac_pop_key_event(&event)) {
+        turbodiag_log("key clear=%d pressed=%d key=%ld mod=%d",
+                      event.clear, event.pressed, (long)event.key, (int)event.mod);
         if (event.clear) {
             keyboard_key_clear();
         } else if (event.pressed) {
@@ -2812,6 +2819,7 @@ static void vicemac_dispatch_queued_input(void)
         char text[VICEMAC_KEYBOARD_TEXT_CAPACITY];
 
         vicemac_copy_cstring(text, sizeof(text), text_event.text);
+        turbodiag_log("kbdbuf feed len=%zu", strlen(text));
         vicemac_basic_text_to_petscii(text);
         (void)kbdbuf_feed(text);
     }
@@ -2823,6 +2831,8 @@ static void vicemac_dispatch_queued_joystick_events(void)
 
     while (vicemac_pop_joystick_event(&event)) {
         if (event.port < JOYPORT_MAX_PORTS) {
+            turbodiag_log("joy port=%u value=$%03X", event.port,
+                          (unsigned int)(event.value & 0x0fffU));
             joystick_set_value_absolute((int)event.port, (uint16_t)(event.value & 0x0fffU));
         }
     }
@@ -2835,12 +2845,15 @@ static void vicemac_dispatch_queued_mouse_events(void)
     while (vicemac_pop_mouse_event(&event)) {
         switch (event.type) {
             case VICEMAC_MOUSE_EVENT_MOVE:
+                turbodiag_log("mouse move %.2f,%.2f", event.delta_x, event.delta_y);
                 mouse_move(event.delta_x, event.delta_y);
                 break;
             case VICEMAC_MOUSE_EVENT_BUTTON:
+                turbodiag_log("mouse button=%u pressed=%d", event.button, event.pressed);
                 mouse_button((int)event.button, event.pressed);
                 break;
             case VICEMAC_MOUSE_EVENT_RESET:
+                turbodiag_log("mouse reset");
                 mouse_reset();
                 break;
         }
@@ -2886,11 +2899,13 @@ static void vicemac_dispatch_machine_command(vicemac_machine_command_t *command)
             }
             break;
         case VICEMAC_MACHINE_COMMAND_RESET:
+            turbodiag_log("machine-reset mode=%d", command->value);
             vsync_suspend_speed_eval();
             machine_trigger_reset((unsigned int)command->value);
             ui_pause_disable();
             break;
         case VICEMAC_MACHINE_COMMAND_WARP:
+            turbodiag_log("warp %d", command->value);
             vsync_set_warp_mode(command->value);
             break;
         case VICEMAC_MACHINE_COMMAND_QUIT:
@@ -2930,6 +2945,9 @@ static int vicemac_dispatch_drive_attach_disk(uint32_t unit,
     if (!vicemac_drive_unit_is_valid(unit) || drive >= NUM_DRIVES) {
         return -1;
     }
+
+    turbodiag_log("attach-disk unit=%u drive=%u run_mode=%d path=%s",
+                  unit, drive, run_mode, path != 0 ? path : "(null)");
 
     if (run_mode != AUTOSTART_MODE_NONE) {
         result = autostart_disk((int)unit,
@@ -2973,6 +2991,7 @@ static void vicemac_dispatch_drive_command(vicemac_drive_command_t *command)
 
     switch (command->type) {
         case VICEMAC_DRIVE_COMMAND_RESET:
+            turbodiag_log("drive-reset unit=%u", command->unit);
             drive_cpu_trigger_reset(command->unit - DRIVE_UNIT_MIN);
             break;
         case VICEMAC_DRIVE_COMMAND_ATTACH_DISK:
@@ -2986,6 +3005,7 @@ static void vicemac_dispatch_drive_command(vicemac_drive_command_t *command)
             if (command->drive >= NUM_DRIVES) {
                 return;
             }
+            turbodiag_log("detach-disk unit=%u drive=%u", command->unit, command->drive);
             file_system_detach_disk(command->unit, command->drive);
             break;
         case VICEMAC_DRIVE_COMMAND_PREVIEW_SOUND:

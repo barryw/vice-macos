@@ -93,12 +93,43 @@ inline static int z80mem_read_limit(int addr)
 
 #define STORE(addr, value) (*_z80mem_write_tab_ptr[(addr) >> 8])((uint16_t)(addr), (uint8_t)(value))
 
+/* TurboCPM E1 diagnostics: log every Z80 port access to the fast-serial
+   window (CIA1 $DC0C-$DC0F, CIA2 $DD00-$DD0F, MMU $D505) at the IN/OUT
+   dispatch itself, so silently swapped io_*_tab entries still show up.
+   See docs/turbocpm-e1-investigation.md; remove with the fix. */
+#include "turbodiag.h"
+
+inline static int turbodiag_z80_port_interesting(uint16_t addr)
+{
+    return (addr >= 0xdd00 && addr <= 0xdd0f)
+           || (addr >= 0xdc0c && addr <= 0xdc0f)
+           || addr == 0xd505;
+}
+
+static uint8_t turbodiag_z80_in(uint16_t addr)
+{
+    uint8_t value = (io_read_tab[addr >> 8])(addr);
+
+    if (turbodiag_z80_port_interesting(addr)) {
+        turbodiag_log("z80-in $%04X=$%02X cfg=%d", addr, value, z80mem_config);
+    }
+    return value;
+}
+
+static void turbodiag_z80_out(uint16_t addr, uint8_t value)
+{
+    if (turbodiag_z80_port_interesting(addr)) {
+        turbodiag_log("z80-out $%04X=$%02X cfg=%d", addr, value, z80mem_config);
+    }
+    (io_write_tab[addr >> 8])(addr, value);
+}
+
 /* undefine IN and OUT first for platforms that have them already defined as something else */
 #undef IN
-#define IN(addr) (io_read_tab[(addr) >> 8])((uint16_t)(addr))
+#define IN(addr) turbodiag_z80_in((uint16_t)(addr))
 
 #undef OUT
-#define OUT(addr, value) (io_write_tab[(addr) >> 8])((uint16_t)(addr), (uint8_t)(value))
+#define OUT(addr, value) turbodiag_z80_out((uint16_t)(addr), (uint8_t)(value))
 
 #ifdef Z80_4MHZ
 static int z80_half_cycle = 0;

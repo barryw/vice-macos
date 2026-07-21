@@ -38,6 +38,84 @@ user reproduction names the divergence.
 Workarounds meanwhile: GTK x128 and the GTK MacVICE bundle boot the
 disk fine (HARD_WON notes apply); turbocpm testing is unblocked there.
 
+## RESOLVED (2026-07-20 session 2): three stacked causes, fix landed
+
+The bridge diagnostics below were implemented (env-gated
+`VICEMAC_TURBO_DIAG=1` → `/tmp/vicemac-bridge-diag.log`, `[TurboDiag]`
+prefix; instrumented: z80.c IN/OUT dispatch, z80mem.c unconnected-I/O,
+c128fastiec.c both directions, cia1571d.c store_sdr,
+serial-iec-device.c state transitions, vicemacbridge.c dispatch
+queues). One session of runs took it from "app-only mystery" to root
+cause:
+
+1. **The kit "pass" evidence was vacuous.**
+   `testRuntimeC128NTSCBootsTurboCPMWriteProtected` polled `$F407 != 0`
+   (bank 4). VICE's RAM init pattern leaves `$F407=$FF`, so the test
+   "passed" ~0.5s after reset without any boot — proven by a control
+   test (no disk attached, `$F407` still `$FF` at 1/3/6s). Every prior
+   green run of that test (and its "variants") proved nothing. The
+   doc's earlier conclusion "only the live interactive process
+   reproduces it" was an artifact of this. The test now uses the
+   prompt-test image + `$2000/$AA/$Ex` semantics like the other boot
+   tests — and with that, **E1 reproduces headless**, same 15s failure
+   as the app.
+
+2. **Bisect: the trigger is `-busdevice4`** (true IEC emulation of
+   printer 4; app argv carries it, GTK config and the old kit tests
+   don't). NTSC/PAL, warp, sound, mouse, frame source, read-only
+   attach, drives 9-11: all innocent. Minimal repro = plain boot +
+   `-busdevice4`.
+
+3. **Root cause: two compounding defects in VICE
+   `serial/serial-iec-device.c`** (the emulated IEC listener that
+   `-busdevice4` puts on the bus). Both fixed, `[TurboCPM]`-marked:
+
+   a) **Tick starvation.** The device's state machine advanced at most
+   one state per host `$DD00` access (iecbus conf3 hooks — no alarm).
+   The kernal polls `$DD00` constantly under ATN so it always fed
+   enough ticks; Turbo CP/M's Z80 holds ATN in ~56ms access-free CPU
+   delays, so the device got 2 ticks where the walk needs 3+ and froze
+   in P_PRE1 holding DATA (trace: `iecdev4 state=0->1`, frozen 3.4M
+   cycles until the Z80's 65536-poll loop expired → E1 on frame 1).
+   Fixed twice over: the listener switch now walks every transition
+   the current bus snapshot satisfies (bounded — adjacent states need
+   opposite CLK levels or fresh timeouts), and a 25µs maincpu alarm
+   ticks the state machine whenever any serial IEC device is enabled,
+   like real hardware that watches the wires continuously.
+
+   b) **Edge-vs-level ready-to-send.** With (a) fixed, ATN frame 1
+   (LISTEN $28, bit-banged) completed and frame 2 still froze: Turbo
+   CP/M asserts ATN for frame 2 **with CLK already released** and
+   sends the command byte over fast serial — burst style. P_PRE1
+   insisted on *observing CLK low* before P_PRE2 would accept a rising
+   flank, an edge requirement no real listener has: a real device
+   answers the ready-to-send *level* after its ATN ack. P_PRE1 now
+   treats CLK-already-high (post the 100µs P_PRE0 glitch guard) as
+   ready-to-send and answers ready-for-data immediately, exactly as
+   P_PRE2 would on the flank.
+
+   Verified after the fix: minimal repro (plain boot + `-busdevice4`)
+   boots; the full app stack (NTSC, sound, mouse, frame source, whole
+   argv tail, drives 9-11, write-protected attach) boots in 33s
+   realtime; plain PAL/warp and DCR regressions still pass; full
+   MacVICEKit suite 58 tests 0 failures.
+
+Autopsy reread under the new theory: DISK_STATUS=$FF "drive answered
+nothing" was right for the wrong drive — drive 8 was healthy; the
+DATA line the Z80 was watching was held by the emulated *printer*.
+
+**Barry's in-app confirmation** (instrumentation stays until then, it
+is env-gated and free when off): rebuild the VICE Mac C128 scheme (the
+runtime dylibs in BuildProducts are already rebuilt with the fix),
+then launch from a terminal with
+`VICEMAC_TURBO_DIAG=1 /path/to/ViceMac.app/Contents/MacOS/ViceMac`,
+attach the D71, soft reset. Expected: CP/M boots where it used to E1.
+If anything still fails, `/tmp/vicemac-bridge-diag.log` now names the
+stuck component directly (`docs/turbodiag-diff.sh good.log bad.log`
+diffs two traces event-by-event). After confirmation: strip
+`turbodiag.h` and its call sites (grep `turbodiag`), keep the
+`[TurboCPM]` fixes and the repaired kit tests.
+
 ## AUTHORIZED NEXT STEP (Barry, 2026-07-20): bridge diagnostics
 
 Barry has explicitly authorized adding whatever diagnostics the bridge

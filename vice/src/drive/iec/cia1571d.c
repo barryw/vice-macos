@@ -38,6 +38,9 @@
 #include "log.h"
 #include "types.h"
 
+/* TurboCPM E1 diagnostics — see docs/turbocpm-e1-investigation.md. */
+#include "turbodiag.h"
+
 
 typedef struct drivecia1571_context_s {
     unsigned int number;
@@ -261,6 +264,11 @@ static void store_sdr(cia_context_t *cia_context, uint8_t byte)
     drivecia1571_context_t *cia1571p;
 
     cia1571p = (drivecia1571_context_t *)(cia_context->prv);
+
+    /* TurboCPM E1 diagnostics (docs/turbocpm-e1-investigation.md):
+       unconditional proof the drive CPU pushed an answer into its SDR,
+       before any fast-serial direction gating. */
+    turbodiag_log("cia1571d%u store_sdr $%02X", cia1571p->number + 8, byte);
 
     iec_fast_drive_write((uint8_t)byte, cia1571p->number);
 }

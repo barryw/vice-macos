@@ -1087,11 +1087,20 @@ final class MacVICEKitTests: XCTestCase {
         }
         try Self.claimLiveRuntimeTest()
 
+        // HISTORY (2026-07-20): this test originally attached the production
+        // image and polled $F407 != 0. That marker is vacuous — VICE's RAM
+        // init pattern leaves $F407=$FF, so the test "passed" ~0.5s after
+        // reset without any boot (proven 2026-07-20 by a control run with no
+        // disk attached: $F407 read $FF at 1s/3s/6s after reset).
+        // Every prior green run of this test proved nothing. It now uses the
+        // prompt-test image, which writes $AA to $2000 at the CP/M prompt and
+        // $Ex on loader-stage failure — same sound semantics as the other
+        // boot tests.
         let environment = ProcessInfo.processInfo.environment
-        let diskPath = environment["TURBOCPM128_D71"]
-            ?? ("\(NSHomeDirectory())/Git/turbocpm128/build/turbocpm128-cpm3.d71")
+        let diskPath = environment["TURBOCPM128_PROMPT_D71"]
+            ?? ("\(NSHomeDirectory())/Git/turbocpm128/build/turbocpm128-cpm3-prompt-test.d71")
         guard FileManager.default.fileExists(atPath: diskPath) else {
-            throw XCTSkip("Turbo CP/M production image not found at \(diskPath); build it with `make` in turbocpm128 or set TURBOCPM128_D71.")
+            throw XCTSkip("Turbo CP/M prompt-test image not found at \(diskPath); build it with `make` in turbocpm128 or set TURBOCPM128_PROMPT_D71.")
         }
 
         let runtime = try builtRuntime()
@@ -1148,27 +1157,29 @@ final class MacVICEKitTests: XCTestCase {
         _ = session.setIntResource("Mouse", value: 1)
         _ = session.setStringResource("KeymapUserSymFile", value: "\(NSHomeDirectory())/barry.vkm")
         _ = session.setIntResource("KeymapIndex", value: 2)
+        _ = session.setIntResource("C128ColumnKey", value: 0)
+        _ = session.setIntResource("VDCRevision", value: 1)
 
         XCTAssertTrue(session.attachDisk(unit: 8, drive: 0, url: URL(fileURLWithPath: diskPath)))
         XCTAssertTrue(session.reset(hard: false))
 
-        // Production mode never writes a debug-cart result; the resident
-        // accelerator counter at $F407 going nonzero proves the loader got
-        // past burst init (E1) and installed the 1571 kernel.
-        let markerAddress: UInt32 = 0xF407
+        let markerAddress: UInt32 = 0x2000
         let deadline = Date().addingTimeInterval(120)
         var lastObserved: UInt8 = 0
         while Date() < deadline {
             RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.25))
             if let byte = try? session.debugger.peekByte(bank: 4, address: markerAddress) {
                 lastObserved = byte
-                if byte != 0 {
+                if byte == 0xAA {
                     return
+                }
+                if (byte & 0xF0) == 0xE0 {
+                    break
                 }
             }
         }
 
-        XCTFail(String(format: "Write-protected NTSC production boot never installed the drive kernel; $F407=$%02X (0 = still at/failed burst init - the E1 the user sees).", lastObserved))
+        XCTFail(String(format: "Write-protected NTSC boot never reached the CP/M prompt; $2000=$%02X (expected $AA; $Ex = loader stage failure - E1 is the burst-init failure the user sees).", lastObserved))
     }
 
     func testCStringArrayBridgesSwiftArgumentsToNullTerminatedArgv() {

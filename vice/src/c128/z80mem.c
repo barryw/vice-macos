@@ -102,11 +102,26 @@ void bios_store(uint16_t addr, uint8_t value)
     z80bios_rom[addr] = value;
 }
 
+/* TurboCPM E1 diagnostics (docs/turbocpm-e1-investigation.md): a
+   fast-serial port access falling through to unconnected I/O means the
+   io tab was silently rerouted — exactly the gating we are hunting. */
+#include "turbodiag.h"
+
+inline static int turbodiag_unconnected_interesting(uint16_t addr)
+{
+    return (addr >= 0xdd00 && addr <= 0xdd0f)
+           || (addr >= 0xdc0c && addr <= 0xdc0f)
+           || addr == 0xd505;
+}
+
 static uint8_t read_unconnected_io(uint16_t addr)
 {
 #ifdef Z80_4MHZ
     z80_clock_stretch();
 #endif
+    if (turbodiag_unconnected_interesting(addr)) {
+        turbodiag_log("z80-unconnected-read $%04X cfg=%d", addr, z80mem_config);
+    }
     return _z80mem_read_tab_ptr[addr >> 8](addr);
 }
 
@@ -115,6 +130,9 @@ static void store_unconnected_io(uint16_t addr, uint8_t value)
 #ifdef Z80_4MHZ
     z80_clock_stretch();
 #endif
+    if (turbodiag_unconnected_interesting(addr)) {
+        turbodiag_log("z80-unconnected-store $%04X=$%02X cfg=%d", addr, value, z80mem_config);
+    }
     _z80mem_write_tab_ptr[addr >> 8](addr, value);
 }
 
