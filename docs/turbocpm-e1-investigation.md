@@ -37,3 +37,41 @@ user reproduction names the divergence.
 
 Workarounds meanwhile: GTK x128 and the GTK MacVICE bundle boot the
 disk fine (HARD_WON notes apply); turbocpm testing is unblocked there.
+
+## AUTHORIZED NEXT STEP (Barry, 2026-07-20): bridge diagnostics
+
+Barry has explicitly authorized adding whatever diagnostics the bridge
+needs. Plan for the next session — implement, reproduce once, decode:
+
+1. Env-gated tracing (`VICEMAC_TURBO_DIAG=1`, log to
+   `/tmp/vicemac-bridge-diag.log`, `[TurboDiag]` prefix, every line
+   stamped with `maincpu_clk`), covering the first ~20 s after any
+   machine reset:
+   - Z80 port I/O to $DD00-$DD0F (CIA2/IEC), $DC0C-$DC0F (CIA1
+     SDR/ICR/CRA), and $D505 (MMU), plus the live C128 `mem_config` at
+     each access — instrument the Z80 I/O dispatch in
+     `vice/src/c128/z80mem.c` (this is where silent gating would hide).
+   - Drive 8 side: 1571 CIA SDR stores and fast-serial dispatch
+     (`vice/src/drive/iec/cia1571d.c` store_sdr path) — proves whether
+     the command ever reached the drive and whether its answer left.
+   - Every `queueResourceInt/String` and reset/attach dispatch in
+     `vice/src/arch/macos/vicemacbridge.c` (timestamps expose ordering
+     races between live resource sets, attach, and reset).
+   - Every joystick/mouse injection call.
+2. Reproduce: app run, attach + reset, E1, quit. Then run the SAME
+   instrumented core through the passing MacVICEKit test
+   (`testRuntimeC128NTSCBootsTurboCPMWriteProtected`) and diff the two
+   traces at first divergence. The kit run boots in ~5 s realtime, so
+   the traces align from reset.
+3. Decode table:
+   - App trace missing the Z80 $DD00 OUTs -> Z80 I/O routing/gating
+     broken only in-app; chase `mem_config` state at the access.
+   - OUTs present, drive CIA silent -> drive-side dispatch/scheduling;
+     chase diskunit clock sync in the app run.
+   - Both present, answer sent, host never sees it -> host CIA1
+     SDR/ICR delivery; chase cross-thread stalls between the OUT and
+     the ICR poll.
+4. Evidence base (all above in this doc): resources/ROMs/argv/disk
+   proven identical and passing headless; live autopsy shows
+   DISK_STATUS=$FF, drive idle at $FF25, Z80 parked at $FFED.
+   Remove the instrumentation after the fix; keep the kit regression.
