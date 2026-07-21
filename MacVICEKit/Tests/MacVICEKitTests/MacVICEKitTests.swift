@@ -1088,10 +1088,10 @@ final class MacVICEKitTests: XCTestCase {
         try Self.claimLiveRuntimeTest()
 
         let environment = ProcessInfo.processInfo.environment
-        let diskPath = environment["TURBOCPM128_PROMPT_D71"]
-            ?? ("\(NSHomeDirectory())/Git/turbocpm128/build/turbocpm128-cpm3-prompt-test.d71")
+        let diskPath = environment["TURBOCPM128_D71"]
+            ?? ("\(NSHomeDirectory())/Git/turbocpm128/build/turbocpm128-cpm3.d71")
         guard FileManager.default.fileExists(atPath: diskPath) else {
-            throw XCTSkip("Turbo CP/M prompt-test image not found at \(diskPath); build it with `make` in turbocpm128 or set TURBOCPM128_PROMPT_D71.")
+            throw XCTSkip("Turbo CP/M production image not found at \(diskPath); build it with `make` in turbocpm128 or set TURBOCPM128_D71.")
         }
 
         let runtime = try builtRuntime()
@@ -1101,16 +1101,38 @@ final class MacVICEKitTests: XCTestCase {
         }
 
         let configuration = MacVICEMachineConfiguration(machine: .c128,
-                                                        soundEnabled: false,
-                                                        warpEnabled: true,
-                                                        extraArguments: ["-model", "ntsc"])
-        let session = MacVICEEngineSession(configuration: configuration)
+                                                        soundEnabled: true,
+                                                        warpEnabled: false,
+                                                        extraArguments: [
+            "-model", "ntsc", "+autostart-handle-tde", "-autostart-warp",
+            "-busdevice4", "-devicebackend4", "1",
+            "-pr4txtdev", "0", "-pr4drv", "mps803", "-pr4output", "graphics",
+            "-rsdev3", "127.0.0.1:56173", "-rsdev3ip232",
+            "-acia1", "-myaciadev", "2", "-acia1mode", "2", "-acia1base", "56832",
+            "-80col", "-sidmodel", "0", "-sidextra", "0",
+            "-tapeport1device", "1", "+datasettesound", "-dssoundvolume", "1024",
+            "-drivesound", "-drivesoundvolume", "680",
+            "-devicebackend9", "0", "-drive9type", "1571", "-drive9truedrive", "+trapdevice9", "-attach9ro",
+            "-devicebackend10", "0", "-drive10type", "0", "-drive10truedrive", "+trapdevice10", "-attach10ro",
+            "-devicebackend11", "0", "-drive11type", "0", "-drive11truedrive", "+trapdevice11", "-attach11ro"])
+        // The app always attaches a video frame source; consuming frames is
+        // the one structural difference between these tests and the real app.
+        let frameSource = MacVICEFrameSource(
+            displayProfile: MacVICEDisplayProfile(
+                bootFrame: MacVICEBootFrame(pixelSize: CGSize(width: 856, height: 312))))
+        let session = MacVICEEngineSession(configuration: configuration,
+                                           videoSource: frameSource)
         try session.start(machineID: MacVICEMachine.c128.viceTarget,
                           dynamicLibraryURL: x128Library,
                           arguments: configuration.launchArguments(runtime: runtime))
         addTeardownBlock {
             Self.stopRunningEngine()
         }
+        // Drain frames like a renderer would.
+        let frameDrain = Timer.scheduledTimer(withTimeInterval: 1.0/60.0, repeats: true) { _ in
+            _ = frameSource.copyLatestFrame()
+        }
+        addTeardownBlock { frameDrain.invalidate() }
 
         let settleDeadline = Date().addingTimeInterval(5)
         while Date() < settleDeadline {
@@ -1122,27 +1144,31 @@ final class MacVICEKitTests: XCTestCase {
         XCTAssertTrue(session.setIntResource("Drive8TrueEmulation", value: 1))
         XCTAssertTrue(session.setIntResource("TrapDevice8", value: 0))
         XCTAssertTrue(session.setIntResource("AttachDevice8d0Readonly", value: 1))
+        _ = session.setIntResource("JoyPort1Device", value: 3)
+        _ = session.setIntResource("Mouse", value: 1)
+        _ = session.setStringResource("KeymapUserSymFile", value: "\(NSHomeDirectory())/barry.vkm")
+        _ = session.setIntResource("KeymapIndex", value: 2)
 
         XCTAssertTrue(session.attachDisk(unit: 8, drive: 0, url: URL(fileURLWithPath: diskPath)))
         XCTAssertTrue(session.reset(hard: false))
 
-        let bootResultAddress: UInt32 = 0x2000
+        // Production mode never writes a debug-cart result; the resident
+        // accelerator counter at $F407 going nonzero proves the loader got
+        // past burst init (E1) and installed the 1571 kernel.
+        let markerAddress: UInt32 = 0xF407
         let deadline = Date().addingTimeInterval(120)
         var lastObserved: UInt8 = 0
         while Date() < deadline {
             RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.25))
-            if let byte = try? session.debugger.peekByte(bank: 4, address: bootResultAddress) {
+            if let byte = try? session.debugger.peekByte(bank: 4, address: markerAddress) {
                 lastObserved = byte
-                if byte == 0xAA {
+                if byte != 0 {
                     return
-                }
-                if (byte & 0xF0) == 0xE0 {
-                    break
                 }
             }
         }
 
-        XCTFail(String(format: "Write-protected NTSC Turbo CP/M boot failed; result byte $%02X (expected $AA; $E1 = burst-init/WP failure).", lastObserved))
+        XCTFail(String(format: "Write-protected NTSC production boot never installed the drive kernel; $F407=$%02X (0 = still at/failed burst init - the E1 the user sees).", lastObserved))
     }
 
     func testCStringArrayBridgesSwiftArgumentsToNullTerminatedArgv() {
