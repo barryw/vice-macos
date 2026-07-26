@@ -65,8 +65,6 @@ static char *basic_rom_name = NULL;
 /* Name of the Kernal ROM.  */
 static char *kernal_rom_name = NULL;
 
-int kernal_revision = C64_KERNAL_REV3;
-
 static int set_chargen_rom_name(const char *val, void *param)
 {
     if (util_string_set(&chargen_rom_name, val)) {
@@ -82,7 +80,7 @@ static int set_kernal_rom_name(const char *val, void *param)
         return 0;
     }
 
-    return c64rom_load_kernal(kernal_rom_name);
+    return c64rom_load_kernal(kernal_rom_name, NULL);
 }
 
 static int set_basic_rom_name(const char *val, void *param)

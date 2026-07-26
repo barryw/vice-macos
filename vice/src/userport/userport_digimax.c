@@ -106,16 +106,10 @@ void userport_digimax_sound_chip_init(void)
 }
 
 /*
-    TLC7266 (4 8bit DACs)
-
-     PA3(A1)  PA2(A0)  selected
-
-     1  (0)   0  (0)   DAC A (left)
-     1  (0)   1  (1)   DAC B (right)
-     0  (1)   0  (0)   DAC C (right)
-     0  (1)   1  (1)   DAC D (left)
-
-    https://gitlab.com/VanessaE/dac-projects/-/raw/main/DigiMAX/old-geda/DigiMAX-0.1.4-schematic.png
+    PA2 low,  /PA3 low:  DAC #0 (left)
+    PA2 high, /PA3 low:  DAC #1 (right)
+    PA2 low,  /PA3 high: DAC #2 (left)
+    PA2 high, /PA3 high: DAC #3 (right).
 */
 
 static void userport_digimax_store_pa2(uint8_t value)
@@ -126,9 +120,8 @@ static void userport_digimax_store_pa2(uint8_t value)
 
 static void userport_digimax_store_pa3(uint8_t value)
 {
-    /* CAUTION: value is the value written to PA3, but the userport line is inverted (!PA3) */
     userport_digimax_address &= ~2;
-    userport_digimax_address |= (((value ^ 1) & 1) << 1);
+    userport_digimax_address |= ((value & 1) << 1);
 }
 
 static void userport_digimax_store_pbx(uint8_t value, int pulse)
@@ -136,17 +129,17 @@ static void userport_digimax_store_pbx(uint8_t value, int pulse)
     uint8_t addr = 0;
 
     switch (userport_digimax_address) {
-        case 0x0: /* left */
+        case 0x0:
             addr = 1;
             break;
-        case 0x1: /* right */
+        case 0x1:
             addr = 0;
             break;
-        case 0x2: /* right */
-            addr = 2;
-            break;
-        case 0x3: /* left */
+        case 0x2:
             addr = 3;
+            break;
+        case 0x3:
+            addr = 2;
             break;
     }
 

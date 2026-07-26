@@ -229,25 +229,19 @@ void drivecpu65c02_init(diskunit_context_t *drv, int type)
 
 void drivecpu65c02_wake_up(diskunit_context_t *drv)
 {
-    if (drv->idling_method == DRIVE_IDLE_SKIP_CYCLES) {
-        /* FIXME: this value could break some programs, or be way too high for
-        others.  Maybe we should put it into a user-definable resource.  */
-        if (((maincpu_clk - drv->cpu->last_clk) > 0xffffff) &&
-            (*(drv->clk_ptr) > 934639)) {
-            log_message(drv->log, "Skipping cycles.");
-            drv->cpu->last_clk = maincpu_clk;
-        }
+    /* FIXME: this value could break some programs, or be way too high for
+       others.  Maybe we should put it into a user-definable resource.  */
+    if (maincpu_clk - drv->cpu->last_clk > 0xffffff
+        && *(drv->clk_ptr) > 934639) {
+        log_message(drv->log, "Skipping cycles.");
+        drv->cpu->last_clk = maincpu_clk;
     }
-    /* NOTE: after this, cpu->stop_clk will be recalculated from
-             clk_value and cpu->last_clk */
 }
 
-#if 0
 void drivecpu65c02_sleep(diskunit_context_t *drv)
 {
     /* Currently does nothing.  But we might need this hook some day.  */
 }
-#endif
 
 /* Handle a ROM trap. */
 inline static uint32_t drive_trap_handler(diskunit_context_t *drv)
@@ -365,19 +359,20 @@ void drivecpu65c02_execute(diskunit_context_t *drv, CLOCK clk_value)
         cycles = 0;
     }
 
-    /* advance cpu->stop_clk accordingly */
     while (cycles != 0) {
-        tcycles = (cycles > 0x10000) ? 0x10000 : cycles;
+        tcycles = cycles > 10000 ? 10000 : cycles;
         cycles -= tcycles;
 
-        cpu->cycle_accum += (drv->cpud->sync_factor * tcycles);
-        cpu->stop_clk += (cpu->cycle_accum >> 16);
-        cpu->cycle_accum &= 0xffff; /* keep reminder */
+        cpu->cycle_accum += drv->cpud->sync_factor * tcycles;
+        cpu->stop_clk += cpu->cycle_accum >> 16;
+        cpu->cycle_accum &= 0xffff;
     }
 
-    /* Run drive CPU emulation until the cpu->stop_clk clock has been reached. */
-    while (*drv->clk_ptr < cpu->stop_clk) {
-
+    /* Run drive CPU emulation until the stop_clk clock has been reached.
+     * There appears to be a nasty 32-bit overflow problem here, so we
+     * paper over it by only considering subtractions of 2nd complement
+     * integers. */
+    while ((int) (*(drv->clk_ptr) - cpu->stop_clk) < 0) {
 /* Include the R65C02 CPU emulation core.  */
 
 #define CLK (*(drv->clk_ptr))
@@ -414,7 +409,7 @@ void drivecpu65c02_execute(diskunit_context_t *drv, CLOCK clk_value)
     }
 
     cpu->last_clk = clk_value;
-    /*drivecpu65c02_sleep(drv);*/
+    drivecpu65c02_sleep(drv);
 }
 
 
@@ -432,28 +427,6 @@ static void drivecpu65c02_set_bank_base(void *context)
 }
 
 /* ------------------------------------------------------------------------- */
-
-/* DRIVECPU65C02 1.3 snapshot module format:
-
-   type  | name                 | description
-   ------------------------------------------
-   CLOCK | clock                |
-   UBYTE | a                    |
-   UBYTE | x                    |
-   UBYTE | y                    |
-   UBYTE | sp                   |
-   WORD  | pc                   |
-   UBYTE | status               |
-   DWORD | last_opcode_info     |
-   CLOCK | last_clk             |
-   CLOCK | cycle_accum          |
-   CLOCK | last_exc_cycles      |
-   CLOCK | stop_clk             |
-   UBYTE | cpu_last_data        |
-   ARRAY | drive RAM            | size depends on drive
-
-   followed by CPU interrupt snapshot data
-*/
 
 #define SNAP_MAJOR 1
 #define SNAP_MINOR 3

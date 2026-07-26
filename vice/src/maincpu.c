@@ -35,7 +35,6 @@
 #include "archdep.h"
 #include "autostart.h"
 #include "debug.h"
-#include "drive.h"
 #include "interrupt.h"
 #include "log.h"
 #include "machine.h"
@@ -524,7 +523,6 @@ void maincpu_resync_limits(void)
     }
 }
 
-/* This doesn't return. The thread will directly exit when requested. */
 void maincpu_mainloop(void)
 {
 #define ORIGIN_MEMSPACE (e_comp_space)
@@ -638,8 +636,6 @@ void maincpu_mainloop(void)
 #include "6510core.c"
 
         maincpu_int_status->num_dma_per_opcode = 0;
-
-        drive_cycle_hook();
 
         if (maincpu_clk_limit && (maincpu_clk > maincpu_clk_limit)) {
             log_error(LOG_DEFAULT, "cycle limit reached.");
@@ -762,44 +758,6 @@ unsigned int maincpu_get_sp(void) {
 }
 
 /* ------------------------------------------------------------------------- */
-
-/* MAINCPU 1.3 snapshot module format:
-
-   type  | name                 | description
-   ------------------------------------------
-   CLOCK | main clock           |
-   UBYTE | a                    |
-   UBYTE | x                    |
-   UBYTE | y                    |
-   UBYTE | sp                   |
-   WORD  | pc                   |
-   UBYTE | status               |
-
-   BYTE  | r3                   |
-   BYTE  | r4                   |
-   BYTE  | r5                   |
-   BYTE  | r6                   |
-   BYTE  | r7                   |
-   BYTE  | r8                   |
-   BYTE  | r9                   |
-   BYTE  | r10                  |
-   BYTE  | r11                  |
-   BYTE  | r12                  |
-   BYTE  | r13                  |
-   BYTE  | r14                  |
-   BYTE  | r15                  |
-   BYTE  | ACM                  |
-   BYTE  | YXM                  |
-   4*BYTE| burst_cache          |
-   WORD  | burst_addr           |
-   DWORD | dtvclockneg          |
-
-   DWORD | last_opcode_info     |
-   DWORD | ane_log_level        |
-   DWORD | lxa_log_level        |
-
-   FIXME: DTV version should get different module name
-*/
 
 static char snap_module_name[] = "MAINCPU";
 #define SNAP_MAJOR 1

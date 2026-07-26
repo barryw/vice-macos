@@ -1490,7 +1490,7 @@ static int http_expand_url(char *final_url)
     }
 
     /* see below, noprintables in pid=.. need to be overruled, otherwise libcurl complains */
-    p = (char*)strstr((const char *)commandbuffer, "&pid=");
+    p = strstr((const char *)commandbuffer, "&pid=");
     if (p != NULL) {
         if (!isprint((unsigned char)*(p+5))) {
             wic64_log(CONS_COL_NO, "%s: patching &pid=X.", __FUNCTION__);
@@ -2779,10 +2779,10 @@ static void userport_wic64_reset(void)
 
 /* ---------------------------------------------------------------------*/
 
-/* UPWIC64 snapshot module format:
+/* USERPORT_WIC64 snapshot module format:
 
    type  | name           | description
-   ------------------------------------
+   -----------------------------
    BYTE  | input_state    |
    BYTE  | input_length   |
 */

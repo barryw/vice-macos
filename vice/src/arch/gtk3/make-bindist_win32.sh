@@ -138,7 +138,7 @@ done
 curdir=`pwd`
 cp `ntldd -R $BUILDPATH/bin/x64sc.exe|gawk '/\\\\bin\\\\/{print $3;}'|cygpath -f -` $BUILDPATH/bin
 cd $MINGW_PREFIX
-cp bin/lib{lzma-5,rsvg-2-2,xml2-*}.dll $BUILDPATH/bin
+cp bin/lib{lzma-5,rsvg-2-2,xml2-2}.dll $BUILDPATH/bin
 cp --parents lib/gdk-pixbuf-2.0/2.10.0/loaders/*pixbufloader*{png,svg,xpm}.dll $BUILDPATH
 # generate loaders.cache from the copied loaders in the binidst, not the system loaders
 cd $BUILDPATH
@@ -174,11 +174,9 @@ rm -f `find $BUILDPATH -name "Makefile*"`
 rm -f `find $BUILDPATH -name "sdl_*"`
 mkdir $BUILDPATH/common
 mkdir $BUILDPATH/hotkeys
-mkdir $BUILDPATH/joymaps
 cp $TOPBUILDDIR/data/common/vice.gresource $BUILDPATH/common
 cp $TOPSRCDIR/data/common/*.ttf $BUILDPATH/common
 cp $TOPSRCDIR/data/hotkeys/*.vhk $BUILDPATH/hotkeys
-cp $TOPSRCDIR/data/joymaps/*.vjm $BUILDPATH/joymaps
 
 #if test x"$HTML_DOCS" = "xyes"; then
 #    cp -a $TOPSRCDIR/doc/html $BUILDPATH

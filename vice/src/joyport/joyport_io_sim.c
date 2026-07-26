@@ -68,6 +68,12 @@ static uint8_t joyport_io_sim_poty[JOYPORT_MAX_PORTS] = {0};
 
 /* ------------------------------------------------------------------------- */
 
+#ifdef HOST_HARDWARE_IO
+static joyport_t joyport_io_hw_device;
+#else
+static joyport_t joyport_io_sim_device;
+#endif
+
 static int joyport_io_sim_set_enabled(int port, int enabled)
 {
     int new_state = enabled ? 1 : 0;
@@ -79,10 +85,10 @@ static int joyport_io_sim_set_enabled(int port, int enabled)
 #ifndef HOST_HARDWARE_IO
     if (new_state) {
         /* enabled, clear lines */
-        joyport_io_sim_data_out[port] = 0xff;
-        joyport_io_sim_data_in[port] = 0xff;
-        joyport_io_sim_potx[port] = 0xff;
-        joyport_io_sim_poty[port] = 0xff;
+        joyport_io_sim_data_out[port] = 0;
+        joyport_io_sim_data_in[port] = 0;
+        joyport_io_sim_potx[port] = 0;
+        joyport_io_sim_poty[port] = 0;
     }
 #endif
 
@@ -126,9 +132,7 @@ static uint8_t joyport_io_hw_read_poty(int p)
 #else
 static uint8_t joyport_io_sim_read(int port)
 {
-    uint8_t val = joyport_io_sim_data_out[port];
-    /* printf("joyport_io_sim_read port:%d value:%02x\n", port, val); */
-    return val | 0xe0;
+    return joyport_io_sim_data_out[port];
 }
 
 static void joyport_io_sim_store(int port, uint8_t val)
@@ -203,13 +207,6 @@ static joyport_t joyport_io_sim_device = {
 
 int joyport_io_sim_resources_init(void)
 {
-    int port;
-    for (port = 0; port < JOYPORT_MAX_PORTS; port++) {
-        joyport_io_sim_data_out[port] = 0xff;
-        joyport_io_sim_data_in[port] = 0xff;
-        joyport_io_sim_potx[port] = 0xff;
-        joyport_io_sim_poty[port] = 0xff;
-    }
 #ifdef HOST_HARDWARE_IO
     return joyport_device_register(JOYPORT_ID_IO_SIMULATION, &joyport_io_hw_device);
 #else

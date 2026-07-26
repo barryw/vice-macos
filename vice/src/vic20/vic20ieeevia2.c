@@ -143,20 +143,18 @@ static uint8_t store_pcr(via_context_t *via_context, uint8_t byte, uint16_t addr
     return byte;
 }
 
-static uint8_t read_prb(via_context_t *via_context, bool peek_only)
+static uint8_t read_prb(via_context_t *via_context)
 {
     uint8_t byte;
 
-    if (!peek_only) {
-        drive_catch_up_hook(maincpu_clk);
-    }
+    drive_cpu_execute_all(maincpu_clk);
 
     byte = (parallel_bus & ~(via_context->via[VIA_DDRB]))
            | (via_context->via[VIA_PRB] & via_context->via[VIA_DDRB]);
     return byte;
 }
 
-static uint8_t read_pra(via_context_t *via_context, uint16_t addr, bool peek_only)
+static uint8_t read_pra(via_context_t *via_context, uint16_t addr)
 {
     return 0xff;
 }

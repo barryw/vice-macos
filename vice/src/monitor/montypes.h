@@ -267,9 +267,7 @@ void mon_add_number_masked_to_buffer(int number, int mask);
 void mon_add_string_to_buffer(char *str);
 void mon_backtrace(void);
 void mon_cart_freeze(void);
-void mon_userport_get_output(void);
 IO_SIM_RESULT mon_userport_set_output(int value);
-void mon_joyport_get_output(int port);
 IO_SIM_RESULT mon_joyport_set_output(int port, int value);
 void mon_reset_machine(int type);
 void mon_resource_get(const char *name);
@@ -308,7 +306,7 @@ long mon_evaluate_address_range(MON_ADDR *start_addr, MON_ADDR *end_addr, bool m
 bool check_drive_emu_level_ok(int drive_num);
 void mon_print_conditional(cond_node_t *cnode);
 void mon_delete_conditional(cond_node_t *cnode);
-int mon_evaluate_conditional(cond_node_t *cnode, unsigned int effective_pc);
+int mon_evaluate_conditional(cond_node_t *cnode);
 int mon_write_snapshot(const char* name, int save_roms, int save_disks, int even_mode);
 int mon_read_snapshot(const char* name, int even_mode);
 bool mon_is_valid_addr(MON_ADDR a);
@@ -345,7 +343,7 @@ void monitor_change_device(MEMSPACE mem);
 
 void mon_export(void);
 
-void mon_stopwatch_show(MEMSPACE mem, const char* prefix, const char* suffix);
+void mon_stopwatch_show(const char* prefix, const char* suffix);
 void mon_stopwatch_reset(void);
 void mon_maincpu_trace(void);
 void mon_maincpu_toggle_trace(int state);

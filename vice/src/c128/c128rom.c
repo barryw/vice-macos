@@ -29,11 +29,9 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "archdep.h"
 #include "c128.h"
 #include "c128mem.h"
 #include "c128memrom.h"
-#include "c128model.h"
 #include "c128rom.h"
 #include "c64memrom.h"
 #include "c64rom.h"
@@ -280,10 +278,9 @@ int c128rom_kernal_setup(void)
     const char *resname = NULL;
     const char *rom_name = NULL;
     uint8_t *kernal = NULL;
-    const char *last_kernal64 = NULL;
+    static const char *last_kernal64 = NULL;
     char *name;
     const char *kernal64 = C128_KERNAL64_NAME;
-    int board_type = BOARD_C128;
 
     if (!rom_loaded) {
         return 0;
@@ -323,36 +320,12 @@ int c128rom_kernal_setup(void)
             return -1;
     }
 
-    /* HACK: In the C128DCR, C64 kernal+BASIC are combined with C128 kernal
-     * in a single chip. Since we don't have separate resources for localized
-     * C64 kernals, we load it automatically here. */
-    resources_get_int("BoardType", &board_type);
-    if (board_type == BOARD_C128D) {
-        const char *p;
-        resources_get_string("Kernal64Name", &last_kernal64);
-        /* get only the name of the file, remove the path */
-        p = strrchr(last_kernal64, ARCHDEP_DIR_SEP_CHR);
-        if (p != NULL) {
-            /* dir separator was found, move pointer behind it */
-            p++;
-        } else {
-            /* separator not found, use original string */
-            p = last_kernal64;
-        }
-        /* now check if the loaded C64 kernal is one of the stock kernals we
-         * provide, and only then replace it by another stock kernal */
-        if (!strcmp(p, C128_KERNAL64_NAME) ||
-            !strcmp(p, C128_KERNAL64_NO_NAME) ||
-            !strcmp(p, C128_KERNAL64_SE_NAME)) {
-            log_warning(c128rom_log,
-                        "On C128DCR boards the C64 kernal is in the same IC as the C128 kernal, using: %s",
-                        kernal64);
-            /* if the file changed, load the new one */
-            if (strcmp(kernal64, last_kernal64) != 0) {
-                resources_set_string("Kernal64Name", kernal64);
-            }
-        }
+    log_verbose(c128rom_log, "kernal64:%s", kernal64);
+
+    if (kernal64 != last_kernal64) {
+        resources_set_string("Kernal64Name", kernal64);
     }
+    last_kernal64 = kernal64;
 
     /* disable traps before loading the ROM */
     get_trapflags();
@@ -683,9 +656,6 @@ int c128rom_load_chargen_it(const char *rom_name)
 
 /******************************************************************************/
 
-/* called by mem_load(), set_kernal64_rom_name()
- * actually loads the C64 kernal
- */
 int c128rom_kernal64_setup(void)
 {
     const char *rom_name = NULL;
@@ -698,29 +668,18 @@ int c128rom_kernal64_setup(void)
         return -1;
     }
 
-    /* sanity check, rom_name can not be NULL */
-    if (rom_name == NULL) {
-        return -1;
-    }
-
     /* Load C64 kernal ROM.  */
     if (sysfile_load(rom_name, machine_name, c64memrom_kernal64_rom, C128_KERNAL64_ROM_SIZE, C128_KERNAL64_ROM_SIZE) < 0) {
         log_error(c128rom_log, "Couldn't load C64 kernal ROM `%s'.", rom_name);
         return -1;
     }
 
-    /* copy loaded kernal to trap rom */
     memcpy(c64memrom_kernal64_trap_rom, c64memrom_kernal64_rom, C128_KERNAL64_ROM_SIZE);
 
     return 0;
 }
 
 /* check if C64 kernal ROM exists */
-
-/* called by c64rom_load_kernal(), set_kernal64_rom_name()
- * load a kernal ROM with given name (usually by setting "Kernal64Name")
- * - must NOT set "Kernal64Name"
- */
 int c128rom_load_kernal64(const char *rom_name)
 {
     if (!rom_loaded) {
@@ -847,12 +806,14 @@ int mem_load(void)
     return 0;
 }
 
-/*
- * load a kernal ROM with given name (usually by setting "KernalName")
- * - keeps "KernalRev" (kernal_revision) in sync
- * - must NOT set "KernalName"
- */
-int c64rom_load_kernal(const char *rom_name)
+/* FIXME: the extra parameter cartkernal was used to replace the kernal
+   with a cartridge kernal rom image.
+
+   CAUTION: The current code does NOT use this anymore, cartkernal is always NULL
+*/
+int c64rom_load_kernal(const char *rom_name, uint8_t *cartkernal)
 {
+    /* CAUTION: this is the only place where c128rom_load_kernal64 gets called
+     *  with cartkernal potentially being not NULL */
     return c128rom_load_kernal64(rom_name);
 }

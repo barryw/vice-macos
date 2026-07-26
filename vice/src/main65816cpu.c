@@ -36,7 +36,6 @@
 #include "autostart.h"
 #include "cmdline.h"
 #include "debug.h"
-#include "drive.h"
 #include "interrupt.h"
 #include "log.h"
 #include "machine.h"
@@ -280,7 +279,6 @@ void maincpu_resync_limits(void)
 
 void maincpu_mainloop(void)
 {
-#define ORIGIN_MEMSPACE (e_comp_space)
     /* Notice that using a struct for these would make it a lot slower (at
        least, on gcc 2.7.2.x).  */
  union regs {
@@ -383,8 +381,6 @@ void maincpu_mainloop(void)
 
         maincpu_int_status->num_dma_per_opcode = 0;
 
-        drive_cycle_hook();
-
         if (maincpu_clk_limit && (maincpu_clk > maincpu_clk_limit)) {
             log_error(LOG_DEFAULT, "cycle limit reached.");
             archdep_vice_exit(EXIT_FAILURE);
@@ -454,30 +450,9 @@ unsigned int maincpu_get_sp(void) {
 
 /* ------------------------------------------------------------------------- */
 
-/* MAIN65816CPU 1.2 snapshot module format:
-
-   type  | name                 | description
-   ------------------------------------------
-   CLOCK | main clock           |
-   UBYTE | a                    |
-   UBYTE | b                    |
-   WORD  | x                    |
-   WORD  | y                    |
-   WORD  | sp                   |
-   WORD  | dpr                  |
-   UBYTE | pbr                  |
-   UBYTE | dbr                  |
-   UBYTE | emul                 |
-   WORD  | pc                   |
-   UBYTE | status               |
-   DWORD | last_opcode_info     |
-
-   Note: renamed "MAIN6565802CPU" to "MAIN65816CPU" in 1.3
-*/
-
-static char snap_module_name[] = "MAIN65816CPU";
+static char snap_module_name[] = "MAIN6565802CPU";
 #define SNAP_MAJOR 1
-#define SNAP_MINOR 3
+#define SNAP_MINOR 2
 
 int maincpu_snapshot_write_module(snapshot_t *s)
 {

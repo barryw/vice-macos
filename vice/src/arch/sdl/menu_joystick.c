@@ -32,15 +32,12 @@
 #include "joystick.h"
 #include "kbd.h"
 #include "lib.h"
-#include "log.h"
 #include "machine.h"
 #include "menu_common.h"
 #include "mouse.h"
 #include "resources.h"
 #include "types.h"
-#include "ui.h"
 #include "uiactions.h"
-#include "uifilereq.h"
 #include "uimenu.h"
 #include "uipoll.h"
 #include "userport_joystick.h"
@@ -48,14 +45,6 @@
 #include "vice_sdl.h"
 
 #include "menu_joystick.h"
-
-/*#define DEBUG_MENU_JOYSTICK*/
-
-#ifdef DEBUG_MENU_JOYSTICK
-#define DBG(x)  log_printf x
-#else
-#define DBG(x)
-#endif
 
 
 UI_MENU_DEFINE_RADIO(JoyDevice1)
@@ -70,12 +59,9 @@ UI_MENU_DEFINE_RADIO(JoyDevice9)
 UI_MENU_DEFINE_RADIO(JoyDevice10)
 UI_MENU_DEFINE_RADIO(JoyDevice11)
 
-#define MAX_HOST_CONTROLLERS            16
-#define JOYSTICK_DEVICES_EXTRA_ITEMS    4
-
 /* FIXME: proper solution would be to dynamically allocate the array of menu
  *        items per port, for now we stick with max. 16 controllers */
-static ui_menu_entry_t joystick_device_dyn_menu[JOYPORT_MAX_PORTS][JOYSTICK_DEVICES_EXTRA_ITEMS + MAX_HOST_CONTROLLERS + 1];
+static ui_menu_entry_t joystick_device_dyn_menu[JOYPORT_MAX_PORTS][5 + 16];
 static int joystick_device_dyn_menu_init[JOYPORT_MAX_PORTS] = { 0 };
 
 static void sdl_menu_joystick_device_free(int port)
@@ -103,7 +89,6 @@ static const ui_callback_t uijoystick_device_callbacks[JOYPORT_MAX_PORTS] = {
     radio_JoyDevice11_callback
 };
 
-/* build menu to select which device to map to the given joystick port */
 static const char *joystick_device_dynmenu_helper(int port)
 {
     int j = 0, id;
@@ -120,8 +105,7 @@ static const char *joystick_device_dynmenu_helper(int port)
         joystick_device_dyn_menu_init[port] = 1;
     }
 
-    /* if (joyport_has_mapping(port)) */
-    {
+    if (joyport_has_mapping(port)) {
         entry[j].action   = ACTION_NONE;
         entry[j].string   = lib_strdup("None");
         entry[j].type     = MENU_ENTRY_RESOURCE_RADIO;
@@ -153,7 +137,7 @@ static const char *joystick_device_dynmenu_helper(int port)
 #ifdef HAVE_SDL_NUMJOYSTICKS
         n = 0;
         joystick_ui_reset_device_list();
-        while ((n < MAX_HOST_CONTROLLERS) && (device_name = joystick_ui_get_next_device_name(&id)) != NULL) {
+        while (n < 16 && (device_name = joystick_ui_get_next_device_name(&id)) != NULL) {
             entry[j].action   = ACTION_NONE;
             entry[j].string   = lib_strdup(device_name);
             entry[j].type     = MENU_ENTRY_RESOURCE_RADIO;
@@ -388,7 +372,6 @@ static UI_MENU_CALLBACK(joystick_autofire_dynmenu_callback)
 }
 
 #ifdef USE_SDL2UI
-#if 0 /* FIXME: does not work right now */
 static UI_MENU_CALLBACK(custom_rescan_joy_callback)
 {
     if (activated) {
@@ -396,7 +379,6 @@ static UI_MENU_CALLBACK(custom_rescan_joy_callback)
     }
     return NULL;
 }
-#endif
 #endif
 
 static UI_MENU_CALLBACK(custom_keyset_callback)
@@ -550,11 +532,10 @@ static const ui_menu_entry_t define_keyset_menu[] = {
 static const char *joy_pin[JOYPORT_MAX_PORTS][JOYPORT_MAX_PINS];
 
 static const char *joy_pot[] = {
-    JOYPORT_POTX_NAME,
-    JOYPORT_POTY_NAME
+    "Pot-X",
+    "Pot-Y"
 };
 
-/* poll for a joystick event and assign it to current mapping */
 static UI_MENU_CALLBACK(custom_joymap_callback)
 {
     char *target = NULL;
@@ -569,24 +550,14 @@ static UI_MENU_CALLBACK(custom_joymap_callback)
     }
 
     if (activated) {
-        DBG(("custom_joymap_callback port:%d pin: %02x", port, (unsigned)pin));
-        target = lib_msprintf("Port %i %s", port + 1, joy_pin[port][pin]);
-        e = sdl_ui_poll_event("controller", target, joystick_device, 0, 1, 0, 5);
+        target = lib_msprintf("Port %i %s (press del to clear)", port + 1, joy_pin[port][pin]);
+        e = sdl_ui_poll_event("joystick", target, joystick_device, 0, 1, 0, 5);
         lib_free(target);
-        DBG(("custom_joymap_callback: e.type:%02x", e.type));
 
         switch (e.type) {
             case SDL_JOYAXISMOTION:
-                DBG(("custom_joymap_callback: (SDL_JOYAXISMOTION %d) sdljoy_set_joystick %02x (pin:%d)",
-                     e.jaxis.value, 1U << pin, pin));
-                sdljoy_set_joystick(e, 1 << pin);
-                break;
             case SDL_JOYBUTTONDOWN:
-                DBG(("custom_joymap_callback: (SDL_JOYBUTTONDOWN) sdljoy_set_joystick %02x (pin:%d)", 1U << pin, pin));
-                sdljoy_set_joystick(e, 1 << pin);
-                break;
             case SDL_JOYHATMOTION:
-                DBG(("custom_joymap_callback: (SDL_JOYHATMOTION) sdljoy_set_joystick %02x (pin:%d)", 1U << pin, pin));
                 sdljoy_set_joystick(e, 1 << pin);
                 break;
             case SDL_KEYDOWN:
@@ -604,20 +575,17 @@ static UI_MENU_CALLBACK(custom_joymap_callback)
     return NULL;
 }
 
-/* completely clear current mapping */
 static UI_MENU_CALLBACK(clear_joymap_callback)
 {
     int pin, port, joystick_device;
 
     port = (vice_ptr_to_int(param)) >> 5;
 
-    if (activated && (joystick_port_map[port] >= JOYDEV_REALJOYSTICK_MIN)) {
+    if (activated && joystick_port_map[port] >= JOYDEV_REALJOYSTICK_MIN) {
         joystick_device = joy_ordinal_to_id(joystick_port_map[port] - JOYDEV_REALJOYSTICK_MIN);
         for (pin = 0; pin < JOYPORT_MAX_PINS; pin++) {
             joy_delete_pin_mapping(joystick_device, 1 << pin);
         }
-        joy_delete_pot_mapping(joystick_device, 0);
-        joy_delete_pot_mapping(joystick_device, 1);
     }
 
     return NULL;
@@ -637,13 +605,18 @@ static UI_MENU_CALLBACK(custom_joymap_axis_callback)
     }
 
     if (activated) {
-        target = lib_msprintf("Port %i %s", port + 1, joy_pot[pot]);
-        e = sdl_ui_poll_event("controller", target, joystick_device, 0, 1, 0, 5);
+        target = lib_msprintf("Port %i %s (del clears mappings)", port + 1, joy_pot[pot]);
+        e = sdl_ui_poll_event("joystick", target, joystick_device, 0, 1, 0, 5);
         lib_free(target);
 
         switch (e.type) {
             case SDL_JOYAXISMOTION:
                 sdljoy_set_joystick_axis(e, pot);
+                resources_set_int_sprintf("PaddlesInput%d", PADDLES_INPUT_JOY_AXIS, port + 1);
+                break;
+            case SDL_MOUSEMOTION:
+                joy_delete_pot_mapping(joystick_device, pot);
+                resources_set_int_sprintf("PaddlesInput%d", PADDLES_INPUT_MOUSE, port + 1);
                 break;
             case SDL_KEYDOWN:
                 if (e.key.keysym.sym == SDLK_DELETE || e.key.keysym.sym == SDLK_BACKSPACE) {
@@ -723,9 +696,7 @@ static const ui_menu_entry_t define_joy_misc_menu[] = {
     SDL_MENU_LIST_END
 };
 
-#define MAPPING_DYN_MENU_EXTRA_ITEMS    (4) /* separator, load, save, clear */
-
-static ui_menu_entry_t joystick_mapping_dyn_menu[JOYPORT_MAX_PORTS][JOYPORT_MAX_PINS + JOYPORT_MAX_POTS + MAPPING_DYN_MENU_EXTRA_ITEMS + 1];
+static ui_menu_entry_t joystick_mapping_dyn_menu[JOYPORT_MAX_PORTS][JOYPORT_MAX_PINS + JOYPORT_MAX_POTS + 2];
 static int joystick_mapping_dyn_menu_init[JOYPORT_MAX_PORTS] = { 0 };
 
 static void sdl_menu_joystick_mapping_free(int port)
@@ -739,64 +710,6 @@ static void sdl_menu_joystick_mapping_free(int port)
     }
 }
 
-/* load current joymap (for one controller) from file */
-static UI_MENU_CALLBACK(load_joymap_from_callback)
-{
-    int port, joystick_device;
-
-    port = (vice_ptr_to_int(param)) >> 5;
-
-    if (activated && (joystick_port_map[port] >= JOYDEV_REALJOYSTICK_MIN)) {
-        char *name = NULL;
-        joystick_device = joy_ordinal_to_id(joystick_port_map[port] - JOYDEV_REALJOYSTICK_MIN);
-
-        name = sdl_ui_file_selection_dialog("Choose joystick map file", FILEREQ_MODE_CHOOSE_FILE);
-
-        if (name != NULL) {
-            if (joy_arch_mapping_load(name, joystick_device_by_index(joystick_device)) != -1) {
-                ui_message("Joymap loaded.");
-            } else {
-                ui_error("Cannot load joymap.");
-            }
-            lib_free(name);
-        }
-    }
-    return NULL;
-}
-
-/* save current joymap (for one controller) to file */
-static UI_MENU_CALLBACK(save_joymap_to_callback)
-{
-    int port, joystick_device;
-
-    port = (vice_ptr_to_int(param)) >> 5;
-
-    if (activated && (joystick_port_map[port] >= JOYDEV_REALJOYSTICK_MIN)) {
-        char *name = NULL;
-        joystick_device = joy_ordinal_to_id(joystick_port_map[port] - JOYDEV_REALJOYSTICK_MIN);
-
-        name = sdl_ui_file_selection_dialog("Choose joystick map file", FILEREQ_MODE_SAVE_FILE);
-
-        if (name != NULL) {
-            char *fullpath;
-            /* add extension if not present (cannot use util_add_extension() here
-            * since that function might realloc its argument using lib_realloc()
-            * and path is owned by GLib not VICE */
-            fullpath = util_add_extension_const(name, "vjm");
-            lib_free(name);
-
-            if (joy_arch_mapping_dump(fullpath, joystick_device_by_index(joystick_device)) == -1) {
-                ui_error("Failed to save joymap");
-            } else {
-                ui_message("Joymap saved.");
-            }
-            lib_free(fullpath);
-        }
-    }
-    return NULL;
-}
-
-/* handles the actual host controller mapping menu */
 static const char *joystick_mapping_dynmenu_helper(int port)
 {
     joyport_map_desc_t *mappings = NULL;
@@ -812,7 +725,7 @@ static const char *joystick_mapping_dynmenu_helper(int port)
         joystick_mapping_dyn_menu_init[port] = 1;
     }
 
-    if (joyport_port_is_active(port) && (joystick_port_map[port] >= JOYDEV_REALJOYSTICK_MIN)) {
+    if (joyport_port_is_active(port)) {
         mappings = joyport_get_mapping(port);
         if (mappings != NULL) {
             if (mappings->pinmap != NULL) {
@@ -837,24 +750,6 @@ static const char *joystick_mapping_dynmenu_helper(int port)
                     j++;
                 }
             }
-            entry[j].action   = ACTION_NONE;
-            entry[j].string   = lib_strdup("");
-            entry[j].type     = MENU_ENTRY_TEXT;
-            entry[j].callback = seperator_callback;
-            entry[j].data     = NULL;
-            j++;
-            entry[j].action   = ACTION_NONE;
-            entry[j].string   = lib_strdup("Load this joystick map from...");
-            entry[j].type     = MENU_ENTRY_OTHER;
-            entry[j].callback = load_joymap_from_callback;
-            entry[j].data     = (ui_callback_data_t)vice_int_to_ptr(port << 5);
-            j++;
-            entry[j].action   = ACTION_NONE;
-            entry[j].string   = lib_strdup("Save this joystick map to...");
-            entry[j].type     = MENU_ENTRY_OTHER;
-            entry[j].callback = save_joymap_to_callback;
-            entry[j].data     = (ui_callback_data_t)vice_int_to_ptr(port << 5);
-            j++;
             entry[j].action   = ACTION_NONE;
             entry[j].string   = lib_strdup("Clear all mappings");
             entry[j].type     = MENU_ENTRY_DIALOG;
@@ -952,7 +847,6 @@ static void sdl_menu_joystick_host_mapping_free(void)
     }
 }
 
-/* builds the menu to select which host controller to map */
 static UI_MENU_CALLBACK(joystick_host_mapping_dynmenu_callback)
 {
     int i;
@@ -966,8 +860,6 @@ static UI_MENU_CALLBACK(joystick_host_mapping_dynmenu_callback)
         joystick_host_mapping_dyn_menu_init = 1;
     }
 
-    /* FIXME: we need to check if this is really a host controller here */
-    /* check how many host controllers are connected and assigned to a joystick */
     for (i = 0; i < JOYPORT_MAX_PORTS; i++) {
         if (joyport_has_mapping(i)) {
             mappings++;
@@ -975,7 +867,6 @@ static UI_MENU_CALLBACK(joystick_host_mapping_dynmenu_callback)
     }
 
     if (mappings) {
-        /* build menu with menu entries for each connected host controller */
         for (i = 0; i < JOYPORT_MAX_PORTS; i++) {
             if (joyport_has_mapping(i)) {
                 joystick_host_mapping_dyn_menu[j].action   = ACTION_NONE;
@@ -993,9 +884,6 @@ static UI_MENU_CALLBACK(joystick_host_mapping_dynmenu_callback)
     return MENU_NOT_AVAILABLE_STRING;
 }
 #endif
-
-UI_MENU_DEFINE_TOGGLE(PaddlesInput1)
-UI_MENU_DEFINE_TOGGLE(PaddlesInput2)
 
 const ui_menu_entry_t joystick_menu[] = {
     {   .string   = "Native joystick port 1",
@@ -1050,18 +938,8 @@ const ui_menu_entry_t joystick_menu[] = {
     },
     {   .action    = ACTION_SWAP_CONTROLPORT_TOGGLE,
         .string    = "Swap native joystick ports",
-        .type      = MENU_ENTRY_RESOURCE_TOGGLE,
-        .resource = "JoysticksAreSwapped"
-    },
-    SDL_MENU_ITEM_SEPARATOR,
-
-    {   .string   = "Paddle 1 from controller",
-        .type     = MENU_ENTRY_RESOURCE_TOGGLE,
-        .callback = toggle_PaddlesInput1_callback
-    },
-    {   .string   = "Paddle 2 from controller",
-        .type     = MENU_ENTRY_RESOURCE_TOGGLE,
-        .callback = toggle_PaddlesInput2_callback
+        .type      = MENU_ENTRY_OTHER_TOGGLE,
+        .displayed = swap_controlport_toggle_display
     },
     SDL_MENU_ITEM_SEPARATOR,
 
@@ -1097,12 +975,10 @@ const ui_menu_entry_t joystick_menu[] = {
         .data     = (ui_callback_data_t)joystick_host_mapping_dyn_menu
     },
 #ifdef USE_SDL2UI
-#if 0 /* FIXME: does not work right now */
     {   .string   = "Rescan host joysticks",
         .type     = MENU_ENTRY_OTHER,
         .callback = custom_rescan_joy_callback
     },
-#endif
 #endif
     {   .string   = "Extra joystick options",
         .type     = MENU_ENTRY_SUBMENU,
@@ -1166,20 +1042,11 @@ const ui_menu_entry_t joystick_c64_menu[] = {
     },
     {   .action    = ACTION_SWAP_CONTROLPORT_TOGGLE,
         .string    = "Swap native joystick ports",
-        .type      = MENU_ENTRY_RESOURCE_TOGGLE,
-        .resource = "JoysticksAreSwapped"
+        .type      = MENU_ENTRY_OTHER_TOGGLE,
+        .displayed = swap_controlport_toggle_display
     },
     SDL_MENU_ITEM_SEPARATOR,
 
-    {   .string   = "Paddle 1 from controller",
-        .type     = MENU_ENTRY_RESOURCE_TOGGLE,
-        .callback = toggle_PaddlesInput1_callback
-    },
-    {   .string   = "Paddle 2 from controller",
-        .type     = MENU_ENTRY_RESOURCE_TOGGLE,
-        .callback = toggle_PaddlesInput2_callback
-    },
-    SDL_MENU_ITEM_SEPARATOR,
     {   .string   = "Allow opposite directions",
         .type     = MENU_ENTRY_RESOURCE_TOGGLE,
         .callback = toggle_JoyOpposite_callback,
@@ -1212,12 +1079,10 @@ const ui_menu_entry_t joystick_c64_menu[] = {
         .data     = (ui_callback_data_t)joystick_host_mapping_dyn_menu
     },
 #ifdef USE_SDL2UI
-#if 0 /* FIXME: does not work right now */
     {   .string   = "Rescan host joysticks",
         .type     = MENU_ENTRY_OTHER,
         .callback = custom_rescan_joy_callback
     },
-#endif
 #endif
     {   .string   = "Extra joystick options",
         .type     = MENU_ENTRY_SUBMENU,
@@ -1281,20 +1146,11 @@ const ui_menu_entry_t joystick_c64dtv_menu[] = {
     },
     {   .action    = ACTION_SWAP_CONTROLPORT_TOGGLE,
         .string    = "Swap native joystick ports",
-        .type      = MENU_ENTRY_RESOURCE_TOGGLE,
-        .resource = "JoysticksAreSwapped"
+        .type      = MENU_ENTRY_OTHER_TOGGLE,
+        .displayed = swap_controlport_toggle_display
     },
     SDL_MENU_ITEM_SEPARATOR,
 
-    {   .string   = "Paddle 1 from controller",
-        .type     = MENU_ENTRY_RESOURCE_TOGGLE,
-        .callback = toggle_PaddlesInput1_callback
-    },
-    {   .string   = "Paddle 2 from controller",
-        .type     = MENU_ENTRY_RESOURCE_TOGGLE,
-        .callback = toggle_PaddlesInput2_callback
-    },
-    SDL_MENU_ITEM_SEPARATOR,
     {   .string   = "Allow opposite directions",
         .type     = MENU_ENTRY_RESOURCE_TOGGLE,
         .callback = toggle_JoyOpposite_callback
@@ -1327,12 +1183,10 @@ const ui_menu_entry_t joystick_c64dtv_menu[] = {
         .data     = (ui_callback_data_t)joystick_host_mapping_dyn_menu
     },
 #ifdef USE_SDL2UI
-#if 0 /* FIXME: does not work right now */
     {   .string   = "Rescan host joysticks",
         .type     = MENU_ENTRY_OTHER,
         .callback = custom_rescan_joy_callback
     },
-#endif
 #endif
     {   .string   = "Extra joystick options",
         .type     = MENU_ENTRY_SUBMENU,
@@ -1403,8 +1257,8 @@ const ui_menu_entry_t joystick_plus4_menu[] = {
     },
     {   .action    = ACTION_SWAP_CONTROLPORT_TOGGLE,
         .string    = "Swap native joystick ports",
-        .type      = MENU_ENTRY_RESOURCE_TOGGLE,
-        .resource = "JoysticksAreSwapped"
+        .type      = MENU_ENTRY_OTHER_TOGGLE,
+        .displayed = swap_controlport_toggle_display
     },
     SDL_MENU_ITEM_SEPARATOR,
 
@@ -1446,12 +1300,10 @@ const ui_menu_entry_t joystick_plus4_menu[] = {
         .data     = (ui_callback_data_t)joystick_host_mapping_dyn_menu
     },
 #ifdef USE_SDL2UI
-#if 0 /* FIXME: does not work right now */
     {   .string   = "Rescan host joysticks",
         .type     = MENU_ENTRY_OTHER,
         .callback = custom_rescan_joy_callback
     },
-#endif
 #endif
     {   .string   = "Extra joystick options",
         .type     = MENU_ENTRY_SUBMENU,
@@ -1510,12 +1362,6 @@ const ui_menu_entry_t joystick_vic20_menu[] = {
     },
     SDL_MENU_ITEM_SEPARATOR,
 
-    {   .string   = "Paddle 1 from controller",
-        .type     = MENU_ENTRY_RESOURCE_TOGGLE,
-        .callback = toggle_PaddlesInput1_callback
-    },
-    SDL_MENU_ITEM_SEPARATOR,
-
     {   .string   = "Allow opposite directions",
         .type     = MENU_ENTRY_RESOURCE_TOGGLE,
         .callback = toggle_JoyOpposite_callback,
@@ -1548,12 +1394,10 @@ const ui_menu_entry_t joystick_vic20_menu[] = {
         .data     = (ui_callback_data_t)joystick_host_mapping_dyn_menu
     },
 #ifdef USE_SDL2UI
-#if 0 /* FIXME: does not work right now */
     {   .string   = "Rescan host joysticks",
         .type     = MENU_ENTRY_OTHER,
         .callback = custom_rescan_joy_callback
     },
-#endif
 #endif
     {   .string   = "Extra joystick options",
         .type     = MENU_ENTRY_SUBMENU,
@@ -1639,12 +1483,10 @@ const ui_menu_entry_t joystick_userport_only_menu[] = {
         .data     = (ui_callback_data_t)joystick_host_mapping_dyn_menu
     },
 #ifdef USE_SDL2UI
-#if 0 /* FIXME: does not work right now */
     {   .string   = "Rescan host joysticks",
         .type     = MENU_ENTRY_OTHER,
         .callback = custom_rescan_joy_callback
     },
-#endif
 #endif
     {   .string   = "Extra joystick options",
         .type     = MENU_ENTRY_SUBMENU,

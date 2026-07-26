@@ -29,7 +29,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "archdep.h"
 #include "c64-resources.h"
 #include "c64acia.h"
 #include "c64cart.h"
@@ -48,7 +47,6 @@
 #include "reu.h"
 #include "georam.h"
 #include "sid-resources.h"
-#include "sysfile.h"
 #include "util.h"
 #include "vicii-resources.h"
 #include "vicii.h"
@@ -92,12 +90,9 @@ static int set_chargen_rom_name(const char *val, void *param)
     return c64rom_load_chargen(chargen_rom_name);
 }
 
-/*
- * sets up "KernalName" (kernal_rom_name)
- * also keeps "KernalRev" (kernal_revision) in sync
- */
 static int set_kernal_rom_name(const char *val, void *param)
 {
+    int ret;
     /* CAUTION: make sure to only trigger a power cycle when the name changed
                 AND it was not null before (in that case we are setting the
                 default value) */
@@ -106,51 +101,15 @@ static int set_kernal_rom_name(const char *val, void *param)
     if ((val != NULL) && (kernal_rom_name != NULL)) {
         changed = (strcmp(val, kernal_rom_name) != 0);
     }
-
-    /* sanity check, ROM name can not be NULL */
-    if (val == NULL) {
-        return -1;
+    if (util_string_set(&kernal_rom_name, val)) {
+        return 0;
     }
-
-    /* load kernal without a kernal overriding buffer. */
-    switch (c64rom_load_kernal(val)) {
-        case 0:
-            /* no error, kernal_revision was already updated */
-            break;
-        case 1:
-        {
-            /* file was not loaded yet, so check if it exists and assume it is valid if so */
-            char *fullpath = NULL;
-            if (sysfile_locate(val, machine_name, &fullpath) != 0) {
-                /* absolute path, not found: do not set kernal_rom_name, will be a fatal error later.
-                   relative path, not found: probably expanded_system_path has not been initialised.
-                   Set kernal_rom_name now. When c64rom_load_kernal() is called again, it will be
-                   with the rom file name that has been set here. And, if expanded_system_path
-                   has been initialised in the meantime, and the rom file exists in the path,
-                   things will work */
-                if (!archdep_path_is_relative(val)) {
-                    log_error(res_log, "failed to set KernalName (%s).", val);
-                    return -1;
-                }
-            } else {
-                /* get kernal revision for this file */
-                kernal_revision = c64rom_get_kernal_file_chksum_id(fullpath, NULL, NULL, NULL);
-                lib_free(fullpath);
-            }
-            break;
-        }
-        case -1:
-            log_error(res_log, "failed to load KernalName (%s).", val);
-            return -1;
-    }
-
-    /* set resource name (only when load succeeded) */
-    util_string_set(&kernal_rom_name, val);
-
+    /* load kernal without a kernal overriding buffer */
+    ret = c64rom_load_kernal(kernal_rom_name, NULL);
     if (changed) {
         machine_trigger_reset(MACHINE_RESET_MODE_POWER_CYCLE);
     }
-    return 0;
+    return ret;
 }
 
 static int set_basic_rom_name(const char *val, void *param)
@@ -292,21 +251,11 @@ static struct kernal_s kernal_match[] = {
     { NULL, C64_KERNAL_UNKNOWN }
 };
 
-/*
- * set "KernalRev" (kernal_revision) to given value
- * keeps "KernalName" in sync if file could successfully be loaded
- */
 static int set_kernal_revision(int val, void *param)
 {
     int n = 0, rev = C64_KERNAL_UNKNOWN;
     const char *name = NULL;
     int flags;
-
-    /* if the requested revision is the current revision, we can exit here */
-    if (kernal_revision == val) {
-        log_verbose(res_log, "set_kernal_revision(val:%d) is kernal_revision: %d, nothing to do", val, kernal_revision);
-        return 0;
-    }
 
     log_verbose(res_log, "set_kernal_revision(val:%d) was kernal_revision: %d", val, kernal_revision);
 
@@ -348,22 +297,14 @@ static int set_kernal_revision(int val, void *param)
 
     log_verbose(res_log, "set_kernal_revision found rev:%d name: %s", rev, name);
 
-    /* load kernal without a kernal overriding buffer. this also updates kernal_revision. */
-    if (c64rom_load_kernal(name) != 0) {
-        /* error */
+    if (resources_set_string("KernalName", name) < 0) {
         log_error(res_log, "failed to set kernal name (%s)", name);
         restore_trapflags(flags);
         return -1;
-    } else {
-        /*printf("set_kernal_revision setting KernalName to:%s\n", name);*/
-        /* set resource name (only when load succeeded) */
-        util_string_set(&kernal_rom_name, name);
     }
 
-    /* copy loaded kernal to the (patched) trap rom */
     memcpy(c64memrom_kernal64_trap_rom, c64memrom_kernal64_rom, C64_KERNAL_ROM_SIZE);
 
-    /* if the revision changed, perform a power cycle */
     if (kernal_revision != rev) {
         machine_trigger_reset(MACHINE_RESET_MODE_POWER_CYCLE);
     }

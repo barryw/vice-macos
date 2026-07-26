@@ -37,6 +37,4 @@ extern int acia_de_enabled;
 extern int cia1_model;
 extern int cia2_model;
 
-extern int kernal_revision;
-
 #endif

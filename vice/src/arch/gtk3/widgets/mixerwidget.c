@@ -13,10 +13,6 @@
  * $VICERES SidResid8580Gain        -vsid
  * $VICERES SidResid8580FilterBias  -vsid
  * $VICERES CB2Lowpass              xpet
- * $VICERES SidResid6581FilterCurve -vsid
- * $VICERES SidResid6581FilterRange -vsid
- * $VICERES SidResid8580FilterCurve -vsid
- * $VICERES SidResidCombinedWaveformStrength -vsid
  */
 
 /*
@@ -141,34 +137,6 @@ static GtkWidget *bias8580label;
 
 #endif
 
-#ifdef HAVE_RESIDFP
-
-/** \brief  ReSIDfp 6581 filter range slider */
-static GtkWidget *range6581;
-
-/** \brief  ReSIDfp 6581 filter curve slider */
-static GtkWidget *curve6581;
-
-/** \brief  ReSIDfp 8580 filter curve slider */
-static GtkWidget *curve8580;
-
-/** \brief  ReSIDfp combined waveform strength slider */
-static GtkWidget *combinedstrength;
-
-/** \brief  ReSIDfp 6581 filter range label */
-static GtkWidget *range6581label;
-
-/** \brief  ReSIDfp 6581 filter curve label */
-static GtkWidget *curve6581label;
-
-/** \brief  ReSIDfp 8580 filter curve label */
-static GtkWidget *curve8580label;
-
-/** \brief  ReSIDfp combined waveform strength label */
-static GtkWidget *combinedstrengthlabel;
-
-#endif
-
 /** \brief  CSS provider for labels
  */
 static GtkCssProvider *label_css_provider;
@@ -201,119 +169,46 @@ void mixer_widget_sid_type_changed(void)
     resources_get_int("SidModel",  &model);
     resources_get_int("SidEngine", &engine);
 
-#ifdef HAVE_RESID
-    if (engine != SID_ENGINE_RESID) {
-        gtk_widget_hide(passband6581label);
-        gtk_widget_hide(gain6581label);
-        gtk_widget_hide(bias6581label);
-        gtk_widget_hide(passband8580label);
-        gtk_widget_hide(gain8580label);
-        gtk_widget_hide(bias8580label);
-
+    if ((model == SID_MODEL_8580) || (model == SID_MODEL_8580D)) {
         gtk_widget_hide(passband6581);
         gtk_widget_hide(gain6581);
         gtk_widget_hide(bias6581);
+        gtk_widget_show(passband8580);
+        gtk_widget_show(gain8580);
+        gtk_widget_show(bias8580);
+        gtk_widget_hide(passband6581label);
+        gtk_widget_hide(gain6581label);
+        gtk_widget_hide(bias6581label);
+        gtk_widget_show(passband8580label);
+        gtk_widget_show(gain8580label);
+        gtk_widget_show(bias8580label);
+    } else {
         gtk_widget_hide(passband8580);
         gtk_widget_hide(gain8580);
         gtk_widget_hide(bias8580);
+        gtk_widget_show(passband6581);
+        gtk_widget_show(gain6581);
+        gtk_widget_show(bias6581);
+        gtk_widget_hide(passband8580label);
+        gtk_widget_hide(gain8580label);
+        gtk_widget_hide(bias8580label);
+        gtk_widget_show(passband6581label);
+        gtk_widget_show(gain6581label);
+        gtk_widget_show(bias6581label);
     }
-#endif
-#ifdef HAVE_RESIDFP
-    if (engine != SID_ENGINE_RESIDFP) {
-        gtk_widget_hide(curve6581label);
-        gtk_widget_hide(curve6581);
-        gtk_widget_hide(range6581label);
-        gtk_widget_hide(range6581);
-        gtk_widget_hide(curve8580label);
-        gtk_widget_hide(curve8580);
-        gtk_widget_hide(combinedstrengthlabel);
-        gtk_widget_hide(combinedstrength);
-    }
-#endif
 
-    if (engine == SID_ENGINE_RESIDFP) {
-#ifdef HAVE_RESIDFP
-        if ((model == SID_MODEL_8580) ||
-            (model == SID_MODEL_8580D)) {
-            gtk_widget_show(curve8580label);
-            gtk_widget_show(curve8580);
-        } else {
-            gtk_widget_show(curve6581label);
-            gtk_widget_show(curve6581);
-            gtk_widget_show(range6581label);
-            gtk_widget_show(range6581);
-        }
-        gtk_widget_show(combinedstrengthlabel);
-        gtk_widget_show(combinedstrength);
-#endif
-    } else if (engine == SID_ENGINE_RESID) {
-#ifdef HAVE_RESID
-        if ((model == SID_MODEL_8580) ||
-            (model == SID_MODEL_8580D)) {
-            gtk_widget_show(passband8580);
-            gtk_widget_show(gain8580);
-            gtk_widget_show(bias8580);
-            gtk_widget_show(passband8580label);
-            gtk_widget_show(gain8580label);
-            gtk_widget_show(bias8580label);
-        } else {
-            gtk_widget_show(passband6581);
-            gtk_widget_show(gain6581);
-            gtk_widget_show(bias6581);
-            gtk_widget_show(passband6581label);
-            gtk_widget_show(gain6581label);
-            gtk_widget_show(bias6581label);
-        }
-#endif
-    }
+    /* enable/disable 8580 filter controls based on --enable-new8580filter */
+    gtk_widget_set_sensitive(passband8580, FILTER_8580);
+    gtk_widget_set_sensitive(gain8580,     FILTER_8580);
+    gtk_widget_set_sensitive(bias8580,     FILTER_8580);
 
     if (engine == SID_ENGINE_FASTSID) {
-#ifdef HAVE_RESID
         gtk_widget_set_sensitive(passband6581, FALSE);
         gtk_widget_set_sensitive(gain6581,     FALSE);
         gtk_widget_set_sensitive(bias6581,     FALSE);
         gtk_widget_set_sensitive(passband8580, FALSE);
         gtk_widget_set_sensitive(gain8580,     FALSE);
         gtk_widget_set_sensitive(bias8580,     FALSE);
-#endif
-#ifdef HAVE_RESIDFP
-        gtk_widget_set_sensitive(curve8580, FALSE);
-        gtk_widget_set_sensitive(curve6581, FALSE);
-        gtk_widget_set_sensitive(range6581, FALSE);
-#endif
-    }
-
-    if (engine == SID_ENGINE_RESID) {
-#ifdef HAVE_RESID
-        gtk_widget_set_sensitive(passband6581, TRUE);
-        gtk_widget_set_sensitive(gain6581,     TRUE);
-        gtk_widget_set_sensitive(bias6581,     TRUE);
-        /* enable/disable 8580 filter controls based on --enable-new8580filter */
-        gtk_widget_set_sensitive(passband8580, FILTER_8580);
-        gtk_widget_set_sensitive(gain8580,     FILTER_8580);
-        gtk_widget_set_sensitive(bias8580,     FILTER_8580);
-#endif
-#ifdef HAVE_RESIDFP
-        gtk_widget_set_sensitive(curve8580, FALSE);
-        gtk_widget_set_sensitive(curve6581, FALSE);
-        gtk_widget_set_sensitive(range6581, FALSE);
-#endif
-    }
-
-    if (engine == SID_ENGINE_RESIDFP) {
-#ifdef HAVE_RESID
-        gtk_widget_set_sensitive(passband6581, FALSE);
-        gtk_widget_set_sensitive(gain6581,     FALSE);
-        gtk_widget_set_sensitive(bias6581,     FALSE);
-        gtk_widget_set_sensitive(passband8580, FALSE);
-        gtk_widget_set_sensitive(gain8580,     FALSE);
-        gtk_widget_set_sensitive(bias8580,     FALSE);
-#endif
-#ifdef HAVE_RESIDFP
-        gtk_widget_set_sensitive(curve8580, TRUE);
-        gtk_widget_set_sensitive(curve6581, TRUE);
-        gtk_widget_set_sensitive(range6581, TRUE);
-#endif
     }
 # undef FILTER_8580
 #endif  /* HAVE_RESID */
@@ -329,10 +224,9 @@ void mixer_widget_sid_type_changed(void)
 static void on_reset_clicked(GtkWidget *widget, gpointer data)
 {
     int value = 0;
-#if defined(HAVE_RESID) || defined(HAVE_RESIDFP)
+#ifdef HAVE_RESID
     int model = 0;
 #endif
-    int engine = 0;
 
     mixer_widget_sid_type_changed();
     resources_get_default_value("SoundVolume", &value);
@@ -341,13 +235,9 @@ static void on_reset_clicked(GtkWidget *widget, gpointer data)
         resources_get_default_value("CB2Lowpass", &value);
         vice_gtk3_resource_exp_range_set_value(GTK_RANGE(lowpass), (gdouble)value);
     }
-
-    resources_get_int("SidEngine", &engine);
-#if defined(HAVE_RESID) || defined(HAVE_RESIDFP)
-    resources_get_int("SidModel", &model);
-#endif
-
 #ifdef HAVE_RESID
+
+    resources_get_int("SidModel", &model);
     if ((model == SID_MODEL_8580) || (model == SID_MODEL_8580D)) {
         vice_gtk3_resource_scale_custom_factory(passband8580);
         vice_gtk3_resource_scale_custom_factory(gain8580);
@@ -356,14 +246,6 @@ static void on_reset_clicked(GtkWidget *widget, gpointer data)
         vice_gtk3_resource_scale_custom_factory(passband6581);
         vice_gtk3_resource_scale_custom_factory(gain6581);
         vice_gtk3_resource_scale_custom_factory(bias6581);
-    }
-#endif
-#ifdef HAVE_RESIDFP
-    if ((model == SID_MODEL_8580) || (model == SID_MODEL_8580D)) {
-        vice_gtk3_resource_scale_custom_factory(curve8580);
-    } else if (model == SID_MODEL_6581) {
-        vice_gtk3_resource_scale_custom_factory(curve6581);
-        vice_gtk3_resource_scale_custom_factory(range6581);
     }
 #endif
 }
@@ -603,65 +485,6 @@ static GtkWidget *create_bias8580_widget(gboolean minimal)
 }
 #endif  /* ifdef HAVE_RESID */
 
-#ifdef HAVE_RESIDFP
-
-/** \brief  Create slider for ReSIDfp 8580 filter curve
- *
- * \param[in]   minimal resize slider to minimal size
- *
- * \return  GtkScale
- */
-static GtkWidget *create_curve8580fp_widget(gboolean minimal)
-{
-    return create_slider("SidResid8580FilterCurve", "%1.2f",
-                         RESIDFP_8580_FILTER_CURVE_MIN / RESIDFP_8580_FILTER_CURVE_ONE,
-                         RESIDFP_8580_FILTER_CURVE_MAX / RESIDFP_8580_FILTER_CURVE_ONE,
-                         RESIDFP_8580_FILTER_CURVE_MIN, RESIDFP_8580_FILTER_CURVE_MAX, 0.01f, minimal);
-}
-
-/** \brief  Create slider for ReSIDfp 6581 filter curve
- *
- * \param[in]   minimal resize slider to minimal size
- *
- * \return  GtkScale
- */
-static GtkWidget *create_curve6581fp_widget(gboolean minimal)
-{
-    return create_slider("SidResid6581FilterCurve", "%1.2f",
-                         RESIDFP_6581_FILTER_CURVE_MIN / RESIDFP_6581_FILTER_CURVE_ONE,
-                         RESIDFP_6581_FILTER_CURVE_MAX / RESIDFP_6581_FILTER_CURVE_ONE,
-                         RESIDFP_6581_FILTER_CURVE_MIN, RESIDFP_6581_FILTER_CURVE_MAX, 0.01f, minimal);
-}
-
-/** \brief  Create slider for ReSIDfp 6581 filter range
- *
- * \param[in]   minimal resize slider to minimal size
- *
- * \return  GtkScale
- */
-static GtkWidget *create_range6581fp_widget(gboolean minimal)
-{
-    return create_slider("SidResid6581FilterRange", "%1.2f",
-                         RESIDFP_6581_FILTER_RANGE_MIN / RESIDFP_6581_FILTER_RANGE_ONE,
-                         RESIDFP_6581_FILTER_RANGE_MAX / RESIDFP_6581_FILTER_RANGE_ONE,
-                         RESIDFP_6581_FILTER_RANGE_MIN, RESIDFP_6581_FILTER_RANGE_MAX, 0.01f, minimal);
-}
-
-/** \brief  Create slider for ReSIDfp combined waveform strength
- *
- * \param[in]   minimal resize slider to minimal size
- *
- * \return  GtkScale
- */
-static GtkWidget *create_combined_waveform_strength_widget(gboolean minimal)
-{
-    return create_slider("SidResidCombinedWaveformStrength", "%1.0f",
-                         RESIDFP_COMBINED_WAVEFORM_STRENGTH_MIN / RESIDFP_COMBINED_WAVEFORM_STRENGTH_ONE,
-                         RESIDFP_COMBINED_WAVEFORM_STRENGTH_MAX / RESIDFP_COMBINED_WAVEFORM_STRENGTH_ONE,
-                         RESIDFP_COMBINED_WAVEFORM_STRENGTH_MIN, RESIDFP_COMBINED_WAVEFORM_STRENGTH_MAX, 1.0f, minimal);
-}
-#endif  /* ifdef HAVE_RESIDFP */
-
 
 /** \brief  Create mixer widget
  *
@@ -678,7 +501,7 @@ GtkWidget *mixer_widget_create(gboolean minimal, GtkAlign alignment)
     GtkWidget *button;
     int row = 0;
     int model = 0;
-#if defined(HAVE_RESID) || defined(HAVE_RESIDFP)
+#ifdef HAVE_RESID
     gboolean sid_present = TRUE;
     int tmp;
 
@@ -756,6 +579,7 @@ GtkWidget *mixer_widget_create(gboolean minimal, GtkAlign alignment)
     }
 
 #ifdef HAVE_RESID
+
     /*
      * 6581 ReSID resources
      */
@@ -811,49 +635,6 @@ GtkWidget *mixer_widget_create(gboolean minimal, GtkAlign alignment)
     gtk_grid_attach(GTK_GRID(grid), bias8580label, 0, row, 1, 1);
     gtk_grid_attach(GTK_GRID(grid), bias8580, 1, row, 1, 1);
     row++;
-#endif
-
-#if defined(HAVE_RESIDFP)
-    /*
-     * 6581 ReSIDfp resources
-     */
-
-    curve6581label = create_label("ReSIDfp 6581 Filter curve", minimal, alignment);
-    curve6581 = create_curve6581fp_widget(minimal);
-    gtk_widget_set_sensitive(curve6581, sid_present);
-    gtk_widget_set_hexpand(curve6581, TRUE);
-    gtk_grid_attach(GTK_GRID(grid), curve6581label, 0, row, 1, 1);
-    gtk_grid_attach(GTK_GRID(grid), curve6581, 1, row, 1, 1);
-    row++;
-
-    range6581label = create_label("ReSIDfp 6581 Filter range", minimal, alignment);
-    range6581 = create_range6581fp_widget(minimal);
-    gtk_widget_set_sensitive(curve6581, sid_present);
-    gtk_widget_set_hexpand(curve6581, TRUE);
-    gtk_grid_attach(GTK_GRID(grid), range6581label, 0, row, 1, 1);
-    gtk_grid_attach(GTK_GRID(grid), range6581, 1, row, 1, 1);
-    row++;
-
-    /*
-     * 8580 ReSIDfp resources
-     */
-
-    curve8580label = create_label("ReSIDfp 8580 Filter curve", minimal, alignment);
-    curve8580 = create_curve8580fp_widget(minimal);
-    gtk_widget_set_sensitive(curve8580, sid_present);
-    gtk_widget_set_hexpand(curve8580, TRUE);
-    gtk_grid_attach(GTK_GRID(grid), curve8580label, 0, row, 1, 1);
-    gtk_grid_attach(GTK_GRID(grid), curve8580, 1, row, 1, 1);
-    row++;
-
-    combinedstrengthlabel = create_label("ReSIDfp combined waveform strength", minimal, alignment);
-    combinedstrength = create_combined_waveform_strength_widget(minimal);
-    gtk_widget_set_sensitive(combinedstrength, sid_present);
-    gtk_widget_set_hexpand(combinedstrength, TRUE);
-    gtk_grid_attach(GTK_GRID(grid), combinedstrengthlabel, 0, row, 1, 1);
-    gtk_grid_attach(GTK_GRID(grid), combinedstrength, 1, row, 1, 1);
-    row++;
-
 #endif
 
     gtk_widget_show_all(grid);

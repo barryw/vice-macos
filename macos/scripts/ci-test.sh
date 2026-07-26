@@ -116,3 +116,5 @@ bash "$SCRIPT_DIR/write-coverage-badge.sh" \
 
 bash "$SCRIPT_DIR/smoke-test-macvicekit-sdk.sh"
 bash "$SCRIPT_DIR/test-release-notes.sh"
+# Needs the configured engine build tree, so it runs after the scheme builds.
+bash "$SCRIPT_DIR/test-resid-voice-capture.sh"

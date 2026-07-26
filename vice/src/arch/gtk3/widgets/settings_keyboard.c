@@ -46,7 +46,6 @@
 #include "resources.h"
 #include "uistatusbar.h"
 #include "util.h"
-#include "uiapi.h"
 #include "vice_gtk3.h"
 
 #include "settings_keyboard.h"
@@ -90,18 +89,16 @@ static void save_filename_callback(GtkDialog *dialog,
         g_free(filename);
 
         result = keyboard_keymap_dump(path);
-        if (result != 0) {
-/* On Windows the main thread stops responding when we use the dialog as
-   parent here, see bug #2205 */
-#ifdef WINDOWS_COMPILE
-            ui_error("Failed to save custom keymap\nError %d: %s",
-                    errno, strerror(errno));
-#else
+        if (result == 0) {
+            vice_gtk3_message_info(GTK_WINDOW(dialog),
+                                   "Succesfully saved current keymap",
+                                   "Wrote current keymap as '%s'.", path);
+            lastdir_update(GTK_WIDGET(dialog), &last_dir, &last_file);
+        } else {
             vice_gtk3_message_error(GTK_WINDOW(dialog),
                                     "Failed to save custom keymap",
                                     "Error %d: %s",
                                     errno, strerror(errno));
-#endif
         }
         lib_free(path);
     }

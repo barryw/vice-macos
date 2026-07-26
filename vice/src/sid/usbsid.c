@@ -41,7 +41,7 @@
 #include "types.h"
 
 
-/* #define DEBUG_USBSID */
+#define DEBUG_USBSID
 /* define to trace usbsid stuff without having a usbsid */
 /* #define DEBUG_USBSID_DUMMY */
 
@@ -206,9 +206,6 @@ void usbsid_state_write(int chipno, struct sid_us_snapshot_state_s *sid_state)
     }
 }
 #else
-
-#include "usbsid.h"
-
 int usbsid_available(void)
 {
     return 0;

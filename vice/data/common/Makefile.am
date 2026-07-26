@@ -175,6 +175,7 @@ desktop_files = x64.desktop \
 		xcbm5x0.desktop \
 		vsid.desktop
 
+
 if USE_SDLUI
 if WINDOWS_COMPILE
 # SDL 1.2 says to use 32x32 icons on Windows
@@ -430,7 +431,7 @@ EXTRA_DIST = $(icon_files) \
 	     $(logo_files) \
 	     $(font_files) \
 	     $(desktop_files) \
-	     PetMe-FreeLicense.txt \
+             PetMe-FreeLicense.txt \
 	     x64.rc \
 	     x64sc.rc \
 	     x64dtv.rc \

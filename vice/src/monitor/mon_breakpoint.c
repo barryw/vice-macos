@@ -542,7 +542,7 @@ bool mon_breakpoint_check_checkpoint(MEMSPACE mem, unsigned int addr, unsigned i
 
             /* If condition test fails, skip this checkpoint */
             if (cp->condition) {
-                if (!mon_evaluate_conditional(cp->condition, is_loadstore ? loadstorepc : instpc)) {
+                if (!mon_evaluate_conditional(cp->condition)) {
                     continue;
                 }
             }
@@ -598,11 +598,8 @@ bool mon_breakpoint_check_checkpoint(MEMSPACE mem, unsigned int addr, unsigned i
             mon_interfaces[mem]->current_bank = monbank; /* restore value used in monitor */
 
             if (cp->command) {
-                MEMSPACE tmpmem = default_memspace;
                 mon_out("Executing: %s\n", cp->command);
-                default_memspace = mem;
                 parse_and_execute_line(cp->command);
-                default_memspace = tmpmem;
             }
 
             if (cp->temporary) {

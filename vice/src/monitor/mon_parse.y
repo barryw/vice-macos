@@ -595,18 +595,14 @@ monitor_misc_rules: CMD_DISK rest_of_line end_cmd
                     { mon_cart_freeze(); }
                   | CMD_UPDB number end_cmd
                     { mon_userport_set_output($2); }
-                  | CMD_UPDB end_cmd
-                    { mon_userport_get_output(); }
                   | CMD_JPDB number number end_cmd
                     { mon_joyport_set_output($2, $3); }
-                  | CMD_JPDB number end_cmd
-                    { mon_joyport_get_output($2); }
                   | CMD_COMMENT opt_rest_of_line end_cmd
                      { }
                   | CMD_STOPWATCH RESET end_cmd
                      { mon_stopwatch_reset(); }
                   | CMD_STOPWATCH end_cmd
-                     { mon_stopwatch_show(default_memspace, "Stopwatch: ", "\n"); }
+                     { mon_stopwatch_show("Stopwatch: ", "\n"); }
                   | CMD_PROFILE TOGGLE end_cmd
                      { mon_profile_action($2); }
                   | CMD_PROFILE end_cmd
@@ -1224,9 +1220,7 @@ int parse_and_execute_line(char *input)
         * If the command is to be executed when the default address space is the main cpu,
         * Ensure drive CPU emulation is up to date with main cpu CLOCK.
         */
-       /* FIXME: should this be drive_catch_up_hook() instead? */
-       /*drive_cpu_execute_all(maincpu_clk);*/
-       drive_catch_up_hook(maincpu_clk);
+       drive_cpu_execute_all(maincpu_clk);
    }
 
    temp_buf = lib_malloc(strlen(input) + 3);
@@ -1238,7 +1232,7 @@ int parse_and_execute_line(char *input)
 
    make_buffer(temp_buf);
    mon_clear_buffer();
-   if ((rc = yyparse()) != 0) {
+   if ( (rc =yyparse()) != 0) {
        mon_out("ERROR -- ");
        switch(rc) {
          case ERR_BAD_CMD:
@@ -1291,9 +1285,8 @@ int parse_and_execute_line(char *input)
            mon_out("Wrong syntax:\n");
        }
        mon_out("  %s\n", input);
-       for (i = 0; i < last_len; i++) {
+       for (i = 0; i < last_len; i++)
            mon_out(" ");
-       }
        mon_out("  ^\n");
        asm_mode = 0;
        new_cmd = 1;

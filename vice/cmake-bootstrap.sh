@@ -441,26 +441,21 @@ function process_source_makefile {
 	#
 
 	local first=true
-	for lib_to_build in $(extract_make_var noinst_LIBRARIES) $(extract_make_var lib_LTLIBRARIES)
+	for lib_to_build in $(extract_make_var noinst_LIBRARIES | sed 's/\.a//g')
 	do
-		local library_target=$(echo "$lib_to_build" | sed -e 's#^.*/##')
-		library_target=${library_target%.a}
-		library_target=${library_target%.la}
-		local library_source=$(echo "$lib_to_build" | sed -e 's#/#_#g' -e 's/\.a$/_a/' -e 's/\.la$/_la/')
-
 		if $first
 		then
-			echo -n "$library_target"
+			echo -n "$lib_to_build"
 			first=false
 		else
-			echo -n ", $library_target"
+			echo -n ", $lib_to_build"
 		fi
 
 		cat <<-HEREDOC >> CMakeLists.txt
-			add_library($library_target)
+			add_library($lib_to_build)
 			
 			target_compile_definitions(
-			    $library_target
+			    $lib_to_build
 			    PRIVATE
 			        \$<\$<COMPILE_LANGUAGE:C>:$(extract_c_compile_definitions)>
 			        \$<\$<COMPILE_LANGUAGE:CXX>:$(extract_cxx_compile_definitions)>
@@ -468,7 +463,7 @@ function process_source_makefile {
 			    )
 
 			target_include_directories(
-			    $library_target
+			    $lib_to_build
 			    PRIVATE
 			        \${CMAKE_CURRENT_SOURCE_DIR}
 			        \${CMAKE_CURRENT_SOURCE_DIR}/$(extract_make_var VPATH)
@@ -476,7 +471,7 @@ function process_source_makefile {
 			    )
 
 			target_compile_options(
-			    $library_target
+			    $lib_to_build
 			    PRIVATE
 			        \$<\$<COMPILE_LANGUAGE:C>:$(extract_cflags)>
 			        \$<\$<COMPILE_LANGUAGE:CXX>:$(extract_cxxflags)>
@@ -484,13 +479,13 @@ function process_source_makefile {
 			    )
 
 			target_sources(
-			    $library_target
+			    $lib_to_build
 			    PRIVATE
 			        $({
-			        extract_sources ${library_source}_SOURCES
-			        extract_headers ${library_source}_SOURCES
-			        extract_object_sources ${library_source}_DEPENDENCIES
-			        extract_object_sources ${library_source}_LIBADD
+			        extract_sources ${lib_to_build}_a_SOURCES
+			        extract_headers ${lib_to_build}_a_SOURCES
+			        extract_object_sources ${lib_to_build}_a_DEPENDENCIES
+			        extract_object_sources ${lib_to_build}_a_LIBADD
 			        extract_sources BUILT_SOURCES
 			        extract_headers BUILT_SOURCES
 			        extract_headers noinst_HEADERS

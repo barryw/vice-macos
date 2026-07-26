@@ -171,10 +171,10 @@ static void log_file_close(void)
 {
     DBG(("log_file_close %p\n", log_file));
     if (log_file) {
-        fflush(log_file);
         if (log_file != stdout) {
             fclose(log_file);
         }
+        fflush(log_file);
         log_file = NULL;
     }
 }
@@ -615,7 +615,7 @@ static int log_archdep(const char *pretxt, const char *logtxt)
     const char *end = logtxt + strlen(logtxt) + 1;
 
     while (beg < end) {
-        char *eol = (char*)strchr(beg, '\n');
+        char *eol = strchr(beg, '\n');
 
         if (eol) {
             *eol = '\0';

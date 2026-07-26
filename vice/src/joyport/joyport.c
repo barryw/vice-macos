@@ -47,13 +47,10 @@
 #include "log.h"
 #include "machine.h"
 #include "maincpu.h"
-
 #include "mouse_1351.h"
-#include "mouse_digital.h"
 #include "mouse_neos.h"
 #include "mouse_paddle.h"
 #include "mouse_quadrature.h"
-
 #include "multijoy.h"
 #include "ninja_snespad.h"
 #include "paperclip2.h"
@@ -80,9 +77,6 @@
 #else
 #define DBG(x)
 #endif
-
-/* resource */
-static int joysticks_are_swapped;
 
 static joyport_t joyport_device[JOYPORT_MAX_DEVICES];
 static uint16_t joyport_display[JOYPORT_MAX_PORTS + 1];
@@ -112,33 +106,6 @@ static resid2text_t ids[] = {
     { -1, NULL }
 };
 
-#define POT_PORT_UNINITIALIZED  -1
-#define POT_PORT_NOT_FOUND      -2
-static int pot_port1 = -1;
-static int pot_port2 = -1;
-
-/* find first two control ports that have POT inputs */
-static void find_pot_ports(void)
-{
-    int i;
-
-    for (i = 0; i < JOYPORT_MAX_PORTS; ++i) {
-        if (port_props[i].has_pot) {
-            if (pot_port1 == POT_PORT_UNINITIALIZED) {
-                pot_port1 = i;
-            } else if (pot_port2 == POT_PORT_UNINITIALIZED) {
-                pot_port2 = i;
-            }
-        }
-    }
-    if (pot_port1 == POT_PORT_UNINITIALIZED) {
-        pot_port1 = POT_PORT_NOT_FOUND;
-    }
-    if (pot_port2 == POT_PORT_UNINITIALIZED) {
-        pot_port2 = POT_PORT_NOT_FOUND;
-    }
-}
-
 static const char *res2text(int joyport_id)
 {
     int i;
@@ -156,68 +123,8 @@ static const char *res2text(int joyport_id)
 void set_joyport_pot_mask(int mask)
 {
     if (pot_port_mask != mask) {
-        int testmask = 0;
-        int id1 = JOYPORT_ID_NONE;
-        int id2 = JOYPORT_ID_NONE;
-        int val1x = 255;
-        int val1y = 255;
-        int val2x = 255;
-        int val2y = 255;
-
-        /* find the pot ports if needed */
-        if ((pot_port1 == POT_PORT_UNINITIALIZED) ||
-            (pot_port2 == POT_PORT_UNINITIALIZED)) {
-            find_pot_ports();
-        }
-        /* set bit in testmask for each port that has a pot connected */
-        if (pot_port1 != POT_PORT_NOT_FOUND) {
-            id1 = joy_port[pot_port1];
-            if (id1 != JOYPORT_ID_NONE) {
-                /* get POT value */
-                if (joyport_device[id1].read_potx) {
-                    val1x = joyport_device[id1].read_potx(pot_port1);
-                }
-                if (joyport_device[id1].read_poty) {
-                    val1y = joyport_device[id1].read_poty(pot_port1);
-                }
-                /* glitches will only be produced when POT is not "open" */
-                /* FIXME: this will always cause glitches on both axis - even
-                   when one axis is open */
-                if ((val1x != 255) || (val1y != 255)) {
-                    testmask |= 0x01;
-                }
-            }
-        }
-        if (pot_port2 != POT_PORT_NOT_FOUND) {
-            id2 = joy_port[pot_port2];
-            if (id2 != JOYPORT_ID_NONE) {
-                /* get POT value */
-                if (joyport_device[id2].read_potx) {
-                    val2x = joyport_device[id2].read_potx(pot_port2);
-                }
-                if (joyport_device[id2].read_poty) {
-                    val2y = joyport_device[id2].read_poty(pot_port2);
-                }
-                /* glitches will only be produced when POT is not "open" */
-                /* FIXME: this will always cause glitches on both axis - even
-                   when one axis is open */
-                if ((val2x != 255) || (val2y != 255)) {
-                    testmask |= 0x02;
-                }
-            }
-        }
-        /* printf("ports %d,%d ids: %d,%d testmask:%d val: %3d,%3d %3d,%3d\n",
-               pot_port1, pot_port2, id1, id2, testmask, val1x, val1y, val2x, val2y); */
-
-        /* if an existing pot was selected or deselected, remember when we did
-           this, for glitch emulation */
-        if ((pot_port_mask & testmask) != (mask & testmask)) {
-            pot_port_mask_clk = maincpu_clk;
-        }
+        pot_port_mask_clk = maincpu_clk;
     }
-    /* printf("maincpu_clk: %10d pot_port_mask_clk: %10d mask: %02x->%02x\n",
-           maincpu_clk, pot_port_mask_clk, pot_port_mask, mask); */
-    /* remember actual mask */
     pot_port_mask = mask;
 }
 
@@ -247,7 +154,6 @@ static int joyport_device_is_single_port(int id)
         case JOYPORT_ID_DIAG_586220_HARNESS:
             return 0;
     }
-    /* we can only attach exactly one of this device type */
     return 1;
 }
 
@@ -360,13 +266,7 @@ void joyport_handle_joystick_hook(int port, uint16_t state)
 /* read the digital lines from port 'port' */
 uint8_t read_joyport_dig(int port)
 {
-    int id;
-
-    if (joysticks_are_swapped && (port < 2)) {
-        port ^= 1;
-    }
-
-    id = joy_port[port];
+    int id = joy_port[port];
 
     if (id == JOYPORT_ID_NONE) {
         return 0xff;
@@ -375,21 +275,14 @@ uint8_t read_joyport_dig(int port)
     if (!joyport_device[id].read_digital) {
         return 0xff;
     }
-
     return joyport_device[id].read_digital(port);
 }
 
 /* drive the digital lines that are indicated as active in 'mask' with value 'val' of port 'port' */
 void store_joyport_dig(int port, uint8_t val, uint8_t mask)
 {
+    int id = joy_port[port];
     uint8_t store_val;
-    int id;
-
-    if (joysticks_are_swapped && (port < 2)) {
-        port ^= 1;
-    }
-
-    id = joy_port[port];
 
     if (id == JOYPORT_ID_NONE) {
         return;
@@ -409,19 +302,42 @@ void store_joyport_dig(int port, uint8_t val, uint8_t mask)
     joyport_dig_stored[port] = store_val;
 }
 
+static int pot_port1 = -1;
+static int pot_port2 = -1;
+
+static void find_pot_ports(void)
+{
+    int i;
+
+    for (i = 0; i < JOYPORT_MAX_PORTS; ++i) {
+        if (port_props[i].has_pot) {
+            if (pot_port1 == -1) {
+                pot_port1 = i;
+            } else {
+                pot_port2 = i;
+            }
+        }
+    }
+    if (pot_port1 == -1) {
+        pot_port1 = -2;
+    }
+    if (pot_port2 == -1) {
+        pot_port2 = -2;
+    }
+}
+
 /* returns JOYPORT_POT_TYPE_DIGITAL if one of the selected POTs is a digital
    (1351 style) device. we need this to correctly emulate the dither produced
    when sampling the POTs */
 int get_joyport_pot_type(void)
 {
     /* first find the pot ports if needed */
-    if ((pot_port1 == POT_PORT_UNINITIALIZED) ||
-        (pot_port2 == POT_PORT_UNINITIALIZED)) {
+    if (pot_port1 == -1 || pot_port2 == -1) {
         find_pot_ports();
     }
 
     if (pot_port_mask == 1 || pot_port_mask == 3) {
-        if (pot_port1 != POT_PORT_NOT_FOUND) {
+        if (pot_port1 != -2) {
             switch (joy_port[pot_port1]) {
                 case JOYPORT_ID_MOUSE_1351:
                 case JOYPORT_ID_MOUSE_SMART:
@@ -432,7 +348,7 @@ int get_joyport_pot_type(void)
     }
 
     if (pot_port_mask == 2 || pot_port_mask == 3) {
-        if (pot_port2 != POT_PORT_NOT_FOUND) {
+        if (pot_port2 != -2) {
             switch (joy_port[pot_port2]) {
                 case JOYPORT_ID_MOUSE_1351:
                 case JOYPORT_ID_MOUSE_SMART:
@@ -488,27 +404,20 @@ uint8_t read_joyport_potx(void)
     uint8_t ret2 = 0xff;
 
     /* first find the pot ports if needed */
-    if ((pot_port1 == POT_PORT_UNINITIALIZED) ||
-        (pot_port2 == POT_PORT_UNINITIALIZED)) {
+    if (pot_port1 == -1 || pot_port2 == -1) {
         find_pot_ports();
     }
 
     if (pot_port_mask == 1 || pot_port_mask == 3) {
-        if (pot_port1 != POT_PORT_NOT_FOUND) {
+        if (pot_port1 != -2) {
             id1 = joy_port[pot_port1];
         }
     }
 
     if (pot_port_mask == 2 || pot_port_mask == 3) {
-        if (pot_port2 != POT_PORT_NOT_FOUND) {
+        if (pot_port2 != -2) {
             id2 = joy_port[pot_port2];
         }
-    }
-
-    if (joysticks_are_swapped) {
-        int tmp = id1;
-        id1 = id2;
-        id2 = tmp;
     }
 
     if (id1 != JOYPORT_ID_NONE) {
@@ -525,18 +434,12 @@ uint8_t read_joyport_potx(void)
 
     DBG(("read_joyport_potx id: %d %d ret: %d %d", id1, id2, ret1, ret2));
 
-    if (joysticks_are_swapped) {
-        int tmp = ret1;
-        ret1 = ret2;
-        ret2 = tmp;
-    }
-
     switch (pot_port_mask) {
-        case 1: /* port 1 */
+        case 1:
             return ret1;
-        case 2: /* port 2 */
+        case 2:
             return ret2;
-        case 3: /* both ports */
+        case 3:
             return calc_parallel_paddle_value(ret1, ret2);
         default:
             return 0xff;
@@ -552,27 +455,20 @@ uint8_t read_joyport_poty(void)
     uint8_t ret2 = 0xff;
 
     /* first find the pot ports if needed */
-    if ((pot_port1 == POT_PORT_UNINITIALIZED) ||
-        (pot_port2 == POT_PORT_UNINITIALIZED)) {
+    if (pot_port1 == -1 || pot_port2 == -1) {
         find_pot_ports();
     }
 
     if (pot_port_mask == 1 || pot_port_mask == 3) {
-        if (pot_port1 != POT_PORT_NOT_FOUND) {
+        if (pot_port1 != -2) {
             id1 = joy_port[pot_port1];
         }
     }
 
     if (pot_port_mask == 2 || pot_port_mask == 3) {
-        if (pot_port2 != POT_PORT_NOT_FOUND) {
+        if (pot_port2 != -2) {
             id2 = joy_port[pot_port2];
         }
-    }
-
-    if (joysticks_are_swapped) {
-        int tmp = id1;
-        id1 = id2;
-        id2 = tmp;
     }
 
     if (id1 != JOYPORT_ID_NONE) {
@@ -587,18 +483,12 @@ uint8_t read_joyport_poty(void)
         }
     }
 
-    if (joysticks_are_swapped) {
-        int tmp = ret1;
-        ret1 = ret2;
-        ret2 = tmp;
-    }
-
     switch (pot_port_mask) {
-        case 1: /* port 1 */
+        case 1:
             return ret1;
-        case 2: /* port 2 */
+        case 2:
             return ret2;
-        case 3: /* both ports */
+        case 3:
             return calc_parallel_paddle_value(ret1, ret2);
         default:
             return 0xff;
@@ -1032,7 +922,6 @@ void joystick_adapter_deactivate(void)
     }
 }
 
-/* enable extra joystick ports */
 void joystick_adapter_set_ports(int ports, int has_5vdc)
 {
     int i;
@@ -1051,7 +940,6 @@ int joystick_adapter_get_ports(void)
     return joystick_adapter_ports + joystick_adapter_additional_ports;
 }
 
-/* enable even more joystick ports (eg internal expansion) */
 void joystick_adapter_set_add_ports(int ports)
 {
     joystick_adapter_additional_ports = ports;
@@ -1075,31 +963,43 @@ int joyport_port_is_active(int port)
     return port_props[port].active;
 }
 
-/* FIXME: the port naming strings can be removed completely,
- * they do not change anymore */
 void joyport_set_mapping(joyport_mapping_t *map, int port)
 {
-    joystick_mapping[port].name = "Joyport";
-    joystick_mapping[port].pin0 = JOYPORT_P0_NAME;
-    joystick_mapping[port].pin1 = JOYPORT_P1_NAME;
-    joystick_mapping[port].pin2 = JOYPORT_P2_NAME;
-    joystick_mapping[port].pin3 = JOYPORT_P3_NAME;
-    joystick_mapping[port].pin4 = JOYPORT_P4_NAME;
-    joystick_mapping[port].pin5 = JOYPORT_P5_NAME;
-    joystick_mapping[port].pin6 = JOYPORT_P6_NAME;
-    joystick_mapping[port].pin7 = JOYPORT_P7_NAME;
-    joystick_mapping[port].pin8 = JOYPORT_P8_NAME;
-    joystick_mapping[port].pin9 = JOYPORT_P9_NAME;
-    joystick_mapping[port].pin10 = JOYPORT_P10_NAME;
-    joystick_mapping[port].pin11 = JOYPORT_P11_NAME;
-    joystick_mapping[port].pot1 = JOYPORT_POTX_NAME;
-    joystick_mapping[port].pot2 = JOYPORT_POTY_NAME;
-
+    joystick_mapping[port].name = map->name;
+    joystick_mapping[port].pin0 = map->pin0;
+    joystick_mapping[port].pin1 = map->pin1;
+    joystick_mapping[port].pin2 = map->pin2;
+    joystick_mapping[port].pin3 = map->pin3;
+    joystick_mapping[port].pin4 = map->pin4;
+    joystick_mapping[port].pin5 = map->pin5;
+    joystick_mapping[port].pin6 = map->pin6;
+    joystick_mapping[port].pin7 = map->pin7;
+    joystick_mapping[port].pin8 = map->pin8;
+    joystick_mapping[port].pin9 = map->pin9;
+    joystick_mapping[port].pin10 = map->pin10;
+    joystick_mapping[port].pin11 = map->pin11;
+    joystick_mapping[port].pot1 = map->pot1;
+    joystick_mapping[port].pot2 = map->pot2;
     joystick_mapped[port] = 1;
 }
 
 void joyport_clear_mapping(int port)
 {
+    joystick_mapping[port].name = NULL;
+    joystick_mapping[port].pin0 = NULL;
+    joystick_mapping[port].pin1 = NULL;
+    joystick_mapping[port].pin2 = NULL;
+    joystick_mapping[port].pin3 = NULL;
+    joystick_mapping[port].pin4 = NULL;
+    joystick_mapping[port].pin5 = NULL;
+    joystick_mapping[port].pin6 = NULL;
+    joystick_mapping[port].pin7 = NULL;
+    joystick_mapping[port].pin8 = NULL;
+    joystick_mapping[port].pin9 = NULL;
+    joystick_mapping[port].pin10 = NULL;
+    joystick_mapping[port].pin11 = NULL;
+    joystick_mapping[port].pot1 = NULL;
+    joystick_mapping[port].pot2 = NULL;
     joystick_mapped[port] = 0;
 }
 
@@ -1111,14 +1011,16 @@ int joyport_has_mapping(int port)
     return 0;
 }
 
-/* builds the list of mappings for the SDL ui */
 static joyport_map_t pinmap[JOYPORT_MAX_PINS + 1] = { 0 };
 static joyport_map_t potmap[JOYPORT_MAX_POTS + 1] = { 0 };
 static joyport_map_desc_t joyport_map = { 0 };
 
-/* FIXME: this can still be made simpler, there is no "mapping per port" info anymore */
 joyport_map_desc_t *joyport_get_mapping(int port)
 {
+    int i = 0;
+    int j = 0;
+    int pots_used = 0;
+
     if (!joystick_mapped[port]) {
         return NULL;
     }
@@ -1126,57 +1028,119 @@ joyport_map_desc_t *joyport_get_mapping(int port)
     /* build joystick mapping description */
     joyport_map.name = joystick_mapping[port].name;
 
-    pinmap[0].name = joystick_mapping[port].pin0;
-    pinmap[0].pin = 0;
+    if (joystick_mapping[port].pin0 != NULL) {
+        pinmap[i].name = joystick_mapping[port].pin0;
+        pinmap[i].pin = j;
+        i++;
+    }
+    j++;
 
-    pinmap[1].name = joystick_mapping[port].pin1;
-    pinmap[1].pin = 1;
+    if (joystick_mapping[port].pin1 != NULL) {
+        pinmap[i].name = joystick_mapping[port].pin1;
+        pinmap[i].pin = j;
+        i++;
+    }
+    j++;
 
-    pinmap[2].name = joystick_mapping[port].pin2;
-    pinmap[2].pin = 2;
+    if (joystick_mapping[port].pin2 != NULL) {
+        pinmap[i].name = joystick_mapping[port].pin2;
+        pinmap[i].pin = j;
+        i++;
+    }
+    j++;
 
-    pinmap[3].name = joystick_mapping[port].pin3;
-    pinmap[3].pin = 3;
+    if (joystick_mapping[port].pin3 != NULL) {
+        pinmap[i].name = joystick_mapping[port].pin3;
+        pinmap[i].pin = j;
+        i++;
+    }
+    j++;
 
-    pinmap[4].name = joystick_mapping[port].pin4;
-    pinmap[4].pin = 4;
+    if (joystick_mapping[port].pin4 != NULL) {
+        pinmap[i].name = joystick_mapping[port].pin4;
+        pinmap[i].pin = j;
+        i++;
+    }
+    j++;
 
-    pinmap[5].name = joystick_mapping[port].pin5;
-    pinmap[5].pin = 5;
+    if (joystick_mapping[port].pin5 != NULL) {
+        pinmap[i].name = joystick_mapping[port].pin5;
+        pinmap[i].pin = j;
+        i++;
+    }
+    j++;
 
-    pinmap[6].name = joystick_mapping[port].pin6;
-    pinmap[6].pin = 6;
+    if (joystick_mapping[port].pin6 != NULL) {
+        pinmap[i].name = joystick_mapping[port].pin6;
+        pinmap[i].pin = j;
+        i++;
+    }
+    j++;
 
-    pinmap[7].name = joystick_mapping[port].pin7;
-    pinmap[7].pin = 7;
+    if (joystick_mapping[port].pin7 != NULL) {
+        pinmap[i].name = joystick_mapping[port].pin7;
+        pinmap[i].pin = j;
+        i++;
+    }
+    j++;
 
-    pinmap[8].name = joystick_mapping[port].pin8;
-    pinmap[8].pin = 8;
+    if (joystick_mapping[port].pin8 != NULL) {
+        pinmap[i].name = joystick_mapping[port].pin8;
+        pinmap[i].pin = j;
+        i++;
+    }
+    j++;
 
-    pinmap[9].name = joystick_mapping[port].pin9;
-    pinmap[9].pin = 9;
+    if (joystick_mapping[port].pin9 != NULL) {
+        pinmap[i].name = joystick_mapping[port].pin9;
+        pinmap[i].pin = j;
+        i++;
+    }
+    j++;
 
-    pinmap[10].name = joystick_mapping[port].pin10;
-    pinmap[10].pin = 10;
+    if (joystick_mapping[port].pin10 != NULL) {
+        pinmap[i].name = joystick_mapping[port].pin10;
+        pinmap[i].pin = j;
+        i++;
+    }
+    j++;
 
-    pinmap[11].name = joystick_mapping[port].pin11;
-    pinmap[11].pin = 11;
+    if (joystick_mapping[port].pin11 != NULL) {
+        pinmap[i].name = joystick_mapping[port].pin11;
+        pinmap[i].pin = j;
+        i++;
+    }
 
-    pinmap[12].name = NULL;
-    pinmap[12].pin = 0;
+    pinmap[i].name = NULL;
+    pinmap[i].pin = 0;
 
-    potmap[0].name = joystick_mapping[port].pot1;
-    potmap[0].pin = 0;
+    i = 0;
+    j = 0;
 
-    potmap[1].name = joystick_mapping[port].pot2;
-    potmap[1].pin = 1;
+    if (joystick_mapping[port].pot1 != NULL) {
+        potmap[i].name = joystick_mapping[port].pot1;
+        potmap[i].pin = j;
+        pots_used++;
+        i++;
+    }
+    j++;
 
-    potmap[2].name = NULL;
-    potmap[2].pin = 0;
+    if (joystick_mapping[port].pot2 != NULL) {
+        potmap[i].name = joystick_mapping[port].pot2;
+        potmap[i].pin = j;
+        i++;
+        pots_used++;
+    }
+
+    potmap[i].name = NULL;
+    potmap[i].pin = 0;
 
     joyport_map.pinmap = pinmap;
-    joyport_map.potmap = potmap;
-
+    if (pots_used) {
+        joyport_map.potmap = potmap;
+    } else {
+        joyport_map.potmap = NULL;
+    }
     return &joyport_map;
 }
 
@@ -1218,12 +1182,6 @@ static joyport_init_t joyport_devices_init[] = {
       NULL                             /* cmdline options init function */
     },
 #ifdef HAVE_MOUSE
-    { JOYPORT_ID_MOUSE_DIGITAL,        /* device id */
-      VICE_MACHINE_NATIVE_5V_JOYPORTS, /* emulators this device works on */
-      mouse_digital_register,          /* resources init function */
-      NULL,                            /* resources shutdown function */
-      NULL                             /* cmdline options init function */
-    },
     { JOYPORT_ID_MOUSE_1351,           /* device id */
       VICE_MACHINE_NATIVE_5V_JOYPORTS, /* emulators this device works on */
       mouse_1351_register,             /* resources init function */
@@ -1512,12 +1470,6 @@ static int set_joyport_device(int val, void *param)
     return joyport_set_device(port, val);
 }
 
-static int set_joysticks_are_swapped(int val, void *param)
-{
-    joysticks_are_swapped = val ? 1 : 0;
-    return 0;
-}
-
 static const resource_int_t resources_int_port1[] = {
     { "JoyPort1Device", JOYPORT_ID_JOYSTICK, RES_EVENT_NO, NULL,
       &joy_port[JOYPORT_1], set_joyport_device, (void *)JOYPORT_1 },
@@ -1584,19 +1536,9 @@ static const resource_int_t resources_int_port11[] = {
     RESOURCE_INT_LIST_END
 };
 
-static const resource_int_t resources_int_joyport[] = {
-    { "JoysticksAreSwapped", 0, RES_EVENT_NO, NULL,
-      &joysticks_are_swapped, set_joysticks_are_swapped, (void *)0 },
-    RESOURCE_INT_LIST_END
-};
-
 int joyport_resources_init(void)
 {
     int i;
-
-    if (resources_register_int(resources_int_joyport) < 0) {
-        return -1;
-    }
 
     memset(joyport_device, 0, sizeof(joyport_device));
     joyport_device[0].name = "None";
@@ -1947,24 +1889,9 @@ static cmdline_option_t cmdline_options_port11[] =
     CMDLINE_LIST_END
 };
 
-static cmdline_option_t cmdline_options_joyport[] =
-{
-    { "-swapjoysticks", SET_RESOURCE, CMDLINE_ATTRIB_NONE,
-      NULL, NULL, "JoysticksAreSwapped", (resource_value_t)1,
-      NULL, "Swap joystick ports." },
-    { "+swapjoysticks", SET_RESOURCE, CMDLINE_ATTRIB_NONE,
-      NULL, NULL, "JoysticksAreSwapped", (resource_value_t)0,
-      NULL, "Do not swap joystick ports." },
-    CMDLINE_LIST_END
-};
-
 int joyport_cmdline_options_init(void)
 {
     union char_func cf;
-
-    if (cmdline_register_options(cmdline_options_joyport) < 0) {
-        return -1;
-    }
 
     if (port_props[JOYPORT_1].name) {
         cf.f = build_joyport_string;
@@ -2071,13 +1998,6 @@ int joyport_cmdline_options_init(void)
 
 /* ------------------------------------------------------------------------- */
 
-/* JOYPORT 0.0 snapshot module format:
-
-   type  | name                | description
-   -----------------------------------------
-   BYTE  | device id           | device id connected to this joystick port
-*/
-
 #define DUMP_VER_MAJOR   0
 #define DUMP_VER_MINOR   0
 
@@ -2087,7 +2007,6 @@ int joyport_snapshot_write_module(struct snapshot_s *s, int port)
     char snapshot_name[16];
 
     sprintf(snapshot_name, "JOYPORT%d", port);
-    DBG(("joyport_snapshot_write_module %s", snapshot_name));
 
     m = snapshot_module_create(s, snapshot_name, DUMP_VER_MAJOR, DUMP_VER_MINOR);
 
@@ -2104,7 +2023,6 @@ int joyport_snapshot_write_module(struct snapshot_s *s, int port)
     snapshot_module_close(m);
 
     /* save seperate joyport device module */
-    DBG(("joyport_snapshot_write_module device id %d", joy_port[port]));
     switch (joy_port[port]) {
         case JOYPORT_ID_NONE:
             break;
@@ -2128,7 +2046,6 @@ int joyport_snapshot_read_module(struct snapshot_s *s, int port)
     char snapshot_name[16];
 
     sprintf(snapshot_name, "JOYPORT%d", port);
-    DBG(("joyport_snapshot_read_module %s", snapshot_name));
 
     m = snapshot_module_open(s, snapshot_name, &major_version, &minor_version);
     if (m == NULL) {
@@ -2152,7 +2069,6 @@ int joyport_snapshot_read_module(struct snapshot_s *s, int port)
     joyport_set_device(port, temp_joy_port);
 
     /* load device snapshot */
-    DBG(("joyport_snapshot_read_module device id %d (=%d)", joy_port[port], temp_joy_port));
     switch (joy_port[port]) {
         case JOYPORT_ID_NONE:
             break;

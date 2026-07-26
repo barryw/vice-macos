@@ -460,21 +460,17 @@ static void reset(via_context_t *via_context)
  * pre-PLA hardware, shows a 74LS164 (8-Bit Serial In/Parallel Out Shift Register)
  * and it would not be latched. SOE indeed affects BYTE READY.
  */
-static uint8_t read_pra(via_context_t *via_context, uint16_t addr, bool peek_only) {
+static uint8_t read_pra(via_context_t *via_context, uint16_t addr) {
     /* GCR data port */
     uint8_t byte;
     drivevia2_context_t *via2p;
 
     via2p = (drivevia2_context_t *)(via_context->prv);
 
-    if (!peek_only) {
-        /* IF: add bus read delay */
-        via2p->drive->req_ref_cycles = BUS_READ_DELAY;
+    /* IF: add bus read delay */
+    via2p->drive->req_ref_cycles = BUS_READ_DELAY;
 
-        rotation_byte_read(via2p->drive);
-
-        via2p->drive->byte_ready_level = 0;
-    }
+    rotation_byte_read(via2p->drive);
 
     byte = ((via2p->drive->GCR_read & ~(via_context->via[VIA_DDRA]))
            | (via_context->via[VIA_PRA] & via_context->via[VIA_DDRA]));
@@ -482,41 +478,35 @@ static uint8_t read_pra(via_context_t *via_context, uint16_t addr, bool peek_onl
     printf("(%u)%02x", via2p->drive->GCR_head_offset/8, via2p->drive->GCR_read);
     if (byte != via2p->drive->GCR_read) printf("[%02x]", byte);
 #endif
+    via2p->drive->byte_ready_level = 0;
 
     return byte;
 }
 
-static uint8_t read_prb(via_context_t *via_context, bool peek_only)
+static uint8_t read_prb(via_context_t *via_context)
 {
-    uint8_t byte, wp;
+    uint8_t byte;
     drivevia2_context_t *via2p;
 
     via2p = (drivevia2_context_t *)(via_context->prv);
 
-    if (peek_only) {
-        wp = via2p->drive->read_only ? 0x0 : 0x10;
-    } else {
-        /* IF: add bus read delay */
-        via2p->drive->req_ref_cycles = BUS_READ_DELAY;
+    /* IF: add bus read delay */
+    via2p->drive->req_ref_cycles = BUS_READ_DELAY;
 
-        rotation_rotate_disk(via2p->drive);
-
-        wp = drive_writeprotect_sense(via2p->drive);
-
-        /*
-         * See comments about port A latching at read_pra();
-         * clearing byte_ready_level here may be wrong.
-         */
-        via2p->drive->byte_ready_level = 0;
-    }
-
+    rotation_rotate_disk(via2p->drive);
     byte = ((rotation_sync_found(via2p->drive)
-           | wp
+           | drive_writeprotect_sense(via2p->drive)
            | 0x6f) /* output bits read 1 if used as input */
            & ~(via_context->via[VIA_DDRB]))
            | (via_context->via[VIA_PRB] & via_context->via[VIA_DDRB]);
 
     DBG(("read_prb %02x pb:%02x ddr:%02x",byte,via_context->via[VIA_PRB],via_context->via[VIA_DDRB]));
+
+    /*
+     * See comments about port A latching at read_pra();
+     * clearing byte_ready_level here may be wrong.
+     */
+    via2p->drive->byte_ready_level = 0;
 
     return byte;
 }

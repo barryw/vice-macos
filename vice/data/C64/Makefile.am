@@ -72,6 +72,11 @@ macos_keymaps = \
 	macos_pos.vkm
 
 sdl_keymaps = \
+	sdl_joymap_ps3.vjm \
+	sdl_joymap_thec64.vjm \
+	sdl_joymap_keyrah_v3.vjm \
+	sdl_joymap_xbox360.vjm \
+	sdl_joymap_8bitdo_6b.vjm \
 	sdl_pos.vkm \
 	sdl_pos_uk.vkm \
 	sdl_pos_ch.vkm \

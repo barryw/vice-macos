@@ -1400,17 +1400,16 @@ static void save_as_callback(GtkDialog *dialog, gchar *path, gpointer data)
         fullpath = util_add_extension_const(path, "vhk");
         g_free(path);
 
-        if (!ui_hotkeys_save_as(fullpath)) {
-/* On Windows the main thread stops responding when we use the dialog as
-   parent here, see bug #2205 */
-#ifdef WINDOWS_COMPILE
-            ui_error("Failed to save hotkeys as '%s'.", fullpath);
-#else
+        if (ui_hotkeys_save_as(fullpath)) {
+            vice_gtk3_message_info(GTK_WINDOW(dialog),
+                                   "Hotkeys saved",
+                                   "Hotkeys succesfully saved as '%s'.",
+                                   fullpath);
+        } else {
             vice_gtk3_message_error(GTK_WINDOW(dialog),
                                     "Hotkeys error",
                                     "Failed to save hotkeys as '%s'.",
                                     fullpath);
-#endif
         }
         lib_free(fullpath);
         update_hotkeys_info();

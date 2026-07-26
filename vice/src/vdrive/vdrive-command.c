@@ -3297,8 +3297,7 @@ out2:
 int vdrive_command_format(struct vdrive_s *vdrive, const char *disk_name)
 {
     int status;
-    uint8_t *p, *po;
-    const uint8_t *pc;
+    uint8_t *p, *po, *pc;
     int length;
     cbmdos_cmd_parse_plus_t cmd;
 
@@ -3838,7 +3837,7 @@ static int vdrive_command_time(vdrive_t *vdrive, uint8_t *cmd, int length)
         p->readmode = CBMDOS_FAM_READ;
         return CBMDOS_IPE_OK;
     } else if (cmd[2] == 'W') {
-        if  (cmd[3] != 'A' && cmd[3] != 'D' && cmd[3] != 'B') {
+        if  (cmd[3] != 'A' || cmd[3] != 'D' || cmd[3] != 'B') {
             goto bad;
         }
         vdrive_command_set_error(vdrive, CBMDOS_IPE_OK, 0, 0);

@@ -1162,8 +1162,8 @@ int cartridge_flush_secondary_image(int type)
 
 int cartridge_save_image(int type, const char *filename)
 {
-    const char *ext = util_get_extension((char *)filename);
-    if ((ext != NULL) && !strcmp(ext, "crt")) {
+    char *ext = util_get_extension((char *)filename);
+    if (ext != NULL && !strcmp(ext, "crt")) {
         return cartridge_crt_save(type, filename);
     }
     return cartridge_bin_save(type, filename);
@@ -1306,17 +1306,6 @@ void cartridge_trigger_freeze(void)
 }
 
 /* ------------------------------------------------------------------------- */
-
-/* VIC20CART 2.1 snapshot module format:
-
-   type  | name                 | description
-   -------------------------------------------
-   DWORD | vic20cart_type       |
-   BYTE  | number_of_carts      | number of attached carts
-   ARRAY | cart_ids             | number_of_carts * DWORD cartridge IDs
-
-   followed by individual cartridges modules
- */
 
 #define VIC20CART_DUMP_MAX_CARTS  16
 

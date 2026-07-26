@@ -286,8 +286,10 @@ final class VSIDSession: ObservableObject {
             "0",
             "-soundoutput",
             "0",
+            // SID_ENGINE_RESID. ReSID-FP (engine 8) does not exist in released
+            // VICE — it is a post-3.10.0 trunk feature.
             "-sidengine",
-            "8",
+            "1",
             "-soundvolume",
             "\(soundVolume)"
         ]

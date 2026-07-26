@@ -70,6 +70,9 @@ SID::SID()
   fir_f_cycles_per_sample = 0;
   fir_filter_scale = 0;
 
+  voice_capture_buf = 0;
+  voice_capture_stride = 0;
+
   sid_model = MOS6581;
   voice[0].set_sync_source(&voice[2]);
   voice[1].set_sync_source(&voice[0]);
@@ -86,6 +89,16 @@ SID::SID()
   scaleFactor = 3;
 
   raw_debug_output = false;
+}
+
+
+// ----------------------------------------------------------------------------
+// Aim per-voice sample capture at a caller-owned buffer (see sid.h).
+// ----------------------------------------------------------------------------
+void SID::set_voice_capture_buffer(short* buf, unsigned int stride)
+{
+  voice_capture_buf = buf;
+  voice_capture_stride = stride;
 }
 
 
@@ -886,6 +899,7 @@ int SID::clock_fast(cycle_count& delta_t, short* buf, int n, int interleave)
 
     sample_offset = (next_sample_offset & FIXP_MASK) - (1 << (FIXP_SHIFT - 1));
     buf[s*interleave] = amplify(output(), scaleFactor);
+    capture_voice_sample(s);
   }
 
   return s;
@@ -932,6 +946,7 @@ int SID::clock_interpolate(cycle_count& delta_t, short* buf, int n, int interlea
       sample_prev + (sample_offset*(sample_now - sample_prev) >> FIXP_SHIFT),
       scaleFactor
     );
+    capture_voice_sample(s);
   }
 
   return s;
@@ -1032,6 +1047,7 @@ int SID::clock_resample(cycle_count& delta_t, short* buf, int n, int interleave)
     v >>= FIR_SHIFT;
 
     buf[s*interleave] = amplify(v, scaleFactor);
+    capture_voice_sample(s);
   }
 
   return s;
@@ -1079,6 +1095,7 @@ int SID::clock_resample_fastmem(cycle_count& delta_t, short* buf, int n, int int
     v >>= FIR_SHIFT;
 
     buf[s*interleave] = amplify(v, scaleFactor);
+    capture_voice_sample(s);
   }
 
   return s;

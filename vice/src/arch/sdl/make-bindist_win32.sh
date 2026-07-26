@@ -188,8 +188,6 @@ rm -f `find $BINDIST_DIR -name 'Makefile*'`
 rm -f `find $BINDIST_DIR -name 'gtk3*'`
 mkdir $BINDIST_DIR/hotkeys
 cp -a $TOPSRCDIR/data/hotkeys/*.vhk $BINDIST_DIR/hotkeys
-mkdir $BINDIST_DIR/joymaps
-cp -a $TOPSRCDIR/data/joymaps/*.vjm $BINDIST_DIR/joymaps
 
 # Icon files for SDL1
 if test x"$SDLVERSION" = "x1"; then

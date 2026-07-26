@@ -131,12 +131,24 @@ static GtkWidget *device_widgets[JOYPORT_MAX_PORTS];
  */
 static void on_swap_joysticks_toggled(GtkWidget *button, gpointer data)
 {
+    int joy1 = -1;
+    int joy2 = -1;
+
     ui_action_trigger(ACTION_SWAP_CONTROLPORT_TOGGLE);
 
     /* make sure to set the correct state, swapping might fail due to certain
      * devices not being allowed on certain ports */
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(button),
                                  ui_get_controlport_swapped());
+
+    /* get current values */
+    resources_get_int_sprintf("JoyDevice%d", &joy1, 1);
+    resources_get_int_sprintf("JoyDevice%d", &joy2, 2);
+
+    /* updating the widgets (triggers updating the resources but since they're
+     * the same nothing will happen) */
+    joystick_device_widget_update(device_widgets[JOYPORT_1], joy1);
+    joystick_device_widget_update(device_widgets[JOYPORT_2], joy2);
 }
 
 /** \brief  Handler for the 'clicked' event of the "Configure keysets" button
@@ -477,8 +489,6 @@ GtkWidget *settings_joystick_widget_create(GtkWidget *parent)
     GtkWidget *opposite_enabled;
     GtkWidget *keyset_1_button;
     GtkWidget *keyset_2_button;
-    GtkWidget *pot1_from_mouse;
-    GtkWidget *pot2_from_mouse;
     int        row = 0;
 
     layout = vice_gtk3_grid_new_spaced(8, 0);
@@ -526,14 +536,6 @@ GtkWidget *settings_joystick_widget_create(GtkWidget *parent)
     opposite_enabled = create_opposite_enable_checkbox();
     gtk_grid_attach(GTK_GRID(layout), keyset_enabled,   0, row, 1, 1);
     gtk_grid_attach(GTK_GRID(layout), opposite_enabled, 1, row, 1, 1);
-    row++;
-
-    pot1_from_mouse = vice_gtk3_resource_check_button_new("PaddlesInput1",
-                                               "POT1 value from controller");
-    pot2_from_mouse = vice_gtk3_resource_check_button_new("PaddlesInput2",
-                                               "POT2 value from controller");
-    gtk_grid_attach(GTK_GRID(layout), pot1_from_mouse, 0, row, 1, 1);
-    gtk_grid_attach(GTK_GRID(layout), pot2_from_mouse, 1, row, 1, 1);
     row++;
 
     /* add buttons to activate keyset dialog */

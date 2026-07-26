@@ -29,7 +29,6 @@
 
 #include "types.h"
 
-/* this is the bit order as delivered by the SNES Pad hardware interface */
 enum {
     SNESPAD_BUTTON_B = 0,
     SNESPAD_BUTTON_Y,

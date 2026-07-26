@@ -28,8 +28,6 @@
 
 #include "vice.h"
 
-#if defined(HAVE_RESID) || defined(HAVE_RESID_DTV)
-
 #ifdef _M_ARM
 #undef _ARM_WINAPI_PARTITION_DESKTOP_SDK_AVAILABLE
 #define _ARM_WINAPI_PARTITION_DESKTOP_SDK_AVAILABLE 1
@@ -46,6 +44,10 @@ extern "C" {
 #include "resources.h"
 #include "sid-snapshot.h"
 #include "types.h"
+
+#ifdef USE_MACOSUI
+#include "vicemacbridge.h"
+#endif
 
 extern log_t sound_log;
 
@@ -65,6 +67,13 @@ struct sound_s
 
     /* resid sid implementation */
     reSID::SID *sid;
+
+#ifdef USE_MACOSUI
+    /* identifies this chip to the macOS SID visualizer */
+    int chip_index;
+    int sample_rate;
+    int clock_rate;
+#endif
 };
 
 typedef struct sound_s sound_t;
@@ -87,12 +96,70 @@ static short *getbuf(int len)
     return buf;
 }
 
+#ifdef USE_MACOSUI
+static short *voice_buf = NULL;
+static int voice_blen = 0;
+static int visualizer_chip_index = 0;
+
+void resid_set_visualizer_sid_chip(int chipno)
+{
+    visualizer_chip_index = chipno;
+}
+
+static short *getvoicebuf(int len)
+{
+    if ((voice_buf == NULL) || (voice_blen < len)) {
+        if (voice_buf) {
+            lib_free(voice_buf);
+        }
+        voice_blen = len;
+        voice_buf = (short *)lib_calloc(len, sizeof(short));
+    }
+    return voice_buf;
+}
+
+static void resid_publish_voice_samples(sound_t *psid, const short *samples, int frame_count)
+{
+    uint16_t frequency[VICEMAC_SID_VOICE_COUNT];
+    uint8_t control[VICEMAC_SID_VOICE_COUNT];
+    reSID::SID::State state;
+    int voice;
+
+    if (psid == NULL || psid->sid == NULL || samples == NULL || frame_count <= 0) {
+        return;
+    }
+
+    state = psid->sid->read_state();
+
+    for (voice = 0; voice < (int)VICEMAC_SID_VOICE_COUNT; voice++) {
+        const int base = voice * 7;
+        frequency[voice] = (uint16_t)(((state.sid_register[base + 1] & 0xff) << 8)
+                                      | (state.sid_register[base] & 0xff));
+        control[voice] = (uint8_t)(state.sid_register[base + 4] & 0xff);
+    }
+
+    vicemac_publish_sid_voice_samples(samples,
+                                      (uint32_t)frame_count,
+                                      VICEMAC_SID_VOICE_COUNT,
+                                      (uint32_t)psid->chip_index,
+                                      (uint32_t)psid->sample_rate,
+                                      (uint32_t)psid->clock_rate,
+                                      frequency,
+                                      control);
+}
+#endif
+
 static sound_t *resid_open(uint8_t *sidstate)
 {
     sound_t *psid;
     int i;
 
     psid = new sound_t;
+#ifdef USE_MACOSUI
+    psid->chip_index = visualizer_chip_index;
+    psid->sample_rate = 0;
+    psid->clock_rate = 0;
+#endif
     psid->sid = new reSID::SID;
 
     for (i = 0x00; i <= 0x18; i++) {
@@ -104,6 +171,10 @@ static sound_t *resid_open(uint8_t *sidstate)
 
 static int resid_init(sound_t *psid, int speed, int cycles_per_sec, int factor)
 {
+#ifdef USE_MACOSUI
+    psid->sample_rate = speed;
+    psid->clock_rate = cycles_per_sec;
+#endif
     sampling_method method;
     char model_text[100];
     char method_text[100];
@@ -248,6 +319,14 @@ static void resid_close(sound_t *psid)
         lib_free(buf);
         buf = NULL;
     }
+
+#ifdef USE_MACOSUI
+    if (voice_buf) {
+        lib_free(voice_buf);
+        voice_buf = NULL;
+        voice_blen = 0;
+    }
+#endif
 }
 
 static uint8_t resid_read(sound_t *psid, uint16_t addr)
@@ -267,6 +346,9 @@ static void resid_reset(sound_t *psid, CLOCK cpu_clk)
 
 #ifdef SOUND_SYSTEM_FLOAT
 /* FIXME */
+/* NOTE: not built by VICE 3.10.0. If the float sound system is ever enabled,
+ * the macOS SID voice capture below (see the short variant) must be mirrored
+ * here or the visualizer goes silent. */
 static int resid_calculate_samples(sound_t *psid, float *pbuf, int nr, CLOCK *delta_t)
 {
     short *tmp_buf;
@@ -301,23 +383,61 @@ static int resid_calculate_samples(sound_t *psid, short *pbuf, int nr, int inter
 {
     short *tmp_buf;
     int retval;
+    int raw_frames;
     int int_delta_t_original = (int)*delta_t;
     int int_delta_t = (int)*delta_t;
+#ifdef USE_MACOSUI
+    int requested_voice_frames;
+    int capture_voice_samples;
+#endif
 
     /* Tried not to mess with resid during 64-bit conversion. clock(...) wants to modify *delta_t ... */
 
     if (psid->factor == 1000) {
-        /* CAUTION: modifies int_delta_t so it contains "cycles left to do" after exit (usually 0) */
+#ifdef USE_MACOSUI
+        requested_voice_frames = nr;
+        capture_voice_samples = vicemac_should_capture_sid_voice_samples((uint32_t)psid->chip_index,
+                                                                        (uint32_t)requested_voice_frames,
+                                                                        (uint32_t)psid->sample_rate);
+        if (capture_voice_samples) {
+            psid->sid->set_voice_capture_buffer(getvoicebuf(requested_voice_frames * (int)VICEMAC_SID_VOICE_COUNT),
+                                                VICEMAC_SID_VOICE_COUNT);
+        }
+#endif
         retval = psid->sid->clock(int_delta_t, pbuf, nr, interleave);
         (*delta_t) += int_delta_t - int_delta_t_original;
+#ifdef USE_MACOSUI
+        if (capture_voice_samples) {
+            psid->sid->set_voice_capture_buffer(NULL, 0);
+            resid_publish_voice_samples(psid, voice_buf, retval);
+        }
+#endif
         return retval;
     }
 
-    /* Used when SID does not run at system clock ("SID card") */
     tmp_buf = getbuf(2 * nr * psid->factor / 1000);
-    retval = psid->sid->clock(int_delta_t, tmp_buf, nr * psid->factor / 1000, interleave);
+#ifdef USE_MACOSUI
+    requested_voice_frames = nr * psid->factor / 1000;
+    capture_voice_samples = vicemac_should_capture_sid_voice_samples((uint32_t)psid->chip_index,
+                                                                    (uint32_t)requested_voice_frames,
+                                                                    (uint32_t)psid->sample_rate);
+    if (capture_voice_samples) {
+        psid->sid->set_voice_capture_buffer(getvoicebuf(requested_voice_frames * (int)VICEMAC_SID_VOICE_COUNT),
+                                            VICEMAC_SID_VOICE_COUNT);
+    }
+#endif
+    raw_frames = psid->sid->clock(int_delta_t, tmp_buf, nr * psid->factor / 1000, interleave);
+    retval = raw_frames * 1000 / psid->factor;
     (*delta_t) += int_delta_t - int_delta_t_original;
-    memcpy(pbuf, tmp_buf, retval * 2);
+    memcpy(pbuf, tmp_buf, 2 * nr);
+#ifdef USE_MACOSUI
+    if (capture_voice_samples) {
+        psid->sid->set_voice_capture_buffer(NULL, 0);
+        /* the capture buffer holds one entry per SID sample, i.e. the count
+         * clock() returned before it was rescaled by the speed factor */
+        resid_publish_voice_samples(psid, voice_buf, raw_frames);
+    }
+#endif
 
     return retval;
 }
@@ -454,5 +574,3 @@ sid_engine_t resid_hooks =
 };
 
 } // extern "C"
-
-#endif

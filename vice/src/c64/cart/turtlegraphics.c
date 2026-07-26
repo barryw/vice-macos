@@ -180,20 +180,18 @@ void turtlegraphics_detach(void)
 
 /* ---------------------------------------------------------------------*/
 
-/* CARTTURTLEGFX 0.2 snapshot module format:
+/* CARTSTB snapshot module format:
 
    type  | name   | version | description
    --------------------------------------
    BYTE  | bank   |   0.1   | current bank
    BYTE  | active |   0.1   | cartridge active flag
    ARRAY | ROML   |   0.0+  | 16384 BYTES of ROML data
-
-   Note: renamed from "CARTSTB" in 0.2
  */
 
-static const char snap_module_name[] = "CARTTURTLEGFX";
+static const char snap_module_name[] = "CARTSTB";
 #define SNAP_MAJOR   0
-#define SNAP_MINOR   2
+#define SNAP_MINOR   1
 
 int turtlegraphics_snapshot_write_module(snapshot_t *s)
 {

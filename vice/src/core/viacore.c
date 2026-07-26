@@ -233,15 +233,15 @@ inline static void update_myviairq(via_context_t *via_context)
  * - the next time T1 gets reloaded and will raise the T1 IRQ some time before;
  *   t1zero is set in this case (alarm time when IRQ is raised; because it is an
  *   alarm it has to be set to the cycle before the CPU must see it).
- * - the previous time it was reloaded (possibly if no more IRQ is wanted;
- *   t1zero is 0 in this case).
+ * - the previous time it was reloaded (if no more IRQ is wanted);
+ *   t1zero is 0 in this case.
  *
- * If the current clock (rclk) has not yet reached t1reload, the difference -2
+ * If the current clock (rclk) has not yet rached t1reload, the difference -2
  * is the clock value. Minus 2 to reach 0 and FFFF.
  *
  * T1:  3     2     1     0    FFFF   42
- *                        ^           ^
- *     rclk               t1zero      t1reload
+ *                           ^         ^
+ *     rclk             t1zero        t1reload
  *
  * Otherwise, calculate the total time since the last reload.
  * We take the remainder of this elapsed time when dividing by the full cycle time.
@@ -265,23 +265,17 @@ inline static void update_myviairq(via_context_t *via_context)
 inline static uint16_t viacore_t1(via_context_t *via_context, CLOCK rclk)
 {
     if (rclk < via_context->t1reload) {
-        CLOCK res = via_context->t1reload - rclk - (unsigned)FULL_CYCLE_2;
-        return (uint16_t)res;
+        return via_context->t1reload - rclk - FULL_CYCLE_2;
     } else {    /* always reload from latch, contrary to datasheet */
-/*
- * Example of a case where the timer should show FFFF:
- *
- * T1:  3     2     1     0    FFFF   3
- *      ^                 ^       ^
- *     t1reload           t1zero  rclk
- */
-        unsigned int full_cycle = via_context->tal + FULL_CYCLE_2;      /* 3+2=5 */
-        CLOCK time_past_last_reload = rclk - (via_context->t1reload);   /* 4     */
-        unsigned int partial_cycle = time_past_last_reload % full_cycle;/* 4%5=4 */
+        unsigned int full_cycle = via_context->tal + FULL_CYCLE_2;
+        CLOCK time_past_last_reload = rclk - (via_context->t1reload);
+        unsigned int partial_cycle = time_past_last_reload % full_cycle;
 
-        return via_context->tal - partial_cycle;                     /* 3-4=FFFF */
+        return via_context->tal - partial_cycle;
     }
 }
+
+#define TBI_OFFSET              1
 
 #define SR_PHI2_FIRST_OFFSET    3
 #define SR_PHI2_NEXT_OFFSET     1
@@ -451,7 +445,7 @@ void viacore_signal(via_context_t *via_context, int line, int edge)
                 update_myviairq(via_context);
 #ifdef MYVIA_NEED_LATCHING
                 if (IS_PA_INPUT_LATCH()) {
-                    via_context->ila = (via_context->read_pra)(via_context, VIA_PRA, false);
+                    via_context->ila = (via_context->read_pra)(via_context, VIA_PRA);
                 }
 #endif
             }
@@ -659,6 +653,7 @@ void viacore_store(via_context_t *via_context, uint16_t addr, uint8_t byte)
 
     if (addr == VIA_PRB || (addr >= VIA_T1CL && addr <= VIA_IER)) {
         run_pending_alarms(rclk, via_context->write_offset, via_context->alarm_context);
+        /* run_pending_alarms(rclk, 0, via_context->alarm_context); */
     }
 
     switch (addr) {
@@ -676,7 +671,6 @@ void viacore_store(via_context_t *via_context, uint16_t addr, uint8_t byte)
                     via_context->ca2_out_state = true;
                     (via_context->set_ca2)(via_context, via_context->ca2_out_state);
                 }
-                // if not pulse, CA2 gets reset on an active CA1 transition
             }
             if (via_context->ier & (VIA_IM_CA1 | VIA_IM_CA2)) {
                 update_myviairq_rclk(via_context, rclk);
@@ -870,7 +864,7 @@ void viacore_store(via_context_t *via_context, uint16_t addr, uint8_t byte)
             if ((!(via_context->via[addr] & VIA_ACR_PA_LATCH)) &&
                                     (byte & VIA_ACR_PA_LATCH)) {
                 if (via_context->ifr & VIA_IM_CA1) {
-                    via_context->ila = (via_context->read_pra)(via_context, addr, false);
+                    via_context->ila = (via_context->read_pra)(via_context, addr);
                 }
             }
             /* switch on port B latching, same as for port A */
@@ -1087,7 +1081,6 @@ uint8_t viacore_read_(via_context_t *via_context, uint16_t addr)
                     via_context->ca2_out_state = true;
                     (via_context->set_ca2)(via_context, via_context->ca2_out_state);
                 }
-                // if not pulse, CA2 gets reset on an active CA1 transition
             }
             if (via_context->ier & (VIA_IM_CA1 | VIA_IM_CA2)) {
                 update_myviairq_rclk(via_context, rclk);
@@ -1111,7 +1104,7 @@ uint8_t viacore_read_(via_context_t *via_context, uint16_t addr)
             } else
 #endif
             {
-                byte = (via_context->read_pra)(via_context, addr, false);
+                byte = (via_context->read_pra)(via_context, addr);
                 /*
                  * Currently the latch is transparent, so there is no need
                  * to store the byte into it. That will happen next time
@@ -1143,7 +1136,7 @@ uint8_t viacore_read_(via_context_t *via_context, uint16_t addr)
             } else
 #endif
             {
-                byte = (via_context->read_prb)(via_context, false);
+                byte = (via_context->read_prb)(via_context);
                 /* Same comment about transparent latch as for PA */
             }
             byte = (byte & ~(via_context->via[VIA_DDRB]))
@@ -1225,7 +1218,7 @@ uint8_t viacore_peek(via_context_t *via_context, uint16_t addr)
         case VIA_PRA_NHS: /* port A, no handshake */
             {
                 uint8_t byte;
-                /* WARNING: this reads the voltage of the output pins, not
+                /* WARNING: this pin reads the voltage of the output pins, not
                 the ORA value as the other port. Value read might be different
                 from what is expected due to excessive load. */
 #ifdef MYVIA_NEED_LATCHING
@@ -1234,7 +1227,8 @@ uint8_t viacore_peek(via_context_t *via_context, uint16_t addr)
                 } else
 #endif
                 {
-                    byte = (via_context->read_pra)(via_context, addr, true);
+                    /* FIXME: side effects ? */
+                    byte = (via_context->read_pra)(via_context, addr);
                 }
                 return byte;
             }
@@ -1248,7 +1242,8 @@ uint8_t viacore_peek(via_context_t *via_context, uint16_t addr)
                 } else
 #endif
                 {
-                    byte = (via_context->read_prb)(via_context, true);
+                    /* FIXME: side effects ? */
+                    byte = (via_context->read_prb)(via_context);
                 }
                 byte = (byte & ~(via_context->via[VIA_DDRB]))
                        | (via_context->via[VIA_PRB] & via_context->via[VIA_DDRB]);
@@ -1321,13 +1316,8 @@ static void viacore_t1_zero_alarm(CLOCK offset, void *data)
         alarm_set(via_context->t1_zero_alarm, via_context->t1zero);
 
         /* Let t1reload also keep up with the cpu clock;
-         * this should avoid `% full_cycle` case in viacore_t1().
-         * However, this breaks seeing $FFFF in T1, which would happen in the
-         * next cycle (where rclk = current_t1reload - 1) (bug 2203).
-         * This optimization broke when this alarm was set to one clock cycle
-         * earlier, to fix viavarious tests 10, 11, 12, 13, 21 (PB7 and IFR).
+           this should avoid `% full_cycle` case. */
         via_context->t1reload += full_cycle;
-         */
 
         VIALOG2("viacore_t1_zero_alarm: re-set t1_zero_alarm at %lu, tal=%04x, t1reload=%lu\n", via_context->t1zero, via_context->tal, via_context->t1reload);
     }
@@ -1902,42 +1892,44 @@ void viacore_shutdown(via_context_t *via_context)
 
 /*------------------------------------------------------------------------*/
 
-/* ---------------------------------------------------------------------*/
-
-/* VIA 2.2 snapshot module format:
-
-   type  | name                 |version| description
-   --------------------------------------------------
-   UBYTE | ORA                  |       | Output register A
-   UBYTE | DDRA                 |       | Data direction register A
-   UBYTE | ORB                  |       | Output register B
-   UBYTE | DDRB                 |       | Data direction register B
-   UWORD | T1L                  |       | timer 1 latch value
-   UWORD | T1C                  |       | timer 1 count value
-   UBYTE | T2LL                 |       | Timer 2 latch lo
-   UBYTE | T2LH                 |       | Timer 2 latch hi
-   UBYTE | T2CL                 |       | timer 2 count value lo
-   UBYTE | T2CH                 |       | timer 2 count value hi
-   UWORD | T2C                  |       | timer 2 counter
-   UBYTE | RUNFL                |       | bit 7: timer 1 will generate IRQ on underflow; bit 6: timer 2 will generate IRQ on underflow
-   UBYTE | SR                   |       | shift register value
-   UBYTE | ACR                  |       | auxiliary control register
-   UBYTE | PCR                  |       | peripherial control register
-   UBYTE | IFR                  |       | active interrupts
-   UBYTE | IER                  |       | interrupt masks
-   UBYTE | PB7                  |       | bit 7 = pb7 state
-   UBYTE | SRHBITS              |       | number of half-bits to shift out on SR
-   UBYTE | CABSTATE             |       | bit 7 = ca2 state, bit6 = cb2 state, bit5 = cb1
-   UBYTE | ILA                  |       | input latch port A  (see ACR bit 0)
-   UBYTE | ILB                  |       | input latch port B  (see ACR bit 1)
-   UBYTE | t2_irq_allowed       | 2.2+  |
-   UBYTE | t2_underflow_alarm   | 2.2+  | 0 if not; 1+time delta if set.
-   UBYTE | t2_shift_alarm       | 2.2+  | 0 if not; 1+time delta if set.
- */
-
 /* The name of the modul must be defined before including this file.  */
 #define VIA_DUMP_VER_MAJOR      2
 #define VIA_DUMP_VER_MINOR      2
+
+/*
+ * The dump data:
+ *
+ * Minor version 1:
+ *
+ * UBYTE        ORA
+ * UBYTE        DDRA
+ * UBYTE        ORB
+ * UBYTE        DDRB
+ * UWORD        T1L             word1   via_context->tal
+ * UWORD        T1C             word2   viacore_t1()
+ * UBYTE        T2LL
+ * UBYTE        T2LH
+ * UBYTE        T2CL
+ * UBYTE        T2CH
+ * UWORD        T2C             word3   viacore_t2()
+ * UBYTE        0x80:t1zero | 0x40:t2xx00     byte1
+ * UBYTE        SR
+ * UBYTE        ACR
+ * UBYTE        PCR
+ * UBYTE        IFR              active interrupts
+ * UBYTE        IER              interrupt masks
+ * UBYTE        PB7              byte4  bit 7 = pb7 state
+ * UBYTE        SRHBITS          shift register state helper
+ * UBYTE        CABSTATE         byte6 bit 7 = ca2 state, bit6 = cb2 state, bi5 = cb1
+ * UBYTE        ILA              input latch port A
+ * UBYTE        ILB              input latch port B
+ *
+ * Minor version 2 adds:
+ *
+ * UBYTE        t2_irq_allowed
+ * UBYTE        t2_underflow_alarm 0 if not; 1+time delta if set.
+ * UBYTE        t2_shift_alarm   0 if not; 1+time delta if set.
+ */
 
 /* FIXME!!!  Error check.  */
 

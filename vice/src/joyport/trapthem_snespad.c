@@ -212,13 +212,11 @@ int joyport_trapthem_snespad_resources_init(void)
    BYTE  | COUNTER | counter value
    BYTE  | LATCH   | latch line state
    BYTE  | CLOCK   | clock line state
-
-   followed by 1 joyport module
-*/
+ */
 
 static const char snap_module_name[] = "TRAPTHEMSNESPAD";
 #define SNAP_MAJOR   0
-#define SNAP_MINOR   2
+#define SNAP_MINOR   1
 
 static int trapthem_snespad_write_snapshot(struct snapshot_s *s, int p)
 {
@@ -237,12 +235,7 @@ static int trapthem_snespad_write_snapshot(struct snapshot_s *s, int p)
             snapshot_module_close(m);
             return -1;
     }
-    snapshot_module_close(m);
-
-    if (joyport_snapshot_write_module(s, JOYPORT_3) < 0) {
-        return -1;
-    }
-    return 0;
+    return snapshot_module_close(m);
 }
 
 static int trapthem_snespad_read_snapshot(struct snapshot_s *s, int p)
@@ -269,15 +262,9 @@ static int trapthem_snespad_read_snapshot(struct snapshot_s *s, int p)
         goto fail;
     }
 
-    snapshot_module_close(m);
-
-    if (joyport_snapshot_read_module(s, JOYPORT_3) < 0) {
-        return -1;
-    }
-    return 0;
+    return snapshot_module_close(m);
 
 fail:
     snapshot_module_close(m);
     return -1;
-
 }

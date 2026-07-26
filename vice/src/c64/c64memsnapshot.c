@@ -54,7 +54,7 @@
 
 /* ---------------------------------------------------------------------*/
 
-/* C64ROM 0.0 snapshot module format:
+/* C64ROM snapshot module format:
 
    type  | name    | description
    -----------------------------
@@ -177,7 +177,7 @@ fail:
 
 /* ---------------------------------------------------------------------*/
 
-/* C64MEM 0.1 snapshot module format:
+/* C64MEM snapshot module format:
 
    type  | name                | version | description
    ---------------------------------------------------

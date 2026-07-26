@@ -309,7 +309,6 @@ static unsigned char *write_uint32(uint32_t input, unsigned char *output) {
     return output + 4;
 }
 
-#ifdef FEATURE_CPUMEMHISTORY
 /*! \internal \brief Write uint64 to buffer and return pointer to byte after */
 static unsigned char *write_uint64(uint64_t input, unsigned char *output) {
     for (int i = 0 ; i < 8 ; i++) {
@@ -318,7 +317,6 @@ static unsigned char *write_uint64(uint64_t input, unsigned char *output) {
 
     return output + 8;
 }
-#endif
 
 /*! \internal \brief Write string to buffer and return pointer to byte after */
 static unsigned char *write_string(uint8_t length, unsigned char *input, unsigned char *output) {
@@ -1271,24 +1269,11 @@ static void monitor_binary_process_display_get(binary_command_t *command)
     screenshot.height = screenshot.last_displayed_line - screenshot.first_displayed_line + 1;
     screenshot.y_offset = screenshot.first_displayed_line;
 
-    buffer_length = (screenshot.debug_width * screenshot.debug_height) * (depth / 8);
-    response_length = (4 + 4) + info_length + buffer_length;
+    buffer_length = screenshot.debug_width * screenshot.debug_height * depth / 8;
+    response_length = 4 + info_length + buffer_length;
     response = lib_malloc(response_length);
     response_cursor = response;
-/*
-    4 FL: 4 bytes: Length of the fields before the display buffer (DW...BP)
 
-    2 DW: 2 bytes: Debug width of display buffer (uncropped) The largest width the screen gets.
-    2 DH: 2 bytes: Debug height of display buffer (uncropped) Rhe largest height the screen gets.
-    2 XO: 2 bytes: X offset  X offset to the inner part of the screen.
-    2 YO: 2 bytes: Y offset  Y offset to the inner part of the screen.
-    2 IW: 2 bytes: Width of the inner part of the screen.
-    2 IH: 2 bytes: Height of the inner part of the screen.
-    1 BP: 1 byte: Bits per pixel of display buffer (=8)
-
-    4 BL: 4 bytes: Length of display buffer
-    followed by display buffer, debug width * debug height bytes
-*/
     /* Length of fields before display buffer */
     response_cursor = write_uint32(info_length, response_cursor);
 
@@ -1317,6 +1302,7 @@ static void monitor_binary_process_display_get(binary_command_t *command)
         screenshot.convert_line(&screenshot, response_cursor, i, format);
         response_cursor += screenshot.debug_width * depth / 8;
     }
+
     monitor_binary_response(response_length, e_MON_RESPONSE_DISPLAY_GET, e_MON_ERR_OK, command->request_id, response);
 
     lib_free(response);
@@ -1773,9 +1759,7 @@ static void monitor_binary_process_command(unsigned char * pbuffer)
     }
 
     /* Ensure drive CPU emulation is up to date with main cpu CLOCK. */
-    /* FIXME: should this be drive_catch_up_hook() instead? */
-    /*drive_cpu_execute_all(maincpu_clk);*/
-    drive_catch_up_hook(maincpu_clk);
+    drive_cpu_execute_all(maincpu_clk);
 
     command.length = little_endian_to_uint32(&pbuffer[2]);
 

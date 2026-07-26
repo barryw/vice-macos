@@ -28,8 +28,6 @@
  *
  */
 
-/* #define DEBUG_DRIVE_CPU */
-
 #include "vice.h"
 
 #include <stdio.h>
@@ -57,11 +55,6 @@
 #include "types.h"
 #include "uiapi.h"
 
-#ifdef DEBUG_DRIVE_CPU
-#define DBG(x)  log_printf x
-#else
-#define DBG(x)
-#endif
 
 #define DRIVE_CPU
 
@@ -261,33 +254,21 @@ void drivecpu_init(diskunit_context_t *drv, int type)
 
 inline void drivecpu_wake_up(diskunit_context_t *drv)
 {
-    if (drv->idling_method == DRIVE_IDLE_SKIP_CYCLES) {
-        /* FIXME: this value could break some programs, or be way too high for
-        others.  Maybe we should put it into a user-definable resource.  */
-        if (((maincpu_clk - drv->cpu->last_clk) > 0xffffff) &&
-            (*(drv->clk_ptr) > 934639)) {
-            log_message(drv->log, "Skipping cycles.");
-            /* forward clock (set last main cpu clock to current clock) */
-            /* FIXME: shouldn't we use clk_value from below? */
-            drv->cpu->last_clk = maincpu_clk;
-        }
+    /* FIXME: this value could break some programs, or be way too high for
+       others.  Maybe we should put it into a user-definable resource.  */
+    if (maincpu_clk - drv->cpu->last_clk > 0xffffff
+        && *(drv->clk_ptr) > 934639) {
+        log_message(drv->log, "Skipping cycles.");
+        drv->cpu->last_clk = maincpu_clk;
     }
-    /* NOTE: after this, cpu->stop_clk will be recalculated from
-             clk_value and cpu->last_clk */
 }
 
-#if 0
 inline void drivecpu_sleep(diskunit_context_t *drv)
 {
     /* Currently does nothing.  But we might need this hook some day.  */
 }
-#endif
 
-/* Handle a ROM trap.
- * In the drive emulation, there can be one trap hooked to the drive irq.
- * So the trap forwards the drive clock to the time when the trap (=irq)
- * triggered.
- */
+/* Handle a ROM trap. */
 inline static uint32_t drive_trap_handler(diskunit_context_t *drv)
 {
     if (MOS6510_REGS_GET_PC(&(drv->cpu->cpu_regs)) == (uint16_t)drv->trap) {
@@ -297,12 +278,10 @@ inline static uint32_t drive_trap_handler(diskunit_context_t *drv)
 
             next_clk = alarm_context_next_pending_clk(drv->cpu->alarm_context);
 
-            /* CAUTION: never run ahead cpu->stop_clk */
             if (next_clk > drv->cpu->stop_clk) {
                 next_clk = drv->cpu->stop_clk;
             }
-            /* forward drive clock to clock at the time of the trap */
-            DBG(("drive_trap_handler next_clk: %lu",next_clk));
+
             *(drv->clk_ptr) = next_clk;
         }
         return 0;
@@ -395,28 +374,24 @@ void drivecpu_execute(diskunit_context_t *drv, CLOCK clk_value)
     drivecpu_wake_up(drv);
 
     /* Calculate number of main CPU clocks to emulate */
-    if (clk_value >= cpu->last_clk) {
+    if (clk_value > cpu->last_clk) {
         cycles = clk_value - cpu->last_clk;
     } else {
-        /* something really odd is going on */
         cycles = 0;
     }
 
-    /* advance cpu->stop_clk accordingly */
     while (cycles != 0) {
-        tcycles = (cycles > 0x10000) ? 0x10000 : cycles;
+        tcycles = cycles > 10000 ? 10000 : cycles;
         cycles -= tcycles;
 
-        cpu->cycle_accum += (drv->cpud->sync_factor * tcycles);
-        cpu->stop_clk += (cpu->cycle_accum >> 16);
-        cpu->cycle_accum &= 0xffff; /* keep reminder */
+        cpu->cycle_accum += drv->cpud->sync_factor * tcycles;
+        cpu->stop_clk += cpu->cycle_accum >> 16;
+        cpu->cycle_accum &= 0xffff;
     }
 
-    /* Run drive CPU emulation until the cpu->stop_clk clock has been reached. */
+    /* Run drive CPU emulation until the stop_clk clock has been reached. */
     while (*drv->clk_ptr < cpu->stop_clk) {
-
 /* Include the 6502/6510 CPU emulation core.  */
-
 #define CPU_LOG_ID (drv->log)
 /* #define ANE_LOG_LEVEL ane_log_level */
 /* #define LXA_LOG_LEVEL lxa_log_level */
@@ -466,7 +441,7 @@ void drivecpu_execute(diskunit_context_t *drv, CLOCK clk_value)
     }
 
     cpu->last_clk = clk_value;
-    /*drivecpu_sleep(drv);*/
+    drivecpu_sleep(drv);
 }
 
 
@@ -564,28 +539,6 @@ static void drivecpu_jam(diskunit_context_t *drv)
 }
 
 /* ------------------------------------------------------------------------- */
-
-/* DRIVECPU 1.3 snapshot module format:
-
-   type  | name                 | description
-   ------------------------------------------
-   CLOCK | clock                |
-   UBYTE | a                    |
-   UBYTE | x                    |
-   UBYTE | y                    |
-   UBYTE | sp                   |
-   WORD  | pc                   |
-   UBYTE | status               |
-   DWORD | last_opcode_info     |
-   CLOCK | last_clk             |
-   CLOCK | cycle_accum          |
-   CLOCK | last_exc_cycles      |
-   CLOCK | stop_clk             |
-   UBYTE | cpu_last_data        |
-   ARRAY | drive RAM            | size depends on drive
-
-   followed by CPU interrupt snapshot data
-*/
 
 #define SNAP_MAJOR 1
 #define SNAP_MINOR 3

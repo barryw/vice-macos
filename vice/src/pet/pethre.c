@@ -404,12 +404,11 @@ static const char module_ram_name[] = "HREMEM";
 #define HREMEM_DUMP_VER_MAJOR   1
 #define HREMEM_DUMP_VER_MINOR   0
 
-/* HREMEM 1.0 snapshot module format:
-
-   type  | name                 | description
-   ------------------------------------------
-   WORD  | reg_E888             |
-*/
+/* Format of the HRE ram snapshot
+ *
+ * xxx....
+ *
+ */
 
 static int pethre_ram_write_snapshot_module(snapshot_t *s)
 {

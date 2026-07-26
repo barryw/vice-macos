@@ -103,6 +103,14 @@ public:
 
   void debugoutput(void);
 
+  // Per-voice sample capture for the macOS SID visualizer. When a buffer is
+  // set, every emitted audio sample also writes one short per voice at
+  // buf[sample_index * stride + voice]. Pass (0, 0) to stop capturing.
+  // NOTE: unconditional on purpose. This directory is built without config.h,
+  // so guarding it on USE_MACOSUI would give SID a different layout here than
+  // in src/sid/resid.cc.
+  void set_voice_capture_buffer(short* buf, unsigned int stride);
+
  protected:
   static double I0(double x);
   int clock_fast(cycle_count& delta_t, short* buf, int n, int interleave);
@@ -110,6 +118,11 @@ public:
   int clock_resample(cycle_count& delta_t, short* buf, int n, int interleave);
   int clock_resample_fastmem(cycle_count& delta_t, short* buf, int n, int interleave);
   void write();
+
+  RESID_INLINE void capture_voice_sample(int frame);
+
+  short* voice_capture_buf;
+  unsigned int voice_capture_stride;
 
   chip_model sid_model;
   Voice voice[3];
@@ -191,6 +204,33 @@ RESID_INLINE
 int SID::output()
 {
   return extfilt.output();
+}
+
+
+// ----------------------------------------------------------------------------
+// Write the current unfiltered output of each voice into the capture buffer.
+// Voice::output() is a pure read of the cached waveform/envelope state, so this
+// is safe to call at sample time without perturbing emulation.
+// ----------------------------------------------------------------------------
+RESID_INLINE
+void SID::capture_voice_sample(int frame)
+{
+  if (voice_capture_buf == 0 || voice_capture_stride < 3 || frame < 0) {
+    return;
+  }
+
+  for (int i = 0; i < 3; i++) {
+    // ponytail: Voice::output() is a 20-bit product (12-bit DAC * 8-bit
+    // envelope); >> 5 keeps a 6581's worst case inside 16 bits. Clamped anyway
+    // because the 8580 DAC curve is not symmetric around wave_zero.
+    int v = voice[i].output() >> 5;
+    if (v > 32767) {
+      v = 32767;
+    } else if (v < -32768) {
+      v = -32768;
+    }
+    voice_capture_buf[(frame * voice_capture_stride) + i] = (short)v;
+  }
 }
 
 

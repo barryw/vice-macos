@@ -26,7 +26,5 @@ EXTRA_DIST = $(noinst_HEADERS) $(noinst_DATA) $(noinst_SCRIPTS) README.VICE
 
 SUFFIXES = .dat
 
-CLEANFILES = ${noinst_DATA:.dat=.h}
-
 .dat.h:
 	$(PERL) $(srcdir)/samp2src.pl $* $< $@

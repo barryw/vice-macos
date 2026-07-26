@@ -200,11 +200,6 @@ static GtkWidget *c64dtv_hummer_adc_widget = NULL;
 /** \brief  Reset with IEC checkbox */
 static GtkWidget *reset_with_iec_widget = NULL;
 
-#ifdef HAVE_RESIDFP
-/** \brief  "old SID caps" checkbox */
-static GtkWidget *old_sid_caps_widget = NULL;
-#endif
-
 /** \brief  C64 "discrete glue logic" radio button */
 static GtkWidget *c64_discrete_radio = NULL;
 
@@ -300,19 +295,6 @@ static void sid_model_callback(int model)
         machine_model_widget_update(machine_widget, false);
     }
 }
-
-#ifdef HAVE_RESIDFP
-/** \brief  Function called on SID caps changes
- *
- * \param[in]   flag    use old caps if 1
- */
-static void sid_old_caps_callback(int flag)
-{
-    if (get_model_func != NULL) {
-        machine_model_widget_update(machine_widget, false);
-    }
-}
-#endif
 
 /** \brief  Custom callback for the Kernal Revision widget
  *
@@ -1065,32 +1047,6 @@ static GtkWidget *create_reset_with_iec_widget(void)
     return reset_with_iec_widget;
 }
 
-#ifdef HAVE_RESIDFP
-/** \brief  Sync "old SID caps" widget with the associated resource
- *
- */
-static void c64_old_sid_caps_sync(void)
-{
-    int old_sid_caps = 0;
-    resources_get_int("SidResid6581OldCaps", &old_sid_caps);
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(old_sid_caps_widget), old_sid_caps);
-}
-
-/** \brief  Create widget to toggle "old SID caps"
- *
- * \return  GtkGrid
- */
-static GtkWidget *create_old_sid_caps_widget(void)
-{
-    old_sid_caps_widget = vice_gtk3_resource_check_button_new("SidResid6581OldCaps",
-            "old 2200pF SID caps");
-    g_signal_connect(GTK_WIDGET(old_sid_caps_widget), "toggled",
-            G_CALLBACK(sid_old_caps_callback), NULL);
-
-    return old_sid_caps_widget;
-}
-#endif
-
 /** \brief  Create widget to toggle "Go64Mode"
  *
  * \return  GtkGrid
@@ -1187,22 +1143,15 @@ static GtkWidget *create_c64_misc_widget(void)
     GtkWidget *label;
     GtkWidget *iec_widget;
     GtkWidget *glue_widget = NULL;
-    int row = 0;
 
     grid = gtk_grid_new();
     gtk_grid_set_row_spacing(GTK_GRID(grid), 8);
 
     label = label_helper("<b>Miscellaneous</b>");
-    gtk_grid_attach(GTK_GRID(grid), label, 0, row, 1, 1);
-    row++;
-#ifdef HAVE_RESIDFP
-    old_sid_caps_widget = create_old_sid_caps_widget();
-    gtk_grid_attach(GTK_GRID(grid), old_sid_caps_widget, 0, row, 1, 1);
-    row++;
-#endif
+    gtk_grid_attach(GTK_GRID(grid), label, 0, 0, 1, 1);
+
     iec_widget = create_reset_with_iec_widget();
-    gtk_grid_attach(GTK_GRID(grid), iec_widget, 0, row, 1, 1);
-    row++;
+    gtk_grid_attach(GTK_GRID(grid), iec_widget, 0, 1, 1, 1);
 
     /*
      * GlueLogic seems to cause timing issues when set to 'custom' on x64, so
@@ -1211,8 +1160,7 @@ static GtkWidget *create_c64_misc_widget(void)
     if (machine_class == VICE_MACHINE_C64SC ||
             machine_class == VICE_MACHINE_SCPU64) {
         glue_widget = create_c64_glue_widget();
-        gtk_grid_attach(GTK_GRID(grid), glue_widget, 0, row, 1, 1);
-        row++;
+        gtk_grid_attach(GTK_GRID(grid), glue_widget, 0, 2, 1, 1);
     }
 
     gtk_widget_show_all(grid);
@@ -1225,9 +1173,6 @@ static void c64_misc_widget_sync(void)
 {
     c64_glue_widget_sync();
     c64_reset_with_iec_sync();
-#ifdef HAVE_RESIDFP
-    c64_old_sid_caps_sync();
-#endif
 }
 
 /** \brief  Create 'misc' widget for C128

@@ -230,10 +230,8 @@ void warpspeed128_reset(void)
 
 /* WARPSPEED128 snapshot module format:
 
-   type  | name                 | description
-   ------------------------------------------
-   ARRAY | ext_function_rom     | 0x4000 bytes of ROM data
-*/
+    FIXME
+ */
 
 static char snap_module_name[] = "WARPSPEED128";
 #define SNAP_MAJOR   0

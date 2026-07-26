@@ -39,7 +39,6 @@
 #include "resources.h"
 #include "types.h"
 #include "ui.h"
-#include "uiapi.h"
 #include "uiactions.h"
 #include "uihotkeys.h"
 #include "uisettings.h"
@@ -236,17 +235,6 @@ static void on_settings_save_to_filename(GtkDialog *dialog,
 {
     if (filename!= NULL) {
         mainlock_obtain();
-/* On Windows the main thread stops responding when we use the dialog as
-   parent here, see bug #2205 */
-#ifdef WINDOWS_COMPILE
-        if (resources_save(filename) != 0) {
-            mainlock_release();
-            ui_error("Failed to save settings as '%s'",
-                    filename);
-        } else {
-            mainlock_release();
-        }
-#else
         if (resources_save(filename) != 0) {
             vice_gtk3_message_error(GTK_WINDOW(dialog),
                                     "VICE core error",
@@ -254,11 +242,10 @@ static void on_settings_save_to_filename(GtkDialog *dialog,
                                     filename);
         }
         mainlock_release();
-#endif
         lastdir_update(GTK_WIDGET(dialog), &last_dir, &last_file);
         g_free(filename);
     }
-    /*mainlock_release();*/
+    mainlock_release();
     gtk_widget_destroy(GTK_WIDGET(dialog));
     mainlock_obtain();
     ui_action_finish(ACTION_SETTINGS_SAVE_TO);

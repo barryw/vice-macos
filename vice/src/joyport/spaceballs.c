@@ -199,13 +199,11 @@ static userport_device_t userport_spaceballs_device = {
    type  |   name  | description
    ----------------------------------
    BYTE  | GROUNDS | userport PBx state
-
-   followed by 8 joyport modules
  */
 
 static const char snap_module_name[] = "SPACEBALLS";
 #define SNAP_MAJOR   0
-#define SNAP_MINOR   1
+#define SNAP_MINOR   0
 
 static int spaceballs_write_snapshot(struct snapshot_s *s, int p)
 {
@@ -222,20 +220,7 @@ static int spaceballs_write_snapshot(struct snapshot_s *s, int p)
             snapshot_module_close(m);
             return -1;
     }
-    snapshot_module_close(m);
-
-    if (0
-        || joyport_snapshot_write_module(s, JOYPORT_3) < 0
-        || joyport_snapshot_write_module(s, JOYPORT_4) < 0
-        || joyport_snapshot_write_module(s, JOYPORT_5) < 0
-        || joyport_snapshot_write_module(s, JOYPORT_6) < 0
-        || joyport_snapshot_write_module(s, JOYPORT_7) < 0
-        || joyport_snapshot_write_module(s, JOYPORT_8) < 0
-        || joyport_snapshot_write_module(s, JOYPORT_9) < 0
-        || joyport_snapshot_write_module(s, JOYPORT_10) < 0) {
-        return -1;
-    }
-    return 0;
+    return snapshot_module_close(m);
 }
 
 static int spaceballs_read_snapshot(struct snapshot_s *s, int p)
@@ -260,20 +245,7 @@ static int spaceballs_read_snapshot(struct snapshot_s *s, int p)
         goto fail;
     }
 
-    snapshot_module_close(m);
-
-    if (0
-        || joyport_snapshot_read_module(s, JOYPORT_3) < 0
-        || joyport_snapshot_read_module(s, JOYPORT_4) < 0
-        || joyport_snapshot_read_module(s, JOYPORT_5) < 0
-        || joyport_snapshot_read_module(s, JOYPORT_6) < 0
-        || joyport_snapshot_read_module(s, JOYPORT_7) < 0
-        || joyport_snapshot_read_module(s, JOYPORT_8) < 0
-        || joyport_snapshot_read_module(s, JOYPORT_9) < 0
-        || joyport_snapshot_read_module(s, JOYPORT_10) < 0) {
-        return -1;
-    }
-    return 0;
+    return snapshot_module_close(m);
 
 fail:
     snapshot_module_close(m);

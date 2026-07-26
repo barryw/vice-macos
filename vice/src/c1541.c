@@ -198,7 +198,6 @@ static int cd_cmd(int nargs, char **args);
 static int chain_cmd(int nargs, char **args);
 static int copy_cmd(int nargs, char **args);
 static int delete_cmd(int nargs, char **args);
-static int delete_geos_cmd(int nargs, char **args);
 static int entry_cmd(int nargs, char **args);
 static int extract_cmd(int nargs, char **args);
 static int extract_geos_cmd(int nargs, char **args);
@@ -206,7 +205,6 @@ static int format_cmd(int nargs, char **args);
 static int help_cmd(int nargs, char **args);
 static int info_cmd(int nargs, char **args);
 static int list_cmd(int nargs, char **args);
-static int list_geos_cmd(int nargs, char **args);
 static int name_cmd(int nargs, char **args);
 static int p00save_cmd(int nargs, char **args);
 static int pwd_cmd(int nargs, char **args);
@@ -399,43 +397,25 @@ const command_t command_list[] = {
       "Otherwise, format the disk in the current unit, if any.",
       1, 4,
       format_cmd },
-    { "geosdelete",
-      "geosdelete <file1> [<file2> ... <fileN>]",
-      "Delete the specified GEOS files."
-      "\nPlease note that due to GEOS using ASCII, not PETSCII, the name should"
-      " be\nentered as listed by the 'geoslist' command.",
-      1, MAXARG,
-      delete_geos_cmd },
-    { "geosdir",
-      "geosdir [<pattern>]",
-      "List GEOS files matching <pattern> (default is all files).",
-      0, 1,
-      list_geos_cmd },
-    { "geosextract",
-      "geosextract [<unit>]",
-      "Extract all the files to the file system and GEOS Convert them.",
-      0, 1,
-      extract_geos_cmd },
-    { "geoslist",
-      "geoslist [<pattern>]",
-      "List GEOS files matching <pattern> (default is all files).",
-      0, 1,
-      list_geos_cmd },
     { "geosread",
       "geosread <source> [<destination>]",
       "Read GEOS <source> from the disk image and copy it as a Convert file "
       "into \n<destination> in the file system.  If <destination> is not "
       "specified, copy \nit into a file with the same name as <source>."
       "\nPlease note that due to GEOS using ASCII, not PETSCII, the name should"
-      " be\nentered as listed by the 'geoslist' command.",
+      " be\nentered in inverted case (ie to read 'rEADmE', use 'ReadMe'",
       1, 2,
       read_geos_cmd },
     { "geoswrite",
       "geoswrite <source>",
-      "Write GEOS Convert file <source> from the file system to a disk image.\n"
-      "Note that the actual file name on disk will be taken from the Convert file.",
+      "Write GEOS Convert file <source> from the file system on a disk image.",
       1, 1,
       write_geos_cmd },
+    { "geosextract",
+      "geosextract <source>",
+      "Extract all the files to the file system and GEOS Convert them.",
+      0, 1,
+      extract_geos_cmd },
     { "help",
       "help [<command>]",
       "Explain specified command.  If no command is specified, list "
@@ -2710,8 +2690,8 @@ static int entry_cmd(int nargs, char **args)
         printf("@-replacement T/S: %d/%d\n",
                 slot[SLOT_REPLACE_TRACK], slot[SLOT_REPLACE_SECTOR]);
 
-        printf("GEOS: Info block T/S: %d/%d\n", slot[SLOT_GEOS_ITRACK], slot[SLOT_GEOS_ISECTOR]);
-        printf("GEOS: structure: %02x,  type: %02x\n",
+        printf("GEOS: IT/S: %d/%d\n", slot[SLOT_GEOS_ITRACK], slot[SLOT_GEOS_ISECTOR]);
+        printf("GEOS: struct: %02x,  type: %02x\n",
                 slot[SLOT_GEOS_STRUCT], slot[SLOT_GEOS_TYPE]);
         printf("GEOS: YY/mm/dd hh:mm %d/%d/%d %d:%d\n",
                 slot[SLOT_GEOS_YEAR],
@@ -2858,71 +2838,6 @@ static int delete_cmd(int nargs, char **args)
     return FD_OK;
 }
 
-/** \brief  Delete (scratch) GEOS file(s) from disk image(s)
- *
- * Delete one or more files. Each file can have a unit number (@\<unit>:) in
- * front of it to indicate which unit to use.
- *
- * \param[in]   nargs   argument count
- * \param[in]   args    argument list
- *
- * \return  0 on success, < 0 on failure
- */
-static int delete_geos_cmd(int nargs, char **args)
-{
-    int i;
-
-    for (i = 1; i < nargs; i++) {
-        int unit;   /* unit number */
-        int dnr;    /* index in drives array */
-        char *p;
-        char *name;
-        char *command;
-        int status;
-
-        unit = extract_unit_from_file_name(args[i], &p);
-        if (unit < 0) {
-            /* illegal unit between '@' and ':' */
-            return FD_BADDEV;
-        }
-        if (unit == 0) {
-            /* no '@<unit>:' found, use current device */
-            dnr = drive_index;
-        } else {
-            dnr = unit - DRIVE_UNIT_MIN;    /* set proper device index */
-        }
-        if (check_drive_ready(dnr) < 0) {
-            return FD_NOTREADY;
-        }
-        name = p;   /* update pointer to name */
-
-        if (!is_valid_cbm_file_name(name)) {
-            fprintf(stderr,
-                    "`%s' is not a valid CBM DOS file name: ignored\n", name);
-            continue;
-        }
-
-        command = util_concat("S:", name, NULL); /* uppercase S, because we don't convert to petscii */
-#if 0
-        /* do not convert, GEOS filenames are ASCII */
-        charset_petconvstring((uint8_t *)command, CONVERT_TO_PETSCII);
-#endif
-        printf("deleting `%s' on unit %d\n", name, unit);
-
-        status = vdrive_command_execute(drives[dnr], (uint8_t *)command,
-                                        (unsigned int)strlen(command));
-        lib_free(command);
-        /* vdrive_command_execute() returns CBMDOS_IPE_DELETED even if no
-         * files where actually scratched, so just display error messages that
-         * actual mean something, not "ERRORCODE 1" */
-        if (status != CBMDOS_IPE_OK && status != CBMDOS_IPE_DELETED) {
-            printf("%02d, %s, 00, 00\n",
-                    status, cbmdos_errortext((unsigned int)status));
-        }
-    }
-
-    return FD_OK;
-}
 
 #define P00_HDR_LEN         0x1a
 #define P00_HDR_MAGIC       0x00
@@ -2968,7 +2883,7 @@ static int extract_cmd_common(int nargs, char **args, int geos)
     disk_image_t *disk_image;
     unsigned int disk_type;
     size_t disk_size;
-    size_t file_written;
+    size_t total_written;
     uint8_t *buf, *str;
     unsigned int channel = 2;
     char *p00_name = NULL;
@@ -3014,6 +2929,7 @@ static int extract_cmd_common(int nargs, char **args, int geos)
     track = floppy->Dir_Track;
     sector = floppy->Dir_Sector;
 
+    total_written = 0;
     while (1) {
         int i, res;
 
@@ -3031,8 +2947,6 @@ static int extract_cmd_common(int nargs, char **args, int geos)
 
         for (i = 0; i < 256; i += SLOT_SIZE) {
             uint8_t file_type = buf[i + SLOT_TYPE_OFFSET];
-
-            file_written = 0;
 
             if (((file_type & 7) == CBMDOS_FT_SEQ
                         || (file_type & 7) == CBMDOS_FT_PRG
@@ -3070,9 +2984,8 @@ static int extract_cmd_common(int nargs, char **args, int geos)
                     len +=2;
                 }
 
-                if (!geos) {
-                    charset_petconvstring((uint8_t *)name, CONVERT_TO_ASCII);
-                }
+
+                charset_petconvstring((uint8_t *)name, CONVERT_TO_ASCII);
 
                 /* translate illegal chars for the host OS to '_' */
                 archdep_sanitize_filename((char *)name);
@@ -3158,23 +3071,28 @@ static int extract_cmd_common(int nargs, char **args, int geos)
                     }
                     do {
                         /* guard against cyclic blocks */
-                        if (file_written < disk_size) {
+                        if (total_written < disk_size) {
                             status = vdrive_iec_read(floppy, &c, 0);
                             fputc(c, fd);
-                            file_written++;
+                            total_written++;
                         } else {
                             fprintf(stderr,
                                     "Error: trying to extract more data than"
                                     " image can contain (%zu), possibly a\n"
-                                    "       cyclic T/S chain in file '%s'.\n",
+                                    "       cyclic T/S chain in file '%s',"
+                                    " aborting.\n",
                                     disk_size, name);
-                            break;
+                            fclose(fd);
+                            if (p00_name != NULL) {
+                                lib_free(p00_name);
+                            }
+                            vdrive_iec_close(floppy, channel);
+                            return FD_WRTERR;
                         }
                     } while (status == SERIAL_OK);
                 }
                 if (p00_name != NULL) {
                     lib_free(p00_name);
-                    p00_name = NULL;
                 }
 
                 vdrive_iec_close(floppy, 0);
@@ -3563,31 +3481,19 @@ static int list_file_matches_pattern(const char *name,
 
 
 
-static void fix_geos_name(char *str)
-{
-    /* seek for first quote */
-    while (*str) {
-        if (*str == '"') {
-            str++; /* skip quote */
-            break;
-        }
-        str++;
-    }
-    /* flip case until next quote */
-    while (*str) {
-        if (*str == '"') {
-            break;
-        }
-        if ((*str >= 0x61) && (*str <= 0x7a)) {
-            *str -= 0x20;
-        } else if ((*str >= 0x41) && (*str <= 0x5a)) {
-            *str += 0x20;
-        }
-        str++;
-    }
-}
-
-static int internal_list_cmd(int nargs, char **args, int geos)
+/** \brief  Show directory listing of a drive
+ *
+ * \param[in]   nargs   number of arguments
+ * \param[in]   args    argument list
+ *
+ * \return  0 on success, < 0 on failure (`FD_NOTREADY`)
+ *
+ * FIXME: diskcontents_read internally opens/closes the disk image, including
+ *        a complete reset of internal vdrive variables. this makes things like
+ *        changing sub partitions and sub directories inside images impossible
+ *        from the c1541 shell.
+ */
+static int list_cmd(int nargs, char **args)
 {
     char *pattern;
     char *type;
@@ -3599,7 +3505,7 @@ static int internal_list_cmd(int nargs, char **args, int geos)
 /*    unsigned int drive = 0; */
 
     if (nargs > 1) {
-        /* use new version call until all old calls are replaced */
+        /* use new version call untill all old calls are replaced */
         unit = extract_unit_from_file_name(args[1], &pattern);
         if (unit == 0) {
             dnr = (int)drive_index;
@@ -3632,9 +3538,7 @@ static int internal_list_cmd(int nargs, char **args, int geos)
     if (listing != NULL) {
         char *string = image_contents_to_string(listing, IMAGE_CONTENTS_STRING_ASCII);
         image_contents_file_list_t *element = listing->file_list;
-        if (geos) {
-            fix_geos_name(string);
-        }
+
         printf("%s\n", string);
         lib_free(string);
         if (element == NULL) {
@@ -3647,9 +3551,6 @@ static int internal_list_cmd(int nargs, char **args, int geos)
                             type, pattern)) {
                     lib_free(string);
                     string = image_contents_file_to_string(element, IMAGE_CONTENTS_STRING_ASCII);
-                    if (geos) {
-                        fix_geos_name(string);
-                    }
                     printf("%s\n", string);
                     fflush(stdout);
                 }
@@ -3667,27 +3568,6 @@ static int internal_list_cmd(int nargs, char **args, int geos)
     return FD_OK;
 }
 
-/** \brief  Show directory listing of a drive
- *
- * \param[in]   nargs   number of arguments
- * \param[in]   args    argument list
- *
- * \return  0 on success, < 0 on failure (`FD_NOTREADY`)
- *
- * FIXME: diskcontents_read internally opens/closes the disk image, including
- *        a complete reset of internal vdrive variables. this makes things like
- *        changing sub partitions and sub directories inside images impossible
- *        from the c1541 shell.
- */
-static int list_cmd(int nargs, char **args)
-{
-    return internal_list_cmd(nargs, args, 0);
-}
-
-static int list_geos_cmd(int nargs, char **args)
-{
-    return internal_list_cmd(nargs, args, 1);
-}
 
 /** \brief  Change disk name and id
  *
@@ -4047,11 +3927,6 @@ int internal_read_geos_file(int unit, FILE* outf, char* src_name_ascii)
     for (n = 2; n < 256; n++) {
         fputc(infoBlock[n], outf);
     }
-#ifdef DEBUG_DRIVE
-    log_debug(LOG_DEFAULT, "DEBUG: Info Block at %u/%u (%u/%u %u/%u %u/%u %u/%u %u/%u)", infoTrk, infoSec,
-              infoBlock[0], infoBlock[1], infoBlock[2], infoBlock[3], infoBlock[4], infoBlock[5],
-              infoBlock[6], infoBlock[7], infoBlock[8], infoBlock[9]);
-#endif
 
     /* read first data block or vlir block */
     if (vdrive_read_sector(drives[unit], vlirBlock, firstTrk, firstSec) != 0) {
@@ -4060,11 +3935,7 @@ int internal_read_geos_file(int unit, FILE* outf, char* src_name_ascii)
                 src_name_ascii, strerror(errno));
         return FD_RDERR;
     }
-#ifdef DEBUG_DRIVE
-    log_debug(LOG_DEFAULT, "DEBUG: First Block at %u/%u (%u/%u %u/%u %u/%u %u/%u %u/%u)", firstTrk, firstSec,
-              vlirBlock[0], vlirBlock[1], vlirBlock[2], vlirBlock[3], vlirBlock[4], vlirBlock[5],
-              vlirBlock[6], vlirBlock[7], vlirBlock[8], vlirBlock[9]);
-#endif
+
     if (geosFileStruc == GEOS_FILE_STRUC_SEQ) {
 #ifdef DEBUG_DRIVE
         log_debug(LOG_DEFAULT, "DEBUG: GEOS_FILE_STRUC_SEQ (%d:%d)", infoTrk, infoSec);
@@ -4073,16 +3944,16 @@ int internal_read_geos_file(int unit, FILE* outf, char* src_name_ascii)
          * since vlir block is the first data block simply put it to
          * disk
          */
-        aktTrk = vlirBlock[0];
-        aktSec = vlirBlock[1];
 
-        BytesInLastSector = (aktTrk != 0) ? 256 : aktSec + 1;
-        for (n = 2; n < BytesInLastSector; n++) {
+        for (n = 2; n < 256; n++) {
             fputc(vlirBlock[n], outf);
         }
 
         /* the rest is like standard cbm file TS-Chains.
            Put them to disk */
+
+        aktTrk = vlirBlock[0];
+        aktSec = vlirBlock[1];
         while (aktTrk != 0) {
             if (vdrive_read_sector(drives[unit], block, aktTrk, aktSec) != 0) {
                 fprintf(stderr,
@@ -4092,7 +3963,7 @@ int internal_read_geos_file(int unit, FILE* outf, char* src_name_ascii)
             }
             aktTrk = block[0];
             aktSec = block[1];
-            BytesInLastSector = (aktTrk != 0) ? 256 : aktSec + 1;
+            BytesInLastSector = aktTrk != 0 ? 256 : aktSec + 1;
             for (n = 2; n < BytesInLastSector; n++) {
                 fputc(block[n], outf);
             }
@@ -4115,31 +3986,19 @@ int internal_read_geos_file(int unit, FILE* outf, char* src_name_ascii)
         }
 
 #ifdef DEBUG_DRIVE
-        log_debug(LOG_DEFAULT, "DEBUG: VLIR scan record chains (%u/%u %u/%u %u/%u %u/%u %u/%u)",
-                  vlirBlock[0], vlirBlock[1], vlirBlock[2], vlirBlock[3], vlirBlock[4], vlirBlock[5],
-                  vlirBlock[6], vlirBlock[7], vlirBlock[8], vlirBlock[9]);
+        log_debug(LOG_DEFAULT, "DEBUG: VLIR scan record chains");
 #endif
 
         /* Replace the TS-chain-origins with NoOfBlocks/BytesInLastSector */
+
         vlirIdx = 2;
         aktTrk = vlirBlock[vlirIdx];
         aktSec = vlirBlock[vlirIdx + 1];
-#ifdef DEBUG_DRIVE
-        log_debug(LOG_DEFAULT, "DEBUG: VLIR Track: %u Sector: %u\n", aktTrk, aktSec);
-#endif
         NoOfBlocks = 0;
         NoOfChains = 0;
         BytesInLastSector = 255;
-
-        for (vlirIdx = 2; vlirIdx < 256;) {
-            /* "When a T/S link of $00/$00 is encountered, we are at the end of the
-                RECORD block" */
-            if ((aktTrk == 0) && (aktSec == 0)) {
-                break;
-            }
-            /* "If the T/S link is a $00/$FF, then the record is not available." */
-            if ((aktTrk != 0) && (vlirIdx <= 254)) {
-                /* Record exists and is not empty */
+        while (aktTrk != 0 && vlirIdx <= 254) {
+            if (aktTrk != 0) { /* Record exists and is not empty */
 #ifdef DEBUG_DRIVE
                 log_debug(LOG_DEFAULT, "DEBUG: VLIR IDX %u", vlirIdx);
 #endif
@@ -4203,18 +4062,8 @@ int internal_read_geos_file(int unit, FILE* outf, char* src_name_ascii)
         vlirIdx = 2;
         aktTrk = vlirBlock[vlirIdx];
         aktSec = vlirBlock[vlirIdx + 1];
-#ifdef DEBUG_DRIVE
-        log_debug(LOG_DEFAULT, "DEBUG: VLIR Track: %u Sector: %u\n", aktTrk, aktSec);
-#endif
-        for (vlirIdx = 2; vlirIdx < 256;) {
-            /* "When a T/S link of $00/$00 is encountered, we are at the end of the
-                RECORD block" */
-            if ((aktTrk == 0) && (aktSec == 0)) {
-                break;
-            }
-            /* "If the T/S link is a $00/$FF, then the record is not available." */
-            if ((aktTrk != 0) && (vlirIdx <= 254)) {
-                /* Record exists and is not empty */
+        while (aktTrk != 0 && vlirIdx <= 254) {
+            if (aktTrk != 0) {
 #ifdef DEBUG_DRIVE
                 log_debug(LOG_DEFAULT, "DEBUG: VLIR IDX %u", vlirIdx);
 #endif
@@ -4251,73 +4100,6 @@ int internal_read_geos_file(int unit, FILE* outf, char* src_name_ascii)
     return FD_OK;
 }
 
-/* find directory entry/slot for given file name, returns pointer to direntry */
-static int find_dir_entry(char *filename, int dnr, uint8_t *slot)
-{
-    unsigned int track, sector;
-    vdrive_t *floppy;
-    uint8_t *buf, *str;
-    unsigned int channel = 2;
-
-    /* printf("find dir entry for: %s (dev:%d)\n", filename, dnr); */
-
-    floppy = drives[dnr];
-
-    if (vdrive_iec_open(floppy, (const uint8_t *)"#", 1, channel, NULL)) {
-        fprintf(stderr, "cannot open buffer #%u in unit %d\n", channel,
-                dnr + DRIVE_UNIT_MIN);
-        return FD_RDERR;
-    }
-
-    track = floppy->Dir_Track;
-    sector = floppy->Dir_Sector;
-
-    while (1) {
-        int i, res;
-
-        str = (uint8_t *)lib_msprintf("B-R:%u 0 %u %u", channel, track, sector);
-        res = vdrive_command_execute(floppy, str, (unsigned int)strlen((char *)str));
-        lib_free(str);
-
-        if (res) {
-            return FD_RDERR;
-        }
-
-        buf = floppy->buffers[channel].buffer;
-
-        for (i = 0; i < 256; i += SLOT_SIZE) {
-            uint8_t file_type = buf[i + SLOT_TYPE_OFFSET];
-
-            if (file_type & CBMDOS_FT_CLOSED) {
-                uint8_t *file_name = buf + i + SLOT_NAME_OFFSET;
-                unsigned int len;
-
-                for (len = 0; len < IMAGE_CONTENTS_FILE_NAME_LEN; len++) {
-                    if (file_name[len] == 0xa0) {
-                        break;
-                    }
-                }
-                /* printf("search:%s name:%s type:%02x namelen:%d\n", filename, file_name, file_type, len); */
-                if (memcmp(filename, file_name, len) == 0) {
-                    /* printf("found! %s\n", file_name); */
-                    memcpy(slot, buf + i, SLOT_SIZE);
-                    vdrive_iec_close(floppy, channel);
-                    return FD_OK;
-                }
-            }
-        }
-        if (buf[0] && buf[1]) {
-            track = buf[0];
-            sector = buf[1];
-        } else {
-            break;
-        }
-    }
-    vdrive_iec_close(floppy, channel);
-    return FD_OK;
-}
-
-
 /* Author:      DiSc
  * Date:        2000-07-28
  * Reads a geos file from the diskimage and writes it to a convert file
@@ -4347,7 +4129,7 @@ static int read_geos_cmd(int nargs, char **args)
     int unit;
     cbmdos_cmd_parse_t *parse_cmd;
     size_t namelen;
-    unsigned char slot[SLOT_SIZE];
+
 
     unit = extract_unit_from_file_name(args[1], &p);
     if (unit > 0) {
@@ -4380,11 +4162,12 @@ static int read_geos_cmd(int nargs, char **args)
         return FD_BADNAME;
     }
 
+
     /*
      * We use this to pass to vdrive_iec_open() as its `cmd_parse_ext` argument
-     * to tell the function what CBM file type the GEOS file is. Without this
-     * the function defaults to looking for (only) PRG files and will fail to
-     * locate the GEOS file requested (which is usually, but not always, USR).
+     * to tell the function to look for USR files. Without this the function
+     * defaults to looking for PRG files and will fail to locate the GEOS file
+     * requested.
      */
     namelen = strlen(src_name_ascii);
     parse_cmd = lib_calloc(1, sizeof *parse_cmd);
@@ -4394,18 +4177,8 @@ static int read_geos_cmd(int nargs, char **args)
                                                            vdrive_iec_open() */
     parse_cmd->parselength = (unsigned int)namelen;
     parse_cmd->secondary = 0;
-    /*parse_cmd->filetype = CBMDOS_FT_USR;*/
+    parse_cmd->filetype = CBMDOS_FT_USR;
     parse_cmd->readmode = CBMDOS_FAM_READ;
-
-    /* find the direntry for this file so we can determine the CBM file type */
-    err_code = find_dir_entry(src_name_ascii, dev, slot);
-    if (err_code) {
-        return err_code;
-    }
-    /* NOTE: the file structure is checked later in internal_read_geos_file(),
-       so we don't do it here */
-
-    parse_cmd->filetype = slot[SLOT_TYPE_OFFSET] & 7;
 
     if (vdrive_iec_open(drives[dev], (uint8_t *)src_name_ascii,
                         (unsigned int)strlen(src_name_ascii), 0,
@@ -4555,14 +4328,6 @@ static int internal_write_geos_file(int unit, FILE* f)
      * else its already a data block */
     for (n = 2; n < 256; n++) {
         c = fgetc(f);
-        if (c == EOF) {
-            vlirBlock[0] = 0;
-            vlirBlock[1] = (unsigned char)(n - 1);
-            while (n < 256) {
-                vlirBlock[n++] = 0x00;
-            }
-            break;
-        }
         vlirBlock[n] = (unsigned char)c;
     }
 

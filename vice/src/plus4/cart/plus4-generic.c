@@ -413,22 +413,20 @@ int generic_cmdline_options_init(void)
 
 /* ---------------------------------------------------------------------*/
 
-/* CARTGENERICPLUS4 0.2 snapshot module format:
+/* CARTGENERIC snapshot module format:
 
    type  | name              | version | description
    -------------------------------------------------
    ARRAY | ROM C1LO          |   0.1+  | 16kiB of ROM data
    ARRAY | ROM C1HI          |   0.1+  | 16kiB of ROM data
-
-   NOTE: renamed from "CARTGENERIC" to "CARTGENERICPLUS4" in 0.2
  */
 
 /* FIXME: since we cant actually make snapshots due to TED bugs, the following
           is completely untested */
 
-static const char snap_module_name[] = "CARTGENERICPLUS4";
+static const char snap_module_name[] = "CARTGENERIC";
 #define SNAP_MAJOR   0
-#define SNAP_MINOR   2
+#define SNAP_MINOR   1
 
 int generic_snapshot_write_module(snapshot_t *s)
 {

@@ -92,56 +92,52 @@
 
 /* ------------------------------------------------------------------------- */
 
-typedef enum {
-    B_INVALID = 0,   /* has to be zero right now */
+#define B_1              1
+#define B_2              2
+#define B_SUPEREXP       3
+#define B_TURTLE         4
 
-    /* CAUTION: these must be in the same order as the basic_list table */
-    B_1 = 1,        /* FIXME: refactor the code so this can be 0 */
-    B_2,
-    B_SUPEREXP,
-    B_TURTLE,
-    B_SIMON,
-    B_SPEECH,
-    B_ATBAS,
-    B_4,
-    B_4P,           /* CBM2 variant */
-    B_4E,           /* C64 extension, Expand only */
-    B_35,
-    B_7,
-    B_10,
-    B_FC3,
-    B_ULTRA,
-    B_GRAPH,
-    B_WS,
-    B_MIGHTY,
-    B_PEG,
-    B_X,
-    B_DRAGO,
-    B_REU,
-    B_BASL,
-    B_71,
-    B_MAGIC,
-    B_EASY,
-    B_BLARG,
-    B_VIC4,
-    B_VIC5,
-    B_WSF,
-    B_GB,
-    B_BSX,
-    B_SUPERBAS,
-    B_EXPBAS64,
-    B_SXC,
-    B_WARSAW,
-    B_EXPBAS20,
-    B_SUPERGRA,
-    B_KIPPER,
-    B_BOB,
-    B_EVE,
-    B_TT64,
-    B_HANDY,
-    B_65,           /* Basic 65 on the Mega65 */
-    B_MDBASIC       /* MDBASIC (C64) by Mark D. Bowren */
-} basic_version_t;
+#define B_SIMON          5
+#define B_SPEECH         6
+#define B_ATBAS          7
+#define B_4              8
+#define B_4E             9      /* C64 extension, Expand only */
+
+#define B_35            10
+#define B_7             11
+#define B_10            12
+#define B_FC3           13
+#define B_ULTRA         14
+#define B_GRAPH         15
+#define B_WS            16
+#define B_MIGHTY        17
+#define B_PEG           18
+#define B_X             19
+#define B_DRAGO         20
+#define B_REU           21
+#define B_BASL          22
+#define B_71            23
+#define B_MAGIC         24
+#define B_EASY          25
+#define B_BLARG         26
+#define B_VIC4          27
+#define B_VIC5          28
+#define B_WSF           29
+#define B_GB            30
+#define B_BSX           31
+#define B_SUPERBAS      32
+#define B_EXPBAS64      33
+#define B_SXC           34
+#define B_WARSAW        35
+#define B_EXPBAS20      36
+#define B_SUPERGRA      37
+#define B_KIPPER        38
+#define B_BOB           39
+#define B_EVE           40
+#define B_TT64          41
+#define B_HANDY         42
+
+#define B_65            43      /* Basic 65 on the Mega65 */
 
 /* Handy Basic (VIC20) -- Tokens 0xCC - 0xE1 */
 
@@ -218,30 +214,15 @@ static const char *atbasickwcc[] = {
     "alarm"
 };
 
-/* Basic v4.0 (PET) -- TOKENS 0xCC - 0xDA / Basic v4.0 extension (C64) -- Tokens 0xCC - 0xE7 */
+/* Basic v4.0 (PET) -- TOKENS 0xCC - 0xDE / Basic v4.0 extension (C64) -- Tokens 0xCC - 0xE5 */
 static const char *petkwcc[] = {
     "concat",    "dopen",  "dclose", "record", "header",  "collect", "backup",
     "copy",      "append", "dsave",  "dload",  "catalog", "rename",  "scratch",
-    "directory",
-
-    "", "", "", "", /* "dclear", "bank",   "bload",  "bsave", */
-
-    /* FIXME: which extension is this exactly? "VIC-Tree" has different extra keywords! */
+    "directory", "dclear", "bank",   "bload",  "bsave",
 
     /* Basic 4 Extension for C64 (0xdf - 0xe7) */
     "color",  "cold", "key", "dverify", "delete", "auto", "merge", "old",
     "monitor"
-};
-
-static const char *cbm2kwcc[] = {
-    "concat",    "dopen",  "dclose", "record", "header",  "collect", "backup",
-    "copy",      "append", "dsave",  "dload",  "catalog", "rename",  "scratch",
-    "directory",
-
-    /* Basic 4 Extensions for CBM2 (0xdb - 0xe8) */
-    "dclear", "bank",   "bload",  "bsave",
-    "key",  "delete", "else", "trap", "resume", "dispose", "pudef", "using",
-    "err$", "instr"
 };
 
 /* Final Cartridge III (C64) by Matti 'ccr' Hamalainen -- Tokens 0xCC - 0xE8 */
@@ -541,26 +522,6 @@ static const char *tt64kwdb[] = {
     "display", "trace", "off",     "hcopy",  "joy"
 };
 
-/* MDBASIC (C64) by Mark D. Bowren -- Tokens 0xCB - 0xFE
- *
- * MDBASIC is a BASIC v2.0 extension cartridge. It re-uses the GO token
- * ($CB) for its first keyword "off" and adds keywords through $FE. Token
- * $FF stays the standard pi symbol. Keyword order and spelling are taken
- * directly from the MDBASIC source (the "newcmd" .shift table), so each
- * entry here lines up with one token starting at $CB.
- */
-
-static const char *mdbasickwcb[] = {
-    "off",    "else",   "merge",  "dump",   "vars",   "circle", "fill",
-    "scroll", "swap",   "cursor", "disk",   "delete", "files",  "color",
-    "move",   "sprite", "sprcol", "find",   "serial", "design", "trace",
-    "mapcol", "plot",   "line",   "paint",  "draw",   "renum",  "text",
-    "screen", "resume", "envelope", "wave", "voice",  "pulse",  "vol",
-    "filter", "play",   "auto",   "old",    "err",    "key",    "time",
-    "round",  "trim",   "mod",    "ptr",    "inf",    "pen",    "joy",
-    "pot",    "hex$",   "instr"
-};
-
 typedef struct basic_list_s {
     uint8_t version;
     uint8_t num_tokens;
@@ -590,8 +551,7 @@ static basic_list_t basic_list[] = {
     { B_SIMON,   128, 0xCB, 0x0801, 1, 0,    simonskw,          "simon",     1, 0, 0, "Basic v2.0 with Simons' Basic (C64)" },
     { B_SPEECH,   27, 0xE6, 0x0801, 0, 0xCC, speechkwcc,        "speech",    0, 0, 0, "Basic v2.0 with Speech Basic v2.7 (C64)" },
     { B_ATBAS,    43, 0xF6, 0x0801, 0, 0xCC, atbasickwcc,       "a",         0, 0, 0, "Basic v2.0 with @Basic (C64)" },
-    { B_4,        15, 0xDA, 0x0401, 0, 0xCC, petkwcc,           "40",        0, 0, 0, "Basic v4.0 (PET)" },
-    { B_4P,       29, 0xE8, 0x0003, 0, 0xCC, cbm2kwcc,          "4p",        0, 0, 0, "Basic v4.0 (CBM2)" },
+    { B_4,        19, 0xDE, 0x0401, 0, 0xCC, petkwcc,           "40",        0, 0, 0, "Basic v4.0 (PET/CBM2)" },
     { B_4E,       28, 0xE7, 0x0801, 0, 0xCC, petkwcc,           "4e",        0, 0, 0, "Basic v2.0 with Basic v4.0 extension (C64)" },
     { B_35,      126, 0xCB, 0x1001, 0, 0,    NULL, /* fix */    "3",         0, 0, 0, "Basic v3.5 (C16)" },
     { B_7,        39, 0x26, 0x1c01, 2, 0,    NULL, /* fix */    "70",        0, 1, 1, "Basic v7.0 (C128)" },
@@ -627,7 +587,6 @@ static basic_list_t basic_list[] = {
     { B_TT64,     26, 0xF4, 0x5b01, 0, 0xDB, tt64kwdb,          "tt64",      0, 0, 0, "Basic v2.0 with The Tool 64 (C64)" },
     { B_HANDY,    22, 0xE1, 0x1801, 0, 0xCC, handykwcc,         "handy",     0, 0, 0, "Basic v2.0 with Handy Basic v1.0 (VIC20)" },
     { B_65,       85, 0x54, 0x2001, 2, 0,    NULL, /* fix */    "65",        0, 1, 1, "Basic v65.0 (Mega65)" },
-    { B_MDBASIC,  52, 0xFE, 0x0801, 0, 0xCB, mdbasickwcb,       "mdbasic",   0, 0, 0, "Basic v2.0 with MDBASIC (C64)" },
     { 0,          0,  0,    0,     0 , 0,    NULL,              NULL,        0, 0, 0, NULL }
 };
 
@@ -717,15 +676,13 @@ static void chksum_f64_init(void *data, int linenum) {
 
 static void chksum_f64_process(void *data, uint8_t c, int quoted) {
     chksum_f64_data *v = data;
-    int b;
     if (!quoted && c == ' ') {
         return;
     }
     /* Taken from https://github.com/Zirias/f64summer, which is BSD-2 */
-    if ((c >= 0x60 && c < 0x80) ||
-        (c >= 0xe0 && c < 0xff) ||
-        (c == 0xde)) {
-
+    if ((c >= 0x60 && c < 0x80)
+      || (c >= 0xe0 && c < 0xff)
+      || c == 0xde) {
         if (c == 0xde || c == 0x7e) {
             c = 0xff;
         } else if (c & 0x80) {
@@ -735,16 +692,14 @@ static void chksum_f64_process(void *data, uint8_t c, int quoted) {
         }
     }
     if (c==0xa0) {
-        c = ' ';
+        c=' ';
     }
-    for (b = 0; b < 8; ++b) {
+    for (int b = 0; b < 8; ++b) {
         unsigned char tmp = !!(c & 0x80);
         c <<= 1;
         tmp ^= (v->val & 1);
         v->val >>= 1;
-        if (tmp) {
-            v->val ^= 0xb400;
-        }
+        if (tmp) v->val ^= 0xb400;
     }
 }
 
@@ -766,11 +721,11 @@ typedef struct {
 
 chksum_t chksum_list[] = {
     /* v2 uses the same algorithm as v1 */
-    { "64er-v1", "64'er Checksummer v1 + v2", chksum_64er_v1_init, chksum_64er_v1_process, chksum_64er_finalize, sizeof(chksum_64er_data) },
-    { "64er-v3", "64'er Checksummer v3", chksum_64er_v3_init, chksum_64er_v3_process, chksum_64er_finalize, sizeof(chksum_64er_data) },
-    { "dossier", "Commodore Dossier Checksummer", chksum_cmddossier_init, chksum_cmddossier_process, chksum_cmddossier_finalize, sizeof(chksum_cmddossier_data) },
-    { "f64", "F64Summer", chksum_f64_init, chksum_f64_process, chksum_f64_finalize, sizeof(chksum_f64_data) },
-    { NULL, NULL, NULL, NULL, NULL, 0},
+    {"64er-v1", "64'er Checksummer v1 + v2", chksum_64er_v1_init, chksum_64er_v1_process, chksum_64er_finalize, sizeof(chksum_64er_data)},
+    {"64er-v3", "64'er Checksummer v3", chksum_64er_v3_init, chksum_64er_v3_process, chksum_64er_finalize, sizeof(chksum_64er_data)},
+    {"dossier", "Commodore Dossier Checksummer", chksum_cmddossier_init, chksum_cmddossier_process, chksum_cmddossier_finalize, sizeof(chksum_cmddossier_data)},
+    {"f64", "F64Summer", chksum_f64_init, chksum_f64_process, chksum_f64_finalize, sizeof(chksum_f64_data)},
+    {NULL, NULL, NULL, NULL, NULL, 0},
 };
 
 /* Limits */
@@ -924,30 +879,20 @@ static const char *e_ctrl1[0x20] = {
 };
 /* ------------------------------------------------------------------------- */
 
-/* 0x20 - 0x5f (petcat, tok64) */
-static const char *cbmchars[0x40] = {
-    "space", "", "",  "",  "", "",  "",  "",
-    "",      "", "*", "+", "", "-", "",  "/",
-    "",      "", "",  "",  "", "",  "",  "",
-    "",      "", "",  "", "<", "=", ">", "",
-
-    "",  "a", "b", "c", "d", "e", "f", "g",
-    "h", "i", "j", "k", "l", "m", "n", "o",
-    "p", "q", "r", "s", "t", "u", "v", "w",
-    "x", "y", "z", "",  "",  "",  "^", ""
+/* 0x20 - 0x3f (petcat, tok64) */
+static const char *cbmchars[0x20] = {
+    "space", "", "", "", "", "", "", "",
+    "",      "", "", "", "", "", "", "",
+    "",      "", "", "", "", "", "", "",
+    "",      "", "", "", "", "", "", ""
 };
 
-/* 0x20 - 0x5f (64er/Checksummer v3) */
-static const char *a_cbmchars[0x40] = {
+/* 0x20 - 0x3f (64er/Checksummer v3) */
+static const char *a_cbmchars[0x20] = {
     "SPACE", "", "", "", "", "", "", "",
     "",      "", "", "", "", "", "", "",
     "",      "", "", "", "", "", "", "",
-    "",      "", "", "", "", "", "", "",
-
-    "", "", "", "", "", "", "", "",
-    "", "", "", "", "", "", "", "",
-    "", "", "", "", "", "", "", "",
-    "", "", "", "", "", "", "", ""
+    "",      "", "", "", "", "", "", ""
 };
 
 /* ------------------------------------------------------------------------- */
@@ -1107,26 +1052,22 @@ static void petcat_version(void);
 static int parse_version(char *str);
 static chksum_t *parse_checksummer(char *str);
 static void list_keywords(int version);
-
-static void text_petscii_to_ascii(int version, int ctrls);
-static void text_ascii_to_petscii(int version, int ctrls);
-
+static void pet_2_asc (int version, int ctrls);
+static void asc_2_pet (int version, int ctrls);
 static void _p_toascii(int c, int version, int ctrls, int quote);
-static int detokenize_basic_to_ascii(int version, int addr, int ctrls);
-static void tokenize_ascii_to_basic(int version, unsigned int addr, int ctrls);
-
+static int p_expand(int version, int addr, int ctrls);
+static void p_tokenize(int version, unsigned int addr, int ctrls);
 static unsigned char sstrcmp(unsigned char *line, const char **wordlist, int token, int maxitems);
 static int sstrcmp_codes(unsigned char *line, const char **wordlist, int token, int maxitems);
 
 /* ------------------------------------------------------------------------- */
 
 static FILE *source, *dest;
-static unsigned int kwlen = 0; /* FIXME: this is a global for the parser */
-
-static int opt_codes_case_insensitive = 0;  /* flag, =1 if controlcodes should be interpreted case insensitive */
-static int opt_quoted_codes = 0;            /* flag, =1 if non alphanumeric characters inside quotes should always be converted to controlcodes */
-static int opt_decimal_codes = 0;           /* flag, =1 if output control codes in decimal */
-static int opt_verbose = 0;                 /* flag, =1 for verbose output */
+static unsigned int kwlen = 0;
+static int codesnocase = 0; /* flag, =1 if controlcodes should be interpreted case insensitive */
+static int quotedcodes = 0; /* flag, =1 if non alphanumeric characters inside quotes should always be converted to controlcodes */
+static int dec = 0;         /* flag, =1 if output control codes in decimal */
+static int verbose = 0;     /* flag, =1 for verbose output */
 
 #define P00HDR_LEN      18
 #define P00HDR_TAG_LEN  8
@@ -1141,10 +1082,10 @@ int main(int argc, char **argv)
     int c = 0;
 
     unsigned long offset = 0;
-    int convert_to_cbm = 0, version = B_7;         /* best defaults */
+    int wr_mode = 0, version = B_7;         /* best defaults */
     unsigned int load_addr = 0;
-    int ctrls = -1, show_header = -1, show_words = 0;
-    int num_infiles = 0, num_outfiles = 0, textmode = 0;
+    int ctrls = -1, hdr = -1, show_words = 0;
+    int fil = 0, outf = 0, textmode = 0;
     /* temporarily commented out to avoid set-but-unused warning by clang */
 #if 0
     int overwrt = 0;
@@ -1160,7 +1101,7 @@ int main(int argc, char **argv)
             break;
         }
         if (!strcmp(argv[0], "-v")) {
-            opt_verbose = 1;
+            verbose = 1;
             continue;
         }
 
@@ -1173,12 +1114,12 @@ int main(int argc, char **argv)
         }
 
         if (!strcmp(argv[0], "-ic")) {
-            opt_codes_case_insensitive = 1;
+            codesnocase = 1;
             continue;
         }
 
         if (!strcmp(argv[0], "-qc")) {
-            opt_quoted_codes = 1;
+            quotedcodes = 1;
             continue;
         }
 
@@ -1193,25 +1134,25 @@ int main(int argc, char **argv)
         }
 
         if (!strcmp(argv[0], "-d")) {
-            opt_decimal_codes = 1;
+            dec = 1;
             continue;
         }
 
         if (!strcmp(argv[0], "-h")) {
-            show_header = 1;
+            hdr = 1;
             continue;
         } else if (!strcmp(argv[0], "-nh")) {
-            show_header = 0;
+            hdr = 0;
             continue;
-#if 0
         } else if (!strcmp(argv[0], "-f")) {      /* force overwrite */
+#if 0
             ++overwrt;
-            continue;
 #endif
+            continue;
         } else if (!strcmp(argv[0], "-o")) {
             if (argc > 1) {
                 outfilename = argv[1];
-                ++num_outfiles;
+                ++outf;
                 --argc; ++argv;
                 continue;
             }
@@ -1220,10 +1161,8 @@ int main(int argc, char **argv)
         }
 
         /* reading offset */
-        if (!strcmp(argv[0], "-skip") ||
-            !strcmp(argv[0], "-offset")) {
-            if (argc > 1) {
-                offset = strtoul(argv[1], NULL, 0);
+        if (!strcmp(argv[0], "-skip") || !strcmp(argv[0], "-offset")) {
+            if (argc > 1 && sscanf(argv[1], "%lx", &offset) == 1) {
                 --argc; ++argv;
                 continue;
             }
@@ -1243,11 +1182,11 @@ int main(int argc, char **argv)
                 continue;
             }
             /* Basic version */
-        } else if (!strncmp(argv[0], "-w", 2) && !convert_to_cbm) {
+        } else if (!strncmp(argv[0], "-w", 2) && !wr_mode) {
             version = parse_version((strlen(argv[0]) > 2 ? &argv[0][2] : NULL));
-            ++convert_to_cbm;
+            ++wr_mode;
             continue;
-        } else if (!strncmp(argv[0], "-k", 2) && !convert_to_cbm) {
+        } else if (!strncmp(argv[0], "-k", 2) && !wr_mode) {
             version = parse_version((strlen(argv[0]) > 2 ? &argv[0][2] : NULL));
             ++show_words;
             continue;
@@ -1263,13 +1202,12 @@ int main(int argc, char **argv)
  * Check parameters
  */
 
-    /* when there are more args, it must be (input) files */
     if (argc) {
-        num_infiles++;
+        fil++;
     }
 
-    if (show_header == -1) {
-        show_header = num_outfiles ? 0 : 1;
+    if (hdr == -1) {
+        hdr = outf ? 0 : 1;
     }
 
     if (version == B_10) {
@@ -1309,7 +1247,7 @@ int main(int argc, char **argv)
     /* HACK: when outputting a prg to stdout, switch stdout to binary mode,
        else redirecting the binary output to a file will result in a broken
        file due to translation of the line endings. */
-    if (!num_outfiles && !textmode) {
+    if (!outf && !textmode) {
         _setmode(STDOUT_FILENO, _O_BINARY);
     }
 #endif
@@ -1318,9 +1256,8 @@ int main(int argc, char **argv)
         load_addr = basic_list[version - 1].load_address;
     }
 
-    if (opt_verbose) {
-        if (convert_to_cbm) {
-            /* convert _to_ CBM format */
+    if (verbose) {
+        if (wr_mode) {
             if (!textmode) {
                 fprintf(stderr, "\nLoad address %04x\n", load_addr);
                 if ((load_addr & 255) != 1) {
@@ -1349,7 +1286,7 @@ int main(int argc, char **argv)
          * are recreated from the magic header while printing the (text) file.
          */
 
-        if (!num_infiles) {
+        if (!fil) {
             const unsigned char *p;
 
             source = stdin;
@@ -1371,7 +1308,7 @@ int main(int argc, char **argv)
         }
 
 
-        if (!num_outfiles) {
+        if (!outf) {
             dest = stdout;
         } else {
             if ((dest = fopen(outfilename, "wb")) == NULL) {
@@ -1381,90 +1318,67 @@ int main(int argc, char **argv)
         }
 
 
-        if (convert_to_cbm) {
-            /* convert _to_ CBM format (ASCII or BASIC) */
+        if (wr_mode) {
             if (textmode) {
-                text_ascii_to_petscii(version, ctrls);
+                asc_2_pet(version, ctrls);
             } else {
-                tokenize_ascii_to_basic(version, load_addr, ctrls);
+                p_tokenize(version, load_addr, ctrls);
             }
         } else {
-            /* convert _from_ CBM format (ASCII or BASIC) */
-
-            if (show_header) { /* name as comment when using petcat name.prg > name.txt */
-                fprintf(dest, "\n\n;%s ", (num_infiles ? argv[0] : "<stdin>"));
-            }
-
-            /* skip "offset" bytes */
-            while (offset > 0) {
-                getc(source);
-                offset--;
+            if (hdr) { /* name as comment when using petcat name.prg > name.txt */
+                fprintf(dest, "\n\n;%s ", (fil ? argv[0] : "<stdin>"));
             }
 
             /*
              * Use TEXT mode if the offset doesn't equal BASIC load addresses
              * and the first bytes to be read do not contain load address.
              * Explicitly selected textmode overrules these conditions.
-             *
-             * FIXME: we should be able to override it the other way around
-             * (always de-tokenize) too
              */
 
-            /* get first byte of the file, which is the low byte of the load
-               address */
-            c = (getc(source) & 0xff);
-            ungetc(c, source);
-
-            if (textmode ||
-                (((offset & 0xff) != 1) &&
-                 (c != 0) &&
-                 (c != 1) &&                        /* common for CBM BASIC */
-                 ((c != 3) && (version == B_4P))    /* CBM2 might use 0x0003 */
-                )) {
+            if (textmode || ((offset & 255) != 1 && ((c = getc(source)) != EOF && ungetc(c, source) != EOF && c && c != 1))) {
                 /* Print the bytes lost in header check */
-                if ((plen > 0) && (plen < P00HDR_TAG_LEN)) {
+                if (plen > 0 && plen < P00HDR_TAG_LEN) {
                     for (c = 0; c < plen; ++c) {
                         fputc (MagicHeaderP00[(int)c], dest);
                     }
                 }
 
-                text_petscii_to_ascii(version, ctrls);
+                pet_2_asc(version, ctrls);
             } else {
                 load_addr = (getc(source) & 0xff);
                 load_addr |= (unsigned int)(getc(source) & 0xff) << 8;
-                if (show_header) {
+                if (hdr) {
                     fprintf(dest, "==%04x==\n", load_addr);
                 }
 
-                if (detokenize_basic_to_ascii(version, (int)load_addr, ctrls)) {
+                if (p_expand(version, (int)load_addr, ctrls)) {
                     fprintf(dest, "\n;*** Machine language part skipped. ***\n");
                 } else {   /* End of BASIC on stdin. Is there more ? */
-                    if (!num_infiles && (c = getc(source)) != EOF && ungetc(c, source) != EOF && c) {
+                    if (!fil && (c = getc(source)) != EOF && ungetc(c, source) != EOF && c) {
                         ++flg;
-                        ++show_header;
+                        ++hdr;
                     }
                 }
             }
 
-            if (show_header) {
+            if (hdr) {
                 fputc('\n', dest);
             }
         }
 
 
-        if (num_infiles) {
+        if (fil) {
             fclose(source);
         }
-        if (num_outfiles) {
+        if (outf) {
             fclose(dest);
         }
-    } while (flg || (num_infiles && --argc && ++argv));           /* next file */
+    } while (flg || (fil && --argc && ++argv));           /* next file */
     return(0);
 }
 
 /* ------------------------------------------------------------------------- */
 
-/* used in usage() */
 static int compare_elements(const void *op1, const void *op2)
 {
     const sorted_basic_t *p1 = (const sorted_basic_t *)op1;
@@ -1532,9 +1446,7 @@ void usage(char *progname)
             "   -l\t\tSpecify load address for program (in hex, no leading chars!).\n");
     fprintf(stdout,
             "   -o <name>\tSpecify the output file name\n"
-#if 0
-            "   -f\t\tForce overwriting the output file\n"
-#endif
+            "   -f\t\tForce overwritten the output file\n"
             "   \t\tThe default depends on the BASIC version.\n");
 
     fprintf(stdout, "\n\tVersions:\n");
@@ -1588,7 +1500,7 @@ static int parse_version(char *str)
 {
     int i;
 
-    if ((str == NULL) || !*str) {
+    if (str == NULL || !*str) {
         return 0;
     }
 
@@ -1609,12 +1521,11 @@ static int parse_version(char *str)
 
 static chksum_t *parse_checksummer(char *str)
 {
-    int i;
-    if ((str == NULL) || !*str) {
+    if (str == NULL || !*str) {
         return NULL;
     }
 
-    for (i = 0; chksum_list[i].name; ++i) {
+    for (int i = 0; chksum_list[i].name; ++i) {
         if (strcasecmp(str, chksum_list[i].name) == 0) {
             return &chksum_list[i];
         }
@@ -1629,8 +1540,7 @@ static void list_keywords(int version)
 {
     unsigned int n, max;
 
-    /* sanity check version */
-    if ((version <= B_INVALID) || ((unsigned int)version > NUM_VERSIONS)) {
+    if (version <= 0 || (unsigned int)version > NUM_VERSIONS) {
 #ifdef USE_SVN_REVISION
         printf("\n  The following versions are supported on petcat"
                " (VICE %s SVN r%d)\n\n",
@@ -1652,32 +1562,21 @@ static void list_keywords(int version)
 
     if (version == B_1) {
         max = basic_list[B_1 - 1].num_tokens;
-    } else if ((version == B_35) ||
-               (version == B_7) ||
-               (version == B_71) ||
-               (version == B_10) ||
-               (version == B_65)) {
+    } else if (version == B_35 || version == B_7 || version == B_71 || version == B_10 || version == B_65) {
         max = basic_list[B_35 - 1].num_tokens;
-    } else if (version == B_MDBASIC) {
-        /* MDBASIC re-uses the GO token as "off", so omit "go" here. */
-        max = basic_list[B_2 - 1].num_tokens - 1;
     } else {
         max = basic_list[B_2 - 1].num_tokens;
     }
 
     for (n = 0; n < max; n++) {
-        if ((version == B_35) || (n != 0x4e)) {      /* Skip prefix marker */
+        if (version == B_35 || n != 0x4e) {      /* Skip prefix marker */
             printf("%s\t", keyword[n] /*, n | 0x80*/);
         }
     }
     printf("%s\n", keyword[127]);
 
 
-    if ((version == B_7) ||
-        (version == B_71) ||
-        (version == B_10) ||
-        (version == B_SXC)) {
-
+    if (version == B_7 || version == B_71 || version == B_10 || version == B_SXC) {
         if (version == B_SXC) {
             for (n = basic_list[version - 1].token_offset; n < basic_list[version - 1].num_tokens; n++) {
                 printf("%s\t", basic_list[version - 1].tokens[n] /*, 0xfe, n*/);
@@ -1717,7 +1616,6 @@ static void list_keywords(int version)
             case B_VIC5:
             case B_VIC4:
             case B_4:
-            case B_4P:
             case B_4E:
             case B_WARSAW:
             case B_EXPBAS20:
@@ -1740,7 +1638,6 @@ static void list_keywords(int version)
             case B_SIMON:
             case B_TT64:
             case B_HANDY:
-            case B_MDBASIC:
                 for (n = basic_list[version - 1].token_offset; n < basic_list[version - 1].num_tokens; n++) {
                     printf("%s\t", basic_list[version -1].tokens[n] /*, n + 0xcc*/);
                 }
@@ -1760,36 +1657,8 @@ static void list_keywords(int version)
  * Conversion Routines
  */
 
-static int ascii_to_petscii(int c)
-{
-    if (c == '\n') {
-        return 0x0d;
-    } else if (c == 0x7e) {              /*  '~' is ASCII for 'pi' */
-        return 0xff;
-    } else if ((c >= 0x5b) && (c <= 0x5f)) { /* '_' -> left arrow, no char value change */
-        return c;
-    } else if ((c >= 0x60) && (c <= 0x7e)) {
-        return c ^ 0x20;
-    } else if ((c >= 'A') && (c <= 'Z')) {
-        return c | 0x80;
-    }
-    return c;
-}
-
-static char petscii_to_ascii(char c)
-{
-    if ((c >= 'A') && (c <= 'Z')) {
-        c -= 'A';
-        c += 'a';
-    } else if ((c >= 'a') && (c <= 'z')) {
-        c -= 'a';
-        c += 'A';
-    }
-    return c;
-}
-
 /* used in text mode */
-static void text_petscii_to_ascii(int version, int ctrls)
+static void pet_2_asc(int version, int ctrls)
 {
     int c;
 
@@ -1807,9 +1676,9 @@ static void text_petscii_to_ascii(int version, int ctrls)
     - petscii codes (*) 0xff, 0x7e and 0xde (PI) produces the same screencode
 
  ******************************************************************************/
-static void out_ctrl_num(unsigned char c)
+static void out_ctrl(unsigned char c)
 {
-    if (opt_decimal_codes) {
+    if (dec) {
         fprintf(dest, CLARIF_LP_ST "%03d" CLARIF_RP_ST, c);
     } else {
         fprintf(dest, CLARIF_LP_ST "$%02x" CLARIF_RP_ST, c);
@@ -1818,21 +1687,20 @@ static void out_ctrl_num(unsigned char c)
 
 static void _p_fputc(int c, int p, int quote)
 {
-   if (quote && opt_quoted_codes) {
+   if (quote && quotedcodes) {
         /* if enabled, output all quoted non alphanumeric characters as control codes */
-        if (!(((c >= 'a') && (c <= 'z')) ||
+        if (!(((c >= 'a') && (c <= 'A')) ||
               ((c >= 'A') && (c <= 'Z')) ||
               ((c >= '0') && (c <= '9')) ||
               (c == '"') /* needed so the leading quote does NOT get converted into a control code */
            )) {
-            out_ctrl_num((unsigned char)(p & 0xff));
+            out_ctrl((unsigned char)(p & 0xff));
             return;
         }
     }
     fputc(c, dest);
 }
 
-/* used when detokenizing, and in text_petscii_to_ascii (textmode) */
 static void _p_toascii(int c, int version, int ctrls, int quote)
 {
     /* fprintf(stderr, "<%02x:%d>", c, ctrls); */
@@ -1842,7 +1710,7 @@ static void _p_toascii(int c, int version, int ctrls, int quote)
             if (!ctrls) {
                 _p_fputc('\n', c, quote);
             } else {
-                out_ctrl_num((unsigned char)(c & 0xff));
+                out_ctrl((unsigned char)(c & 0xff));
             }
             break;
         case 0x0d: /* CBM carriage return */
@@ -1867,7 +1735,7 @@ static void _p_toascii(int c, int version, int ctrls, int quote)
             _p_fputc('_', c, quote);
             break;
         case 0x60: /* produces the same screencode as $c0! */
-            out_ctrl_num((unsigned char)(c & 0xff));
+            out_ctrl((unsigned char)(c & 0xff));
             break;
 
         case 0x7b: /* produces the same screencode as $db! */
@@ -1875,7 +1743,7 @@ static void _p_toascii(int c, int version, int ctrls, int quote)
         case 0x7d: /* produces the same screencode as $dd! */
         case 0x7e: /* PI produces the same screencode as $de! */
         case 0x7f: /* produces the same screencode as $df! */
-            out_ctrl_num((unsigned char)(c & 0xff)); /* shift+arrow up */
+            out_ctrl((unsigned char)(c & 0xff)); /* shift+arrow up */
             break;
 
         case 0xc0:
@@ -1891,7 +1759,7 @@ static void _p_toascii(int c, int version, int ctrls, int quote)
             fprintf(dest, CLARIF_LP_ST "SHIFT--" CLARIF_RP_ST);
             break;
         case 0xde: /* PI produces the same screencode as $7e and $ff! */
-            out_ctrl_num((unsigned char)(c & 0xff));
+            out_ctrl((unsigned char)(c & 0xff));
             break;
         case 0xdf: /* (*) produces the same screencode as $7f! */
             fprintf(dest, CLARIF_LP_ST "CBM-*" CLARIF_RP_ST);
@@ -1902,7 +1770,7 @@ static void _p_toascii(int c, int version, int ctrls, int quote)
             if (!ctrls) {
                 _p_fputc(' ', c, quote);
             } else {
-                out_ctrl_num((unsigned char)(c & 0xff));
+                out_ctrl((unsigned char)(c & 0xff));
             }
             break;
         case 0xff: /* (*) PI produces the same screencode as $7e and $de! */
@@ -1916,7 +1784,7 @@ static void _p_toascii(int c, int version, int ctrls, int quote)
                     break;
                 case 0x60:                /* 61 - 7F (produces same screencodes as C1...) */
                     if (ctrls) {
-                        out_ctrl_num((unsigned char)(c & 0xff));
+                        out_ctrl((unsigned char)(c & 0xff));
                     } else {
                         _p_fputc(c ^ 0x20, c, quote);
                     }
@@ -1925,7 +1793,7 @@ static void _p_toascii(int c, int version, int ctrls, int quote)
                     fprintf(dest, CLARIF_LP_ST "%s" CLARIF_RP_ST, cbmkeys[c & 0x1f]);
                     break;
                 case 0xe0:                /* E1 - FE (produces same screencodes as A1...) */
-                    out_ctrl_num((unsigned char)(c & 0xff));
+                    out_ctrl((unsigned char)(c & 0xff));
                     break;
                 case 0xc0:                /* (primary set) C0 - DF (produces same screencodes as 61...) */
                     _p_fputc(c ^ 0x80, c, quote);
@@ -1941,7 +1809,7 @@ static void _p_toascii(int c, int version, int ctrls, int quote)
                             } else if ((c > 0x7f) && (c < 0xa0) && *d_ctrl2[c & 0x1f]) {
                                 fprintf(dest, CLARIF_LP_ST "%s" CLARIF_RP_ST, d_ctrl2[c & 0x1f]);
                             } else {
-                                out_ctrl_num((unsigned char)(c & 0xff));
+                                out_ctrl((unsigned char)(c & 0xff));
                             }
                         } else {
                             if ((c < 0x20) && *ctrl1[c]) {
@@ -1949,7 +1817,7 @@ static void _p_toascii(int c, int version, int ctrls, int quote)
                             } else if ((c > 0x7f) && (c < 0xa0) && *ctrl2[c & 0x1f]) {
                                 fprintf(dest, CLARIF_LP_ST "%s" CLARIF_RP_ST, ctrl2[c & 0x1f]);
                             } else {
-                                out_ctrl_num((unsigned char)(c & 0xff));
+                                out_ctrl((unsigned char)(c & 0xff));
                             }
                         }
                     }  /* ctrls */
@@ -1957,6 +1825,21 @@ static void _p_toascii(int c, int version, int ctrls, int quote)
     }  /* switch */
 }
 
+static int _a_topetscii(int c, int ctrls)
+{
+    if (c == '\n') {
+        return 0x0d;
+    } else if (c == 0x7e) {              /*  '~' is ASCII for 'pi' */
+        return 0xff;
+    } else if ((c >= 0x5b) && (c <= 0x5f)) { /* '_' -> left arrow, no char value change */
+        return c;
+    } else if ((c >= 0x60) && (c <= 0x7e)) {
+        return c ^ 0x20;
+    } else if ((c >= 'A') && (c <= 'Z')) {
+        return c | 0x80;
+    }
+    return c;
+}
 
 /* read a decimal integer from string. we do it in a seperate function because
  * of the ugly GEMDOS hack */
@@ -1980,72 +1863,20 @@ static int scan_integer(const char *line, unsigned int *num, unsigned int *digit
 }
 
 /* ------------------------------------------------------------------------- */
-
-/* some extra buffering, so we can use ungetc multiple times (libc only
-   guarantees ONE push back to work) */
-
-static int ptr_r = 0;
-static int ptr_w = 0;
-static unsigned char readbuffer[512];
-
-static int my_getc(FILE *f)
-{
-    int ch;
-    if (ptr_r != ptr_w) {
-        /* there are characters in the buffer */
-        ch = readbuffer[ptr_r];     /* get character */
-        ptr_r = (ptr_r + 1) & 511;  /* advance pointer */
-    } else {
-        /* no characters in the buffer */
-        ch = getc(f);
-    }
-    return ch;
-}
-
-static size_t my_fread(char *buffer, size_t size, size_t num, FILE *f)
-{
-    int ch, n;
-    for (n = 0; n < (size * num); n++) {
-        ch = my_getc(f);
-        if (ch == EOF) {
-            break;
-        }
-        buffer[n] = ch;
-    }
-    return n / size;
-}
-
-static int my_ungetc(FILE *f, int ch)
-{
-    readbuffer[ptr_w] = ch;     /* put character into buffer */
-    ptr_w = (ptr_w + 1) & 511;  /* advance pointer */
-    if (ptr_r == ptr_w) {
-        fprintf(stderr, "ERROR: input buffer overrun\n");
-        exit (-1);
-    }
-    return ch;
-}
-
 /*
- * de-tokenize - convert basic (and petscii) to ascii (text)
+ * convert basic (and petscii) to ascii (text)
  *
  * This routine starts from the beginning of Basic, and not from the
  * load address included on program files. That way it can list from
  * RAM dump.
  */
 
-#define MAX_KEYWORD_LEN     16      /* FIXME */
-
-static int detokenize_basic_to_ascii(int version, int addr, int ctrls)
+static int p_expand(int version, int addr, int ctrls)
 {
     static char line[4];
-    static unsigned char thisword[MAX_KEYWORD_LEN + 1];
-    static unsigned char thisword_asc[MAX_KEYWORD_LEN + 1];
     int c = 0;
-    int quote, spnum;
-    int rem, data;
+    int quote, spnum, directory = 0;
     int sysflg = 0;
-    int initialspace = 0;
 
     void *checksummer_data = NULL;
     if (checksummer) {
@@ -2060,41 +1891,47 @@ static int detokenize_basic_to_ascii(int version, int addr, int ctrls)
      * next file on stdin intact.
      */
 
-    while ((my_fread(line, 1, 2, source) == 2) &&   /* line link */
-           !((version != B_4P) && (line[1] == 0)) && /* stop if highbyte is 0 */
-           (my_fread(line + 2, 1, 2, source) == 2)  /* line number */
-        ) {
-
-        quote = rem = data = 0; /* clear all flags */
-
-        /* the line number */
+    while ((fread(line, 1, 2, source) == 2) && (line[1]) && fread(line + 2, 1, 2, source) == 2) {
+        quote = 0;
         fprintf(dest, "%5d ", (spnum = (line[2] & 0xff) + ((line[3] & 0xff) << 8)));
         if (checksummer) {
             checksummer->init(checksummer_data, spnum);
         }
 
-        /* skip 0 bytes, prevent list protection from terminating listing */
-        while ((c = my_getc(source)) != EOF && !c) {
-            /* FIXME: should we output these somehow? */
+        if (directory) {
+            if (spnum >= 100) {
+                spnum = 0;
+            } else if (spnum >= 10) {
+                spnum = 1;
+            } else {
+                spnum = 2;
+            }
         }
 
-        initialspace = (c == 0x20);
+        /* prevent list protection from terminating listing */
 
-        /* process the rest of the line */
+        while ((c = getc(source)) != EOF && !c) {
+        }
+
+        if (c == 0x12 && !line[2] && !line[3]) {  /* 00 00 12 22 */
+            directory++;
+        }
+
         do {
-            if (checksummer) {
+            if (checksummer)
                 checksummer->process(checksummer_data, c, quote);
-            }
 
             if (c == 0x22) {
                 quote ^= c;
-            } else if (c != 0x20) {
-                initialspace = 0;
             }
 
-            /* Simons' basic. Tokens are prefixed by $64 */
-            if (!quote && (c == 0x64) && (version == B_SIMON)) {
-                if (((c = my_getc(source)) < 0x80) && basic_list[version - 1].tokens) {
+            /*
+             * Simons' basic. Any flag for this is not needed since it is
+             * mutually exclusive with all other implemented modes.
+             */
+
+            if (!quote && (c == 0x64)) {
+                if (((c = getc(source)) < 0x80) && basic_list[version - 1].tokens) {
                     fprintf(dest, "%s", basic_list[version - 1].tokens[c]);
                     continue;
                 } else {
@@ -2104,29 +1941,9 @@ static int detokenize_basic_to_ascii(int version, int addr, int ctrls)
 
             /* basic 2.0, 7.0, 10.0, 65.0 and extensions */
 
-            if (!quote && !rem && !data && (c > 0x7f)) {
-
-                /* Check if the keyword is a REM or a DATA */
-                switch (c & 0x7f) {
-                    case TOKEN_REM:
-                        rem = 1;
-                        break;
-                    case TOKEN_DATA:
-                        data = 1;
-                        break;
-                    default:
-                        break;
-                }
-
+            if (!quote && c > 0x7f) {
                 /* check for keywords common to all versions, include pi */
-                /* MDBASIC re-uses the GO token ($CB) and the slots up to $FE
-                 * for its own keywords, so those must fall through to the
-                 * extension table below instead of the common keyword list.
-                 * Token $FF (pi) is still shared. */
-                if ((c <= basic_list[B_1 - 1].max_token || c == 0xff) &&
-                    !(version == B_MDBASIC &&
-                      c >= basic_list[version - 1].token_start &&
-                      c <= basic_list[version - 1].max_token)) {
+                if (c <= basic_list[B_1 - 1].max_token || c == 0xff) {
                     fprintf(dest, "%s", keyword[c & 0x7f]);
 
                     if (c == 0x9E) {
@@ -2139,13 +1956,13 @@ static int detokenize_basic_to_ascii(int version, int addr, int ctrls)
                         if (version == B_65) {
                             /* Use the kwce65 table for BASIC 65.0, which is
                                longer than the kwce and kwce10 tables. */
-                            if ((c = my_getc(source)) < NUM_KWCE65) {
+                            if ((c = getc(source)) < NUM_KWCE65) {
                                 fprintf(dest, "%s", kwce65[c]);
                             } else {
                                 fprintf(dest, "($ce%02x)", (unsigned int)c);
                             }
                         } else {
-                            if ((c = my_getc(source)) <= MAX_KWCE) {
+                            if ((c = getc(source)) <= MAX_KWCE) {
                                 fprintf(dest, "%s", (version == B_10) ? kwce10[c] : kwce[c]);
                             } else {
                                 fprintf(dest, "($ce%02x)", (unsigned int)c);
@@ -2154,7 +1971,7 @@ static int detokenize_basic_to_ascii(int version, int addr, int ctrls)
                         continue;
                     } else if (c == 0xfe && basic_list[version - 1].prefixfe) {
                         if (version == B_SXC) {
-                            if ((c = my_getc(source)) <= basic_list[B_SXC - 1].max_token) {
+                            if ((c = getc(source)) <= basic_list[B_SXC - 1].max_token) {
                                 fprintf(dest, "%s", basic_list[version - 1].tokens[c]);
                             } else {
                                 fprintf(dest, "($fe%02x)", (unsigned int)c);
@@ -2162,13 +1979,13 @@ static int detokenize_basic_to_ascii(int version, int addr, int ctrls)
                         } else if (version == B_65) {
                             /* Use the kwfe65 table for BASIC 65.0, which is
                                longer than the kwfe and kwfe71 tables. */
-                            if ((c = my_getc(source)) <= basic_list[B_65 - 1].max_token) {
+                            if ((c = getc(source)) <= basic_list[B_65 - 1].max_token) {
                                 fprintf(dest, "%s", kwfe65[c]);
                             } else {
                                 fprintf(dest, "($fe%02x)", (unsigned int)c);
                             }
                         } else {
-                            if ((c = my_getc(source)) <= basic_list[B_10 - 1].max_token) {
+                            if ((c = getc(source)) <= basic_list[B_10 - 1].max_token) {
                                 fprintf(dest, "%s", (version == B_71) ? kwfe71[c] : kwfe[c]);
                             } else {
                                 fprintf(dest, "($fe%02x)", (unsigned int)c);
@@ -2192,7 +2009,6 @@ static int detokenize_basic_to_ascii(int version, int addr, int ctrls)
                     case B_VIC5:
                     case B_VIC4:
                     case B_4:             /* PET V4.0 */
-                    case B_4P:            /* CBM2 V4.0 */
                     case B_4E:            /* V4.0 extension */
                     case B_BASL:
                     case B_REU:
@@ -2214,19 +2030,8 @@ static int detokenize_basic_to_ascii(int version, int addr, int ctrls)
                     case B_EVE:
                     case B_TT64:
                     case B_HANDY:
-                    case B_MDBASIC:       /* C64 MDBASIC */
-                        if ((basic_list[version - 1].tokens) &&
-                            (c >= basic_list[version - 1].token_start) &&
-                            (c <= basic_list[version - 1].max_token)) {
-                            const char *token = basic_list[version - 1].tokens[c - basic_list[version - 1].token_start];
-                            if ((token == NULL) || (*token == 0)) {
-                                out_ctrl_num((int)c);  /* output byte as control code */
-                            } else {
-                                fprintf(dest, "%s", token);
-                            }
-                        } else {
-                            /* not a valid token */
-                            out_ctrl_num((int)c);  /* output byte as control code */
+                        if (basic_list[version - 1].tokens && c >= basic_list[version - 1].token_start && c <= basic_list[version - 1].max_token) {
+                            fprintf(dest, "%s", basic_list[version - 1].tokens[c - basic_list[version - 1].token_start]);
                         }
                         break;
 
@@ -2236,150 +2041,13 @@ static int detokenize_basic_to_ascii(int version, int addr, int ctrls)
                 continue;
             } /* quote */
 
-            if ((rem || data) && (c > 0x7f)) {
-                out_ctrl_num((int)c);  /* output as control code */
-            } else
-            /* some codes must always be converted to control codes, else they can't
-               be tokenized into the exact same thing again */
-            /* FIXME: this is also true for every (literal) keyword */
-            if (c == 0x0d) {
-                /* a 'return' code in the middle of the line */
-                out_ctrl_num((int)c);  /* output as control code */
-            } else if ( /* FIXME: what about pi? */
-                 (c == 0x2a) ||  /* literal "*" (else converts into a token) */
-                 (c == 0x2b) ||  /* literal "+" (else converts into a token) */
-                 (c == 0x2d) ||  /* literal "-" (else converts into a token) */
-                 (c == 0x2f) ||  /* literal "/" (else converts into a token) */
-                 (c == 0x3c) ||  /* literal "<" (else converts into a token) */
-                 (c == 0x3d) ||  /* literal "=" (else converts into a token) */
-                 (c == 0x3e) ||  /* literal ">" (else converts into a token) */
-                 (c == 0x5e)     /* literal "^" (else converts into a token) */
-                ) {
-                if (quote || rem || data) {
-                    _p_toascii((int)c, version, ctrls, quote);  /* convert character */
-                } else {
-                    /*out_ctrl_num((int)c);*/  /* output as control code */
-                    fprintf(dest, CLARIF_LP_ST "%c" CLARIF_RP_ST, c);
-                }
-            } else if (c == 0x20) {
-                if (initialspace) {
-                    out_ctrl_num((int)c);  /* output as control code */
-                } else {
-                    int ch;
-
-                    _p_toascii((int)c, version, ctrls, quote);  /* convert character */
-
-                    if ((ch = my_getc(source)) == 0x20) {
-                        int extraspaces = 0;
-                        /* test if there are only spaces for the rest of the line */
-                        while ((ch = my_getc(source)) != EOF && (ch == 0x20)) {
-                            extraspaces++;
-                        }
-                        if (ch == 0) {
-                            /* end of line reached, output spaces as control codes */
-                            out_ctrl_num((int)0x20);
-                            while (extraspaces) {
-                                out_ctrl_num((int)0x20);
-                                extraspaces--;
-                            }
-                        } else {
-                            /* push back into buffer */
-                            my_ungetc(source, 0x20);
-                            while (extraspaces) {
-                                my_ungetc(source, 0x20);
-                                extraspaces--;
-                            }
-                        }
-                        my_ungetc(source, ch);
-                    } else {
-                        my_ungetc(source, ch);
-                    }
-                }
-            } else {
-
-                /* MDBASIC: an apostrophe (') outside quotes is an alternate
-                 * REM. Switch into REM mode so the rest of the line is copied
-                 * verbatim instead of being escaped or re-tokenized, exactly
-                 * as the tokenize path treats it. */
-                if (version == B_MDBASIC && !quote && !rem && !data && c == '\'') {
-                    rem = 1;
-                }
-
-                if (!quote && !rem && !data) {
-                    int n = 0;
-                    int i;
-                    int max;
-                    int ch;
-                    unsigned char ctmp;
-
-                    /* get potential keyword into buffer */
-                    thisword[n] = c;
-                    n++;
-                    do {
-                        ch = my_getc(source);
-                        if (ch == EOF) {
-                            break;
-                        }
-                        thisword[n] = ch;
-                        n++;
-                        /* a BASIC keyword may contain any letters, $, ( */
-                        if (!(((ch >= 'a') && (ch <= 'z')) ||
-                                ((ch >= 'A') && (ch <= 'Z')) ||
-                                (ch == '$') ||
-                                (ch == '(')
-                                )) {
-                            break;
-                        }
-                    } while(n < MAX_KEYWORD_LEN);
-
-                    /* convert to ASCII */
-                    for (i = 0; i < n; i++) {
-                        thisword_asc[i] = petscii_to_ascii(thisword[i]);
-                    }
-
-                    /* push back */
-                    for (i = 1; i < n; i++) {
-                        my_ungetc(source, thisword[i]);
-                    }
-
-                    /* test if this is a keyword */
-                    if (version == B_1) {
-                        max = basic_list[B_1 - 1].num_tokens;
-                    } else if ((version == B_35) ||
-                                (version == B_7) ||
-                                (version == B_71) ||
-                                (version == B_10) ||
-                                (version == B_65) ||
-                                (version == B_SXC)) {
-                        max = basic_list[B_35 - 1].num_tokens;
-                    } else {
-                        max = basic_list[B_2 - 1].num_tokens;
-                    }
-
-                    /* compare against keyword list */
-                    /* FIXME: this only compares against the "common" keywords - it
-                                does not take other BASIC variants into account */
-                    if ((ctmp = sstrcmp(thisword_asc, keyword, 0, max)) != KW_NONE) {
-                        /* if a keyword was found, output its first character as
-                            control code, this prevents it from being tokenized by
-                            petcat, and keeps the resulting text somewhat human
-                            readable at least */
-                        /*out_ctrl_num(thisword[0]);*/
-                        fprintf(dest, CLARIF_LP_ST "%c" CLARIF_RP_ST, thisword_asc[0]);
-                        continue;
-                    }
-                }
-
-                /* a regular character */
-                _p_toascii((int)c, version, ctrls, quote);  /* convert character */
-
-                /* colon terminates data mode */
-                if (!quote && (c == ':')) {
-                    data = 0;
-                }
+            if (directory && spnum && c == 0x20) {
+                spnum--;          /* eat spaces to adjust directory lines */
+                continue;
             }
-        } while ((c = my_getc(source)) != EOF && c);
 
+            _p_toascii((int)c, version, ctrls, quote);  /* convert character */
+        } while ((c = getc(source)) != EOF && c);
         if (checksummer) {
             char *chksum = checksummer->finalize(checksummer_data);
             fprintf(dest, "\t|| %s", chksum);
@@ -2403,7 +2071,6 @@ static int detokenize_basic_to_ascii(int version, int addr, int ctrls)
 #define MAX_INLINE_LEN  (256 * 8)
 #define MAX_OUTLINE_LEN 256
 
-/* used in tokenize_ascii_to_basic() */
 static unsigned char* check_leading_space(int version, unsigned char* p)
 {
     if (version == B_10 || version == B_65) {
@@ -2421,8 +2088,7 @@ static unsigned char* check_leading_space(int version, unsigned char* p)
     return p;
 }
 
-/* this converts ASCII to BASIC */
-static void tokenize_ascii_to_basic(int version, unsigned int addr, int ctrls)
+static void p_tokenize(int version, unsigned int addr, int ctrls)
 {
     static char line[MAX_INLINE_LEN + 1];
     static char tokenizedline[MAX_OUTLINE_LEN + 1];
@@ -2430,11 +2096,11 @@ static void tokenize_ascii_to_basic(int version, unsigned int addr, int ctrls)
     unsigned char *p2;
     unsigned char *p3;
     unsigned char quote;
-    unsigned char rem;
-    unsigned char data;
     int c;
     int ctmp = -1;
     int kwlentmp = -1;
+    unsigned char rem_data_mode;
+    unsigned char rem_data_endchar = '\0';
     unsigned int len = 0;
     unsigned int match;
     unsigned int match2;
@@ -2458,7 +2124,8 @@ static void tokenize_ascii_to_basic(int version, unsigned int addr, int ctrls)
 
         DBG(("line: %u [%s]\n", linum, line));
 
-        quote = rem = data = 0; /* clear all flags */
+        quote = 0;
+        rem_data_mode = 0;
 
         p2 = check_leading_space(version, p2);
 
@@ -2472,17 +2139,7 @@ static void tokenize_ascii_to_basic(int version, unsigned int addr, int ctrls)
 
             match = 0;
             match2 = 0;
-
-            /*
-             * MDBASIC: an apostrophe (') outside quotes starts an alternate
-             * REM. Switch into REM mode so the rest of the line is copied
-             * verbatim instead of being tokenized; the ' itself is copied as
-             * a literal character by the if (!match) block below.
-             */
-            if (version == B_MDBASIC && !quote && !rem && !data && *p2 == '\'') {
-                rem = 1;
-            }
-
+            if (quote) {
                 /*
                  * control code evaluation
                  * only strings that appear inside quotes are
@@ -2530,8 +2187,8 @@ static void tokenize_ascii_to_basic(int version, unsigned int addr, int ctrls)
                             ((c = sstrcmp_codes(p, c_ctrl1, 0, 0x20)) != CODE_NONE) || /* 0x00-0x1f */
                             ((c = sstrcmp_codes(p, d_ctrl1, 0, 0x20)) != CODE_NONE) || /* 0x00-0x1f */
 
-                            ((((c = sstrcmp_codes(p, cbmchars, 0, 0x40)) != CODE_NONE) || /* 0x20-0x5f */
-                              ((c = sstrcmp_codes(p, a_cbmchars, 0, 0x40)) != CODE_NONE) /* 0x20-0x5f */
+                            ((((c = sstrcmp_codes(p, cbmchars, 0, 0x20)) != CODE_NONE) || /* 0x20-0x3f */
+                              ((c = sstrcmp_codes(p, a_cbmchars, 0, 0x20)) != CODE_NONE) /* 0x20-0x3f */
                               ) && (c += 0x20)) ||
 
                             ((
@@ -2586,15 +2243,15 @@ static void tokenize_ascii_to_basic(int version, unsigned int addr, int ctrls)
                     fprintf(stderr, "error: line %u - unknown control code: %s\n",
                             linum, p);
                     exit(-1);
-
+                }
 /*    DBG(("controlcode end\n")); */
-            } else if (rem || data) {
+            } else if (rem_data_mode) {
                 /* if we have already encountered a REM or a DATA,
                    simply copy the char */
 
                 /* DO NOTHING! As we do not set "match", the if (!match) will be true,
                  * and this part will copy the char over to the new buffer */
-            } else if (!quote && (isalpha((unsigned char)*p2) || strchr("+-*/^>=<", *p2))) {
+            } else if (isalpha((unsigned char)*p2) || strchr("+-*/^>=<", *p2)) {
                 /* FE and CE prefixes are checked first */
                 if (version == B_7 || version == B_71 || version == B_10 || version == B_65 || version == B_SXC || version == B_SIMON) {
                     switch (version) {
@@ -2689,18 +2346,9 @@ static void tokenize_ascii_to_basic(int version, unsigned int addr, int ctrls)
 
                     if (version == B_1) {
                         max = basic_list[B_1 - 1].num_tokens;
-                    } else if ((version == B_35) ||
-                               (version == B_7) ||
-                               (version == B_71) ||
-                               (version == B_10) ||
-                               (version == B_65) ||
-                               (version == B_SXC)) {
+                    } else if ((version == B_35) || (version == B_7) || (version == B_71) ||
+                               (version == B_10) || (version == B_65) || (version == B_SXC)) {
                         max = basic_list[B_35 - 1].num_tokens;
-                    } else if (version == B_MDBASIC) {
-                        /* MDBASIC re-uses the GO token ($CB) as "off", so drop
-                         * "go" from the common keyword set here; it is matched
-                         * from the MDBASIC extension table instead. */
-                        max = basic_list[B_2 - 1].num_tokens - 1;
                     } else {
                         max = basic_list[B_2 - 1].num_tokens;
                     }
@@ -2712,11 +2360,14 @@ static void tokenize_ascii_to_basic(int version, unsigned int addr, int ctrls)
 
                             /* Check if the keyword is a REM or a DATA */
                             switch (ctmp) {
-                                case TOKEN_REM:
-                                    rem= 1;
-                                    break;
                                 case TOKEN_DATA:
-                                    data = 1;
+                                    rem_data_mode = 1;
+                                    rem_data_endchar = ':';
+                                    break;
+
+                                case TOKEN_REM:
+                                    rem_data_mode = 1;
+                                    rem_data_endchar = '\0';
                                     break;
                                 default:
                                     break;
@@ -2733,7 +2384,6 @@ static void tokenize_ascii_to_basic(int version, unsigned int addr, int ctrls)
                     case B_VIC5:
                     case B_VIC4:
                     case B_4:
-                    case B_4P:
                     case B_4E:
                     case B_MAGIC:
                     case B_MIGHTY:
@@ -2761,7 +2411,6 @@ static void tokenize_ascii_to_basic(int version, unsigned int addr, int ctrls)
                     case B_WARSAW:
                     case B_SUPERBAS:
                     case B_HANDY:
-                    case B_MDBASIC:
                         if ((c = sstrcmp(p2, basic_list[version - 1].tokens, basic_list[version - 1].token_offset, basic_list[version - 1].num_tokens)) != KW_NONE) {
                             if (match) {
                                 if ((int)kwlen >= kwlentmp) {
@@ -2796,19 +2445,11 @@ static void tokenize_ascii_to_basic(int version, unsigned int addr, int ctrls)
 
             if (!match) {
                 /* convert character */
-                *p1++ = (unsigned char)ascii_to_petscii(*p2 & 0xff);
+                *p1++ = (unsigned char)(_a_topetscii(*p2 & 0xff, ctrls));
 
-                switch (*p2) {
-                    case 0: /* REM ends at end of line */
-                        rem= 0;
-                        break;
-                    case ':': /* DATA ends at colon, but only if not in quote mode */
-                        if (!quote) {
-                            data = 0;
-                        }
-                        break;
-                    default:
-                        break;
+                /* check if the REM/DATA mode has to be stopped: */
+                if (*p2 == rem_data_endchar) {
+                    rem_data_mode = 0;
                 }
 
                 p3 = p2;
@@ -2822,7 +2463,7 @@ static void tokenize_ascii_to_basic(int version, unsigned int addr, int ctrls)
                    BASIC 65 works. */
                 if ((version == B_65) && (*p3 == 0x24)) {
                     while (((*p2 >= 0x30) && (*p2 <= 0x39)) || ((*p2 >= 0x61) && (*p2 <=0x66))) {
-                        *p1++ = (unsigned char)ascii_to_petscii(*p2 & 0xff);
+                        *p1++ = (unsigned char)(_a_topetscii(*p2 & 0xff, ctrls));
                         ++p2;
                     }
                 }
@@ -2852,7 +2493,7 @@ static void tokenize_ascii_to_basic(int version, unsigned int addr, int ctrls)
 
 /* ------------------------------------------------------------------------- */
 /* convert ascii (text) to petscii */
-static void text_ascii_to_petscii(int version, int ctrls)
+static void asc_2_pet(int version, int ctrls)
 {
     static unsigned char line[MAX_INLINE_LEN + 1];
     int c, d;
@@ -2870,7 +2511,7 @@ static void text_ascii_to_petscii(int version, int ctrls)
             }
             p = line;
 
-            DBG(("text_ascii_to_petscii controlcode start: %c\n", c));
+            DBG(("asc_2_pet controlcode start: %c\n", c));
 
             /* repetition count */
             len = 1;
@@ -2884,7 +2525,7 @@ static void text_ascii_to_petscii(int version, int ctrls)
                     continue;
                 }
 
-                DBG(("text_ascii_to_petscii controlcode repeat count: len:%u kwlen:%u\n",
+                DBG(("asc_2_pet controlcode repeat count: len:%u kwlen:%u\n",
                             len, kwlen));
 
                 if (*p == ' ') {
@@ -2892,7 +2533,7 @@ static void text_ascii_to_petscii(int version, int ctrls)
                 }
             }
 
-            DBG(("text_ascii_to_petscii controlcode test: \"%s\"\n", p));
+            DBG(("asc_2_pet controlcode test: \"%s\"\n", p));
 
             if (
                 (
@@ -2905,8 +2546,8 @@ static void text_ascii_to_petscii(int version, int ctrls)
                     ((c = sstrcmp_codes(p, c_ctrl1, 0, 0x20)) != CODE_NONE) || /* 0x00-0x1f */
                     ((c = sstrcmp_codes(p, d_ctrl1, 0, 0x20)) != CODE_NONE) || /* 0x00-0x1f */
 
-                    ((((c = sstrcmp_codes(p, cbmchars, 0, 0x40)) != CODE_NONE) || /* 0x20-0x5f */
-                      ((c = sstrcmp_codes(p, a_cbmchars, 0, 0x40)) != CODE_NONE) /* 0x20-0x5f */
+                    ((((c = sstrcmp_codes(p, cbmchars, 0, 0x20)) != CODE_NONE) || /* 0x20-0x3f */
+                      ((c = sstrcmp_codes(p, a_cbmchars, 0, 0x20)) != CODE_NONE) /* 0x20-0x3f */
                         ) && (c += 0x20)) ||
 
                     ((
@@ -2925,32 +2566,32 @@ static void text_ascii_to_petscii(int version, int ctrls)
                 )
                 ) {
 
-                DBG(("text_ascii_to_petscii controlcode test 2: '%c' '%s' '%u'\n",
+                DBG(("asc_2_pet controlcode test 2: '%c' '%s' '%u'\n",
                             p[kwlen], p, kwlen));
 
                 if (p[kwlen] == '*') {
                     /* repetition count */
                     p += (kwlen);
 
-                    DBG(("text_ascii_to_petscii controlcode test rpt: %s\n", p));
+                    DBG(("asc_2_pet controlcode test rpt: %s\n", p));
 
                     len = 1;
                     if (scan_integer((char *)++p, &len, &kwlen) > 0) {
                         p += kwlen;
-                        DBG(("text_ascii_to_petscii controlcode repeat count: len:%u kwlen:%u\n",
+                        DBG(("asc_2_pet controlcode repeat count: len:%u kwlen:%u\n",
                                     len, kwlen));
                         kwlen = 0;
                     }
                 }
 
-                DBG(("text_ascii_to_petscii controlcode test 3: '%c' '%s' '%u'\n",
+                DBG(("asc_2_pet controlcode test 3: '%c' '%s' '%u'\n",
                             p[0], p, kwlen));
 
                 if (p[kwlen] == CLARIF_RP) {
                     for (; len-- > 0; ) {
                         fputc(c, dest);
                     }
-                    DBG(("text_ascii_to_petscii controlcode continue\n"));
+                    DBG(("asc_2_pet controlcode continue\n"));
 
                     fseek(source, pos + kwlen + 1, SEEK_SET);
                     continue;
@@ -2961,10 +2602,10 @@ static void text_ascii_to_petscii(int version, int ctrls)
             exit(-1);
         }
 
-        DBG(("text_ascii_to_petscii convert character (%02x)\n", (unsigned int)c));
+        DBG(("asc_2_pet convert character (%02x)\n", (unsigned int)c));
 
         /* convert character */
-        d = ascii_to_petscii(c);
+        d = _a_topetscii(c, ctrls);
         fputc(d, dest);
     }
 }
@@ -2984,7 +2625,7 @@ static int sstrcmp_codes(unsigned char *line, const char **wordlist, int token, 
     for (; token < maxitems; token++) {
         DBG(("compare '%s' vs  '%s' - %u %u\n", wordlist[token], line, j, kwlen));
 
-        if (opt_codes_case_insensitive) {
+        if (codesnocase) {
             for (p = wordlist[token], q = (char *)line, j = 0;
                  *p && *q && (tolower((unsigned char)*p) == tolower((unsigned char)*q));
                  p++, q++, j++) {}

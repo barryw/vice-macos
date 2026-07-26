@@ -86,7 +86,6 @@
 #include "hotkeys.h"
 #include "interrupt.h"
 #include "jamdialog.h"
-#include "joystick.h"
 #include "kbd.h"
 #include "lib.h"
 #include "lightpen.h"
@@ -2635,10 +2634,6 @@ static void pause_loop(void *param)
 {
     vsync_suspend_speed_eval();
     sound_suspend();
-
-    /* poll the joystick input even in pause mode - this allows eg "pause"
-       being mapped to a controller button */
-    joystick();
 
     if (ui_pause_loop_iteration()) {
         /*

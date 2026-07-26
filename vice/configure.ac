@@ -89,7 +89,6 @@ VICE_ARG_WITH_LIST(mpg123,                  [  --with-mpg123           use MPG12
 VICE_ARG_WITH_LIST(oss,                     [  --with-oss              use the OSS sound system])
 VICE_ARG_WITH_LIST(pulse,                   [  --without-pulse         do not use PulseAudio sound system])
 VICE_ARG_WITH_LIST(resid,                   [  --without-resid         do not use the reSID engine])
-VICE_ARG_WITH_LIST(residfp,                 [  --without-residfp       do not use the reSIDfp engine])
 VICE_ARG_WITH_LIST(sdlsound,                [  --with-sdlsound         use SDL sound system])
 VICE_ARG_WITH_LIST(sun,                     [  --without-sun           do not use the sun/netbsd sound system])
 VICE_ARG_WITH_LIST(vorbis,                  [  --with-vorbis           use Ogg/Vorbis support])
@@ -464,7 +463,6 @@ HAVE_PORTSID_SUPPORT="no "
 HAVE_RAWNET_SUPPORT="no "
 HAVE_REALDEVICE_SUPPORT="no "
 HAVE_RESID_SUPPORT="no "
-HAVE_RESIDFP_SUPPORT="no "
 HAVE_RS232DEV_SUPPORT="no "
 HAVE_RS232NET_SUPPORT="no "
 HAVE_OPENMP_SUPPORT="no "
@@ -1889,12 +1887,10 @@ dnl FastSID is disabled by default, so we check against "yes", ReSID is enabled
 dnl by default so we check against "no" ($with_resid being empty means the
 dnl default, ie "yes")
 dnl
-dnl FIXME: residfp?
-dnl
 dnl Remove this check to allow building without a SID engine
-dnl if test x"$with_fastsid" != "xyes" -a x"$with_resid" = "xno"; then
-dnl   AC_MSG_ERROR([Neither FastSID nor ReSID sound engine enabled, please enable at least one.])
-dnl fi
+if test x"$with_fastsid" != "xyes" -a x"$with_resid" = "xno"; then
+  AC_MSG_ERROR([Neither FastSID nor ReSID sound engine enabled, please enable at least one.])
+fi
 
 
 dnl FastSID
@@ -2007,89 +2003,6 @@ AC_SUBST(RESID_DTV_DIR)
 AC_SUBST(RESID_DTV_LIBS)
 AC_SUBST(RESID_DTV_INCLUDES)
 AC_SUBST(RESID_DTV_DEP)
-
-
-RESIDFP_DIR=
-RESIDFP_LIBS=
-RESIDFP_INCLUDES=
-RESIDFP_DEP=
-
-dnl Set linker to C++ compiler/linker: even SDL builds use C++ code (linenoise-ng)
-LINKCC='$(CXX)'
-
-dnl disable reSIDfp for certain platforms
-
-RESIDFPSUB=""
-
-if test x"$with_residfp" = "xno"; then
-  dnl Do not attempt to configure reSIDfp.
-  dnl NOTE: no_recursion is set because directories specified with
-  dnl AC_CONFIG_SUBDIRS are always recursed into regardless of where the
-  dnl macro is used.
-  dnl Another workaround must be found if other self-contained packages go
-  dnl into VICE.
-
-  dnl A workaround for an autoconf bug when not using/checking the C++
-  dnl compiler, we'll define am__fastdepCXX_TRUE as #
-  am__fastdepCXX_TRUE=#
-  am__fastdepCXX_FALSE=
-else
-  AC_LANG_SAVE
-  AC_LANG_CPLUSPLUS
-  AC_PROG_CXX([g++ clang++ cc])
-
-  dnl disable residfp when no C++ compiler is found
-  if test x"$CXX" != "x" ; then
-    LINKCC='$(CXX)'
-
-    dnl Set CXXFLAGS. Use -fno-exceptions for G++ if supported.
-    if test "$ac_test_CXXFLAGS" != set; then
-      if test "$GXX" = yes; then
-        old_CXXFLAGS=$CXXFLAGS
-        CXXFLAGS="$CXXFLAGS -fno-exceptions"
-        AC_MSG_CHECKING([whether the C++ compiler ($CXX $CXXFLAGS $LDFLAGS) works])
-        AC_TRY_COMPILE([],
-                       [ int test; ],
-                       [ AC_MSG_RESULT(yes) ],
-                       [ AC_MSG_RESULT(no)
-                         CXXFLAGS=$old_CXXFLAGS
-                         ])
-      fi
-    fi
-    AC_PROG_CXXCPP
-  fi
-
-  if test x"$with_residfp" = "xyes" -o x"$with_residfp" = "x"; then
-    AC_DEFINE(HAVE_RESIDFP,,[This version provides ReSIDfp support.])
-    HAVE_RESIDFP_SUPPORT="yes"
-    AX_SUBDIRS_CONFIGURE([src/lib/libresidfp], [[--disable-option-checking],[--disable-tests]])
-    RESIDFP_DIR=lib/libresidfp
-    RESIDFP_LIBS="\$(top_builddir)/src/lib/libresidfp/libresidfp.a"
-    RESIDFP_INCLUDES="-I\$(top_srcdir)/src/lib/libresidfp -I\$(top_builddir)/src/lib/libresidfp/src"
-    RESIDFP_DEP=libresidfp
-    RESIDFPSUB=lib/libresidfp
-  fi
-  AC_LANG_RESTORE
-fi
-
-AC_SUBST(RESIDFPSUB)
-
-if test x"$RESIDFPSUB" = "xlib/libresidfp"; then
-  AM_CONDITIONAL(RESIDFP_DIR_USED, true)
-else
-  AM_CONDITIONAL(RESIDFP_DIR_USED, false)
-fi
-
-AC_SUBST(LINKCC)
-
-AM_CONDITIONAL(HAVE_RESIDFP, test x"$with_residfp" != "xno")
-
-AC_SUBST(RESIDFP_DIR)
-AC_SUBST(RESIDFP_LIBS)
-AC_SUBST(RESIDFP_INCLUDES)
-AC_SUBST(RESIDFP_DEP)
-
-
 
 dnl Check for typedefs, structures, and compiler characteristics.
 AC_CHECK_HEADERS(sys/types.h)
@@ -2307,13 +2220,10 @@ dnl
 dnl 2023-11-18: check relaxed to accept any version, the wic64 code uses an
 dnl #ifdef to check for `CURLSSLOPT_NATIVE_CA` to see if the option can be
 dnl enabled. See https://sourceforge.net/p/vice-emu/bugs/1964/
-dnl
-dnl 2026-02-05: add check for >= 7.66.0 for `curl_multi_poll()
-dnl
 if test x"$with_libcurl" != "xno"; then
-  PKG_CHECK_MODULES(libcurl, [libcurl >= 7.66.0], [have_libcurl=yes], [have_libcurl=no])
+  PKG_CHECK_MODULES(libcurl, [libcurl], [have_libcurl=yes], [have_libcurl=no])
   if test x"$have_libcurl" = "xno"; then
-    AC_MSG_ERROR([libcurl (>= 7.66.0) support requested, but libcurl was not found.])
+    AC_MSG_ERROR([libcurl support requested, but libcurl was not found.])
   fi
   HAVE_LIBCURL_SUPPORT="yes"
   VICE_CFLAGS="$VICE_CFLAGS $libcurl_CFLAGS"
@@ -3598,7 +3508,6 @@ AC_OUTPUT([Makefile
            data/common/Makefile
            data/GLSL/Makefile
            data/hotkeys/Makefile
-           data/joymaps/Makefile
            doc/Makefile
            doc/building/Makefile
            doc/html/Makefile
@@ -3794,7 +3703,6 @@ echo "SOUND"
 echo "-----"
 echo "FastSID support              : $HAVE_FASTSID_SUPPORT (--with/without-fastsid)"
 echo "ReSID support                : $HAVE_RESID_SUPPORT (--with/without-resid)"
-echo "ReSIDfp support              : $HAVE_RESIDFP_SUPPORT (--with/without-residfp)"
 echo "New 8580 filter support      : $USE_NEW_8580_FILTER (--enable/disable-new8580filter)"
 echo "PortAudio sound input support: $USE_PORTAUDIO_SUPPORT (--with/without-portaudio)"
 

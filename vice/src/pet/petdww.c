@@ -1019,13 +1019,12 @@ static const char module_ram_name[] = "DWWMEM";
 #define DWWMEM_DUMP_VER_MAJOR   1
 #define DWWMEM_DUMP_VER_MINOR   0
 
-/* DWWMEM 1.0 snapshot module format:
-
-   type  | name         | description
-   ------------------------------------------
-   WORD  | RAM size     | size, 0 if not allocated
-   ARRAY | RAM data     | "RAM size" bytes RAM content
-*/
+/* Format of the DWW ram snapshot
+ *
+ * WORD         size, 0 if not allocated
+ * BYTE[size]   memory
+ *
+ */
 
 static int petdww_ram_write_snapshot_module(snapshot_t *s)
 {

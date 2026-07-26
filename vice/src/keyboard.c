@@ -655,16 +655,6 @@ static int keyb_find_in_keyconvtab(int sym, int mod)
     return found;
 }
 
-int keyboard_find_mapped_row_col(int key, int *row, int *col, int *shift)
-{
-    int keynum = keyb_find_in_keyconvtab(key, 0);
-    *row = keyconvmap[keynum].row;
-    *col = keyconvmap[keynum].column;
-    *shift = keyconvmap[keynum].shift;
-    return keynum;
-}
-
-
 /* press or release a key in the keyboard matrix
  * key: host key
  * mod: host key modifier
@@ -1254,14 +1244,6 @@ void keyboard_event_delayed_playback(void *data)
 }
 
 /*--------------------------------------------------------------------------*/
-
-/* KEYBOARD 1.1 snapshot module format:
-
-   type        | name           | description
-   ------------------------------------------
-   WORD ARRAY  | keyarr         |
-   WORD ARRAY  | rev_keyarr     |
-*/
 
 #define SNAP_MAJOR 1
 #define SNAP_MINOR 1

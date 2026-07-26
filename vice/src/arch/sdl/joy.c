@@ -54,16 +54,6 @@
 #include "uimenu.h"
 #include "vkbd.h"
 
-
-/*#define DEBUG_JOY*/
-
-#ifdef DEBUG_JOY
-#define DBG(x)  log_printf x
-#else
-#define DBG(x)
-#endif
-
-
 #define DEFAULT_JOYSTICK_THRESHOLD 10000
 #define DEFAULT_JOYSTICK_FUZZ      1000
 
@@ -381,7 +371,7 @@ VICE_SDL_JoystickID joy_ordinal_to_id(int ordinal)
 }
 
 
-/* FIXME: does not work right now */
+
 int sdljoy_rescan(void)
 {
 #if 0
@@ -583,7 +573,7 @@ int sdljoy_get_joynum_for_event(VICE_SDL_JoystickID event_device_id)
 static joystick_mapping_t *sdljoy_get_mapping(SDL_Event e)
 {
     joystick_mapping_t *retval = NULL;
-    int cur;
+    uint8_t cur;
     int joynum;
 
     switch (e.type) {
@@ -811,11 +801,9 @@ void sdljoy_set_joystick(SDL_Event e, int bits)
 {
     joystick_mapping_t *joyevent = sdljoy_get_mapping(e);
 
-    DBG(("sdljoy_set_joystick bits:%02x value:%d", (unsigned)bits, e.jaxis.value));
     if (joyevent != NULL) {
         joyevent->action = JOY_ACTION_JOYSTICK;
         joyevent->value.joy_pin = (uint16_t)bits;
-        DBG(("sdljoy_set_joystick action:%02x joy_pin:%02x", joyevent->action, joyevent->value.joy_pin));
     }
 }
 
@@ -823,7 +811,6 @@ void sdljoy_set_joystick_axis(SDL_Event e, int pot)
 {
     int joynum;
 
-    DBG(("sdljoy_set_joystick_axis pot:%d", pot));
     if (e.type != SDL_JOYAXISMOTION) {
         return;
     }
@@ -877,18 +864,22 @@ void sdljoy_unset(SDL_Event e)
 
 /* ------------------------------------------------------------------------- */
 
+static int _sdljoy_swap_ports = 0;
+
 void sdljoy_swap_ports(void)
 {
-    int swapped = 0;
-    resources_get_int("JoysticksAreSwapped", &swapped);
-    resources_set_int("JoysticksAreSwapped", swapped ^ 1);
+    int i, k;
+
+    resources_get_int("JoyDevice1", &i);
+    resources_get_int("JoyDevice2", &k);
+    resources_set_int("JoyDevice1", k);
+    resources_set_int("JoyDevice2", i);
+    _sdljoy_swap_ports ^= 1;
 }
 
 int sdljoy_get_swap_ports(void)
 {
-    int swapped = 0;
-    resources_get_int("JoysticksAreSwapped", &swapped);
-    return swapped;
+    return _sdljoy_swap_ports;
 }
 
 void joystick_arch_shutdown(void)
@@ -903,9 +894,12 @@ void joystick_arch_shutdown(void)
 
 void sdljoy_swap_ports(void)
 {
-    int swapped = 0;
-    resources_get_int("JoysticksAreSwapped", &swapped);
-    resources_set_int("JoysticksAreSwapped", swapped ^ 1);
+    int i, k;
+
+    resources_get_int("JoyDevice1", &i);
+    resources_get_int("JoyDevice2", &k);
+    resources_set_int("JoyDevice1", k);
+    resources_set_int("JoyDevice2", i);
 }
 
 void joystick(void)

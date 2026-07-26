@@ -211,14 +211,11 @@ static void reset(via_context_t *via_context)
     store_userport_pa2(1);
 }
 
-inline static uint8_t read_pra(via_context_t *via_context, uint16_t addr, bool peek_only)
+inline static uint8_t read_pra(via_context_t *via_context, uint16_t addr)
 {
     uint8_t byte = 0xff;
 
-    /* Reading from the userport might not be peek-safe */
-    if (!peek_only) {
-        byte = read_userport_pbx(byte);
-    }
+    byte = read_userport_pbx(byte);
 
     /* joystick always pulls low, even if high output, so no
        masking with DDRA */
@@ -227,13 +224,11 @@ inline static uint8_t read_pra(via_context_t *via_context, uint16_t addr, bool p
     return byte;
 }
 
-static uint8_t read_prb(via_context_t *via_context, bool peek_only)
+static uint8_t read_prb(via_context_t *via_context)
 {
     uint8_t byte;
 
-    if (!peek_only) {
-        drive_catch_up_hook(maincpu_clk);
-    }
+    drive_cpu_execute_all(maincpu_clk);
 
     /* read parallel IEC interface line states */
     byte = 255

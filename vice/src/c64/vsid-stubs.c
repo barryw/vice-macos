@@ -966,14 +966,6 @@ void drive_cpu_execute_all(CLOCK clk_value)
 {
 }
 
-void drive_catch_up_hook(CLOCK clk_value)
-{
-}
-
-void drive_cycle_hook(void)
-{
-}
-
 int drive_num_leds(unsigned int dnr)
 {
     return 1;
@@ -1206,11 +1198,6 @@ const char *tapeport_get_device_type_desc(int type)
     return NULL;
 }
 #endif
-
-uint8_t userport_io_sim_get_pbx_out_lines(void)
-{
-    return 0;
-}
 
 void userport_io_sim_set_pbx_out_lines(uint8_t val)
 {
