@@ -72,11 +72,8 @@ fetch_release_note_refs() {
         git -C "$REPO_ROOT" fetch --tags >/dev/null 2>&1 ||
         true
 
-    if ! git -C "$REPO_ROOT" remote get-url upstream >/dev/null 2>&1; then
-        git -C "$REPO_ROOT" remote add upstream https://github.com/VICE-Team/svn-mirror.git >/dev/null 2>&1 || true
-    fi
-
-    git -C "$REPO_ROOT" fetch --no-tags upstream +refs/heads/main:refs/remotes/upstream/main >/dev/null 2>&1 || true
+    # NOTE: no upstream fetch. Commits are classified as upstream VICE against
+    # the pinned release commit (see release_note_upstream_ref).
 }
 
 xml_escape() {
@@ -350,8 +347,10 @@ release_note_is_upstream_commit() {
     git -C "$REPO_ROOT" merge-base --is-ancestor "$commit" "$upstream_ref" >/dev/null 2>&1
 }
 
+# vice/ is pinned to an upstream VICE release; a commit counts as "upstream
+# VICE" when it is an ancestor of that pinned release commit.
 release_note_upstream_ref() {
-    local upstream_ref
+    local pinned_commit
 
     if [[ -n "${VICE_MAC_UPSTREAM_REF:-}" ]]; then
         if git -C "$REPO_ROOT" rev-parse --verify "$VICE_MAC_UPSTREAM_REF^{commit}" >/dev/null 2>&1; then
@@ -360,12 +359,20 @@ release_note_upstream_ref() {
         return
     fi
 
-    for upstream_ref in refs/remotes/upstream/main upstream/main; do
-        if git -C "$REPO_ROOT" rev-parse --verify "$upstream_ref^{commit}" >/dev/null 2>&1; then
-            echo "$upstream_ref"
-            return
-        fi
-    done
+    if [[ ! -f "$REPO_ROOT/VICE_UPSTREAM_RELEASE" ]]; then
+        return
+    fi
+
+    pinned_commit="$(
+        # shellcheck source=/dev/null
+        . "$REPO_ROOT/VICE_UPSTREAM_RELEASE"
+        printf '%s\n' "${VICE_UPSTREAM_RELEASE_COMMIT:-}"
+    )"
+
+    if [[ -n "$pinned_commit" ]] &&
+        git -C "$REPO_ROOT" rev-parse --verify "$pinned_commit^{commit}" >/dev/null 2>&1; then
+        echo "$pinned_commit"
+    fi
 }
 
 markdown_escape() {

@@ -53,11 +53,5 @@ fi
 
 fetch_origin_history
 
-if [[ "${VICE_MAC_CI_FETCH_UPSTREAM:-1}" == "1" ]]; then
-    if ! git -C "$REPO_ROOT" remote get-url upstream >/dev/null 2>&1; then
-        git -C "$REPO_ROOT" remote add upstream https://github.com/VICE-Team/svn-mirror.git
-    fi
-
-    git -C "$REPO_ROOT" fetch --no-tags upstream +refs/heads/main:refs/remotes/upstream/main ||
-        git -C "$REPO_ROOT" fetch --no-tags --depth=1 upstream +refs/heads/main:refs/remotes/upstream/main
-fi
+# NOTE: no upstream fetch. vice/ is pinned to an upstream VICE release recorded
+# in VICE_UPSTREAM_RELEASE; builds never consult upstream trunk.

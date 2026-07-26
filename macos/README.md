@@ -100,7 +100,9 @@ The prepare step downloads the Xcode Metal Toolchain component when it is not
 already installed.
 
 Push builds on `main` build, test, package, and publish a GitHub Release named
-`vice-mac-<VICE version>-<git sha>-1`. Tags matching
+`vice-mac-<VICE version>-<git sha>-1`. `<VICE version>` comes from
+`vice/configure.ac`, which is pinned to an upstream VICE release tag — see
+[docs/VICE-UPSTREAM-PIN.md](../docs/VICE-UPSTREAM-PIN.md). Tags matching
 `vice-mac-*` also package and publish a release for that tag. The pipeline
 requires the `github_token` and `sparkle_private_key` secrets. The release
 publisher signs the DMG with Sparkle's EdDSA key and uploads `appcast.xml`

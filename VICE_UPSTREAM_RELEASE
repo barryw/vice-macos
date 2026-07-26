@@ -1,0 +1,10 @@
+# The upstream VICE release this repository's vice/ tree is pinned to.
+#
+# vice/ is the source tree of exactly this upstream release tag, plus the
+# macOS port (vice/src/arch/macos/ and the targeted core patches listed in
+# docs/VICE-UPSTREAM-PIN.md). We do NOT track upstream trunk: releases must be
+# built from released VICE.
+#
+# To move the pin, see docs/VICE-UPSTREAM-PIN.md. Shell-sourceable.
+VICE_UPSTREAM_RELEASE_TAG=3.10.0
+VICE_UPSTREAM_RELEASE_COMMIT=4d283a2e7dd59b7e378524878e81ecc7826b700c

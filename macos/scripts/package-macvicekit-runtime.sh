@@ -75,28 +75,24 @@ short_git_sha() {
     git -C "$REPO_ROOT" rev-parse --short=12 "$ref" 2>/dev/null || echo "unknown"
 }
 
+# vice/ is pinned to an upstream VICE *release* (never trunk), recorded in
+# VICE_UPSTREAM_RELEASE at the repo root. No git remote or fetch is required.
 upstream_git_sha() {
-    local merge_base
-    local upstream_ref
-
     if [[ -n "${VICE_UPSTREAM_GIT_SHA:-}" ]]; then
         echo "$VICE_UPSTREAM_GIT_SHA"
         return
     fi
 
-    for upstream_ref in refs/remotes/upstream/main upstream/main FETCH_HEAD; do
-        if ! git -C "$REPO_ROOT" rev-parse --verify "$upstream_ref^{commit}" >/dev/null 2>&1; then
-            continue
-        fi
+    if [[ ! -f "$REPO_ROOT/VICE_UPSTREAM_RELEASE" ]]; then
+        echo "unknown"
+        return
+    fi
 
-        merge_base="$(git -C "$REPO_ROOT" merge-base HEAD "$upstream_ref" 2>/dev/null || true)"
-        if [[ -n "$merge_base" ]]; then
-            short_git_sha "$merge_base"
-            return
-        fi
-    done
-
-    echo "unknown"
+    (
+        # shellcheck source=/dev/null
+        . "$REPO_ROOT/VICE_UPSTREAM_RELEASE"
+        printf '%s\n' "${VICE_UPSTREAM_RELEASE_COMMIT:0:12}"
+    )
 }
 
 create_framework_skeleton() {

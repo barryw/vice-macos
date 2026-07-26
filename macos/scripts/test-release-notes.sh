@@ -56,7 +56,9 @@ commit_file "$tmp_repo" "macos/ViceMac/ContentView.swift" "machine" "Fix C128 di
 
 git -C "$tmp_repo" checkout -q -b upstream vice-mac-0.1
 commit_file "$tmp_repo" "src/sid/sid.c" "sid" "Fix upstream SID filter"
-git -C "$tmp_repo" update-ref refs/remotes/upstream/main HEAD
+# Stand in for the pinned upstream VICE release (see VICE_UPSTREAM_RELEASE).
+printf 'VICE_UPSTREAM_RELEASE_TAG=3.10.0\nVICE_UPSTREAM_RELEASE_COMMIT=%s\n' \
+    "$(git -C "$tmp_repo" rev-parse HEAD)" >"$tmp_repo/VICE_UPSTREAM_RELEASE"
 
 git -C "$tmp_repo" checkout -q "$main_branch"
 git -C "$tmp_repo" merge -q --no-ff upstream -m "Merge upstream VICE"

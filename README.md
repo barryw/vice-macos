@@ -271,9 +271,11 @@ This work builds on VICE, the canonical multi-platform Commodore emulator:
 
 https://vice-emu.sourceforge.io/
 
-This repository tracks VICE upstream directly. Local product work lives on
-`main`; `git pull` merges `VICE-Team/svn-mirror` `main`, and `git push` pushes
-this Mac product repo.
+`vice/` is pinned to an upstream VICE **release tag** — currently `3.10.0` — not
+to upstream trunk, so a release labelled `3.10.0` really is VICE 3.10.0 plus the
+macOS port. The pin lives in [`VICE_UPSTREAM_RELEASE`](VICE_UPSTREAM_RELEASE);
+see [docs/VICE-UPSTREAM-PIN.md](docs/VICE-UPSTREAM-PIN.md) for the delta we carry
+and for how to move the pin when upstream cuts a release.
 
 ## License
 
