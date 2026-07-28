@@ -23,6 +23,7 @@ bash -n "$MACOS_DIR/../website/tools/build-macvicekit-docs.sh"
 bash -n "$MACOS_DIR/../website/tools/validate-containerfile-pages.sh"
 bash -n "$SCRIPT_DIR/write-coverage-badge.sh"
 bash "$SCRIPT_DIR/test-coverage-badge.sh"
+bash "$SCRIPT_DIR/test-resid-voice-capture.sh"
 MACVICEKIT_DOC_OUTPUT_DIR="$DERIVED_DATA/MacVICEKitDocs" \
     MACVICEKIT_DOC_DERIVED_DATA="$DERIVED_DATA/MacVICEKitDocBuild" \
     bash "$MACOS_DIR/../website/tools/build-macvicekit-docs.sh"
@@ -116,5 +117,3 @@ bash "$SCRIPT_DIR/write-coverage-badge.sh" \
 
 bash "$SCRIPT_DIR/smoke-test-macvicekit-sdk.sh"
 bash "$SCRIPT_DIR/test-release-notes.sh"
-# Needs the configured engine build tree, so it runs after the scheme builds.
-bash "$SCRIPT_DIR/test-resid-voice-capture.sh"

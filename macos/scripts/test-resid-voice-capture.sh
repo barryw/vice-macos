@@ -1,37 +1,41 @@
 #!/usr/bin/env bash
 # Verifies the per-voice sample tap we add to ReSID (vice/src/resid/sid.{h,cc}),
-# which feeds the VSID voice visualizer. Compiles the vendored ReSID sources
-# directly against the configured engine build tree, so it needs the engine to
-# have been built at least once (prepare-vicemac-runtime.sh).
+# which feeds the VSID voice visualizer.
+#
+# Self-contained: it generates the two things ReSID needs from configure
+# (siddefs.h and the wave*.h sample tables) into a temp dir and compiles the
+# vendored sources directly, so it does not care whether, where, or when the
+# engine was built.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 RESID_SRC="$REPO_ROOT/vice/src/resid"
 
-default_engine_build_dir() {
-    local repo_hash
-    repo_hash="$(printf '%s' "$REPO_ROOT" | /usr/bin/shasum -a 256 | awk '{ print substr($1, 1, 12) }')"
-    echo "/private/tmp/vice-macos-native-build-$repo_hash"
-}
-
-BUILD_DIR="${VICE_MACOS_ENGINE_BUILD_DIR:-$(default_engine_build_dir)}"
-GENERATED_INCLUDE="$BUILD_DIR/src/resid"
-
-if [[ ! -f "$GENERATED_INCLUDE/siddefs.h" ]]; then
-    echo "ERROR: $GENERATED_INCLUDE/siddefs.h not found." >&2
-    echo "Build the engine first: macos/scripts/prepare-vicemac-runtime.sh" >&2
-    exit 1
-fi
-
-if grep -q '^#define NEW_8580_FILTER 1' "$GENERATED_INCLUDE/siddefs.h"; then
-    filter_src="filter8580new.cc"
-else
-    filter_src="filter.cc"
-fi
-
 work_dir="$(mktemp -d "${TMPDIR:-/tmp}/resid-voice-capture.XXXXXX")"
 trap 'rm -rf "$work_dir"' EXIT
+
+GENERATED_INCLUDE="$work_dir/generated"
+mkdir -p "$GENERATED_INCLUDE"
+
+# Same substitutions VICE's configure makes for an Apple Silicon build.
+sed \
+    -e 's/@RESID_INLINING@/1/' \
+    -e 's/@RESID_INLINE@/inline/' \
+    -e 's/@RESID_BRANCH_HINTS@/1/' \
+    -e 's/@NEW_8580_FILTER@/1/' \
+    -e 's/@HAVE_BOOL@/1/' \
+    -e 's/@HAVE_BUILTIN_EXPECT@/1/' \
+    -e 's/@HAVE_LOG1P@/1/' \
+    "$RESID_SRC/siddefs.h.in" >"$GENERATED_INCLUDE/siddefs.h"
+
+# wave*.h are BUILT_SOURCES: samp2src.pl turns each .dat sample table into a header.
+for dat in "$RESID_SRC"/wave*.dat; do
+    base="$(basename "$dat" .dat)"
+    perl "$RESID_SRC/samp2src.pl" "$base" "$dat" "$GENERATED_INCLUDE/$base.h"
+done
+
+filter_src="filter8580new.cc"   # matches NEW_8580_FILTER above
 
 cat >"$work_dir/main.cc" <<'EOF'
 #include "sid.h"
