@@ -1,0 +1,28 @@
+# Nightly Doxygen HTML documentation generation.
+#
+# Ported from .github/workflows/run-doxygen.yml (WAL-45 — CEO Woodpecker-only
+# directive; GitHub Actions is fully retired, crons included).
+#
+# Woodpecker owns the schedule. Register a cron named "doxygen" on this repo
+# (Woodpecker -> Settings -> Crons) with schedule "0 4 * * *" (daily 04:00 UTC,
+# matching the original). The pipeline only references the cron by name.
+#
+# The upstream run-doxygen.yml posted build failures to VICE's #vice-dev IRC
+# channel (irc-message.sh / IRC_PASS). That targets upstream infra, not WHI's
+# fork — dropped here in favour of Woodpecker's native pipeline notifications.
+when:
+  - event: cron
+    cron: doxygen
+  - event: manual
+
+labels:
+  platform: linux/amd64
+
+steps:
+  - name: mkdoxy
+    image: ubuntu:24.04
+    commands:
+      - apt-get update
+      - DEBIAN_FRONTEND=noninteractive apt-get install -y doxygen
+      - cd vice/doc
+      - ./mkdoxy.sh
