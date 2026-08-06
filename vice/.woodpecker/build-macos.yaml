@@ -1,0 +1,57 @@
+# vice-core dual-flag CI matrix — macOS combo (vice-macos flags).
+# Builds --enable-macosui on a native darwin/arm64 runner (local backend, no image).
+# Mirrors barryw/vice-macos macos/scripts/prepare-vicemac-runtime.sh, adapted for a
+# repo whose ROOT is the VICE source tree. The OTHER half of the both-green gate.
+#
+# Phase-A boundary: --enable-mcp-server is NOT passed here, so libmicrohttpd and the
+# network.server entitlement never enter the macOS combo. The signed/notarized Mac
+# bundle is unaffected by core convergence in Phase A.
+when:
+  - event: [push, pull_request, manual]
+    branch: main
+
+labels:
+  platform: darwin/arm64
+
+steps:
+  - name: install-deps
+    image: bash
+    commands:
+      - brew update
+      - brew install autoconf automake bison pkg-config dos2unix xa
+
+  - name: build-macosui
+    image: bash
+    environment:
+      ENGINE_DEPLOYMENT_TARGET: "12.0"
+    commands:
+      # Regenerate autotools output from source; bison lives in a keg on macOS.
+      - export PATH="$$(brew --prefix bison)/bin:$$PATH"
+      - rm -rf build-macos && rm -f src/config.h
+      - find . -name config.status -exec rm -f {} +
+      - ./src/buildtools/genvicedate_h.sh
+      - ./autogen.sh
+      - sleep 1 && find . -name aclocal.m4 -exec touch {} +
+      - sleep 1 && find . -name configure -exec touch {} + && find . -name config.h.in -exec touch {} +
+      - find . -name Makefile.in -exec touch {} +
+      # Regenerate the bison parser into the SOURCE tree (repo root) BEFORE the
+      # out-of-tree build dir exists — the out-of-tree Makefiles resolve
+      # src/monitor/mon_parse.c via VPATH. (This mirrors build-engine.yaml, which
+      # runs bison at the root; running it after `cd build-macos` looked for the
+      # .y grammar under build-macos/ and failed "cannot open".)
+      - bison -d -o src/monitor/mon_parse.c src/monitor/mon_parse.y
+      - mkdir -p build-macos && cd build-macos
+      - >-
+        ../configure --enable-option-checking=fatal
+        --enable-macosui --enable-macos-minimum-version=$${ENGINE_DEPLOYMENT_TARGET}
+        --disable-pdf-docs --disable-html-docs
+        --without-pulse --without-alsa --without-oss
+      # Prove the CoreAudio sound driver + native arch backend configured & compile.
+      # (grep path is relative to the build-macos/ out-of-tree dir.)
+      - grep -Eq '^SOUND_DRIVERS = .*soundcoreaudio\.o' src/arch/shared/sounddrv/Makefile || (echo "CoreAudio driver not enabled by configure" && exit 1)
+      - make -C src gcr.o V=1
+      - make -C src/drive && make -C src/vdrive && make -C src/fsdevice
+      - make -C src/userport && make -C src/core/rtc
+      - make -C src/arch/macos V=1
+      - make -C src/lib/linenoise-ng && make -C src/lib/md5
+      - echo "macOS combo (--enable-macosui, no mcp-server) built green"

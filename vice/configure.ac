@@ -140,6 +140,9 @@ VICE_ARG_ENABLE_LIST(experimental-devices,  [  --enable-experimental-devices    
 dnl Needed for WIC64
 VICE_ARG_WITH_LIST(libcurl,                 [  --without-libcurl       disable libcurl support [[default=no]]])
 
+dnl Needed for MCP server
+VICE_ARG_ENABLE_LIST(mcp-server,            [  --enable-mcp-server     enable MCP server support [[default=no]]])
+
 dnl
 dnl UI options
 dnl
@@ -453,6 +456,7 @@ HAVE_IOSID_SUPPORT="no "
 HAVE_IPV6_SUPPORT="no "
 HAVE_LIBIEEE1284_SUPPORT="no "
 HAVE_LIGHTPEN_SUPPORT="no "
+HAVE_MCP_SERVER="no "
 HAVE_MIDI_SUPPORT="no "
 HAVE_MOUSE_SUPPORT="no "
 HAVE_NETWORK_SUPPORT="no "
@@ -2232,6 +2236,53 @@ if test x"$with_libcurl" != "xno"; then
   AC_DEFINE(HAVE_LIBCURL, , [libcurl support])
 fi
 
+dnl ----- MCP Server Support -----
+dnl MCP server requires libmicrohttpd and pthreads (available on all target platforms).
+dnl On POSIX: uses native socket headers. On Windows (MinGW): uses winsock2.
+if test x"$enable_mcp_server" = "xyes"; then
+  if test x"$is_unix_x11" = "xyes" -o x"$is_unix_macosx" = "xyes"; then
+    dnl Check for required POSIX headers
+    MCP_HEADERS_PRESENT=yes
+    AC_CHECK_HEADERS(pthread.h sys/socket.h netinet/in.h arpa/inet.h,,
+                     [MCP_HEADERS_PRESENT=no],)
+    if test x"$MCP_HEADERS_PRESENT" = "xno"; then
+      AC_MSG_ERROR([MCP server support requested, but required POSIX headers were not found.])
+    fi
+
+    PKG_CHECK_MODULES(LIBMICROHTTPD, [libmicrohttpd >= 0.9.0], [have_libmicrohttpd=yes], [have_libmicrohttpd=no])
+    if test x"$have_libmicrohttpd" = "xno"; then
+      AC_MSG_ERROR([MCP server support requested, but libmicrohttpd was not found.])
+    fi
+    HAVE_MCP_SERVER="yes"
+    VICE_CFLAGS="$VICE_CFLAGS $LIBMICROHTTPD_CFLAGS"
+    VICE_LDFLAGS="$VICE_LDFLAGS $LIBMICROHTTPD_LDFLAGS"
+    LIBS="$LIBS $LIBMICROHTTPD_LIBS"
+    AC_DEFINE(HAVE_MCP_SERVER, , [MCP server support])
+  elif test x"$is_win32" = "xyes" -o x"$is_win32_gtk3" = "xyes"; then
+    dnl Windows (MinGW-w64): pthreads via winpthreads, sockets via winsock2
+    MCP_HEADERS_PRESENT=yes
+    AC_CHECK_HEADERS(pthread.h winsock2.h ws2tcpip.h,,
+                     [MCP_HEADERS_PRESENT=no],)
+    if test x"$MCP_HEADERS_PRESENT" = "xno"; then
+      AC_MSG_ERROR([MCP server support requested, but required headers (pthread.h, winsock2.h, ws2tcpip.h) were not found.])
+    fi
+
+    PKG_CHECK_MODULES(LIBMICROHTTPD, [libmicrohttpd >= 0.9.0], [have_libmicrohttpd=yes], [have_libmicrohttpd=no])
+    if test x"$have_libmicrohttpd" = "xno"; then
+      AC_MSG_ERROR([MCP server support requested, but libmicrohttpd was not found.])
+    fi
+    HAVE_MCP_SERVER="yes"
+    VICE_CFLAGS="$VICE_CFLAGS $LIBMICROHTTPD_CFLAGS"
+    VICE_LDFLAGS="$VICE_LDFLAGS $LIBMICROHTTPD_LDFLAGS"
+    LIBS="$LIBS $LIBMICROHTTPD_LIBS -lws2_32"
+    AC_DEFINE(HAVE_MCP_SERVER, , [MCP server support])
+  else
+    AC_MSG_WARN([MCP server support is not available on this platform.])
+    HAVE_MCP_SERVER="no "
+  fi
+fi
+AM_CONDITIONAL(HAVE_MCP_SERVER, test x"$HAVE_MCP_SERVER" = "xyes")
+
 dnl ----- Netplay Support -----
 NETPLAY_LIBS=
 old_LIBS="$LIBS"
@@ -3571,6 +3622,7 @@ AC_OUTPUT([Makefile
            src/lib/libusbsiddrv/Makefile
            src/lib/libzmbv/Makefile
            src/lib/md5/Makefile
+           src/mcp/Makefile
            src/monitor/Makefile
            src/parallel/Makefile
            src/pet/Makefile
@@ -3804,6 +3856,7 @@ echo "RS232 network support            : $HAVE_RS232NET_SUPPORT"
 echo "IPv6 network support             : $HAVE_IPV6_SUPPORT (--enable/disable-ipv6)"
 echo "Network capture/injection support: $HAVE_RAWNET_SUPPORT (--enable/disable-ethernet)"
 echo "libcurl support                  : $HAVE_LIBCURL_SUPPORT (--with/without-libcurl)"
+echo "MCP server support               : $HAVE_MCP_SERVER (--enable/disable-mcp-server)"
 
 echo ""
 echo "DRIVE"

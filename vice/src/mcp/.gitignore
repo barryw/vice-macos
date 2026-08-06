@@ -1,0 +1,6 @@
+*.o
+*.a
+*.Po
+.deps/
+!tests/Makefile
+tests/test_mcp_tools

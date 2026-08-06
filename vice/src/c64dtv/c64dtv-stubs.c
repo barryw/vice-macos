@@ -333,3 +333,7 @@ int parallel_cable_cpu_resources_init(void)
 {
     return -1;
 }
+
+void ds1307_sync_system_time(rtc_ds1307_t *context)
+{
+}

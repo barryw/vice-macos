@@ -100,10 +100,18 @@ void maincpu_set_pc(int);
 void maincpu_set_a(int);
 void maincpu_set_x(int);
 void maincpu_set_y(int);
+#ifdef HAVE_MCP_SERVER
+void maincpu_set_sp(int);
+#endif
 void maincpu_set_sign(int);
 void maincpu_set_zero(int);
 void maincpu_set_carry(int);
 void maincpu_set_interrupt(int);
+#ifdef HAVE_MCP_SERVER
+void maincpu_set_overflow(int);
+void maincpu_set_break(int);
+void maincpu_set_decimal(int);
+#endif
 unsigned int maincpu_get_pc(void);
 unsigned int maincpu_get_a(void);
 unsigned int maincpu_get_x(void);

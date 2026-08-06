@@ -1,0 +1,64 @@
+# vice-core dual-flag CI matrix — ENGINE combo (vice-mcp flags).
+# Builds --enable-gtk3ui --enable-mcp-server (+ headless) on Linux.
+# Mirrors barryw/vice-mcp .woodpecker/build-linux.yaml, adapted for a repo whose
+# ROOT is the VICE source tree (no `cd vice`). One half of the both-green-before-pull
+# gate: a downstream `git subtree pull` may only land after BOTH combos are green.
+when:
+  - event: [push, pull_request, manual]
+    branch: main
+
+labels:
+  platform: linux/amd64
+
+steps:
+  - name: build-engine
+    image: debian:12
+    backend_options:
+      kubernetes:
+        node_selector:
+          ci-role: linux
+    commands:
+      - apt-get update
+      - >-
+        apt-get install -y --no-install-recommends
+        autoconf automake build-essential ca-certificates bison byacc dos2unix
+        file flex git libasound2-dev libcap-dev libcurl4-openssl-dev libevdev-dev
+        libflac-dev libgif-dev libglew-dev libgtk-3-dev libieee1284-3-dev
+        libmicrohttpd-dev libmp3lame-dev libmpg123-dev libpcap-dev libpng-dev
+        libpulse-dev libusb-1.0-0-dev libvorbis-dev pkg-config portaudio19-dev
+        xa65 zip
+      # Regenerate all autotools output from source (CI automake may differ from
+      # upstream's), then regenerate the bison parser to avoid stale generated .c.
+      - rm -rf build-gui build-headless && rm -f src/config.h
+      - find . -name config.status -exec rm -f {} +
+      - ./src/buildtools/genvicedate_h.sh
+      - ./autogen.sh
+      - sleep 1 && find . -name aclocal.m4 -exec touch {} +
+      - sleep 1 && find . -name configure -exec touch {} + && find . -name config.h.in -exec touch {} +
+      - find . -name Makefile.in -exec touch {} +
+      - bison -d -o src/monitor/mon_parse.c src/monitor/mon_parse.y
+      # --- GUI + MCP combo ---
+      - mkdir -p build-gui && cd build-gui
+      - >-
+        ../configure --enable-option-checking=fatal
+        --enable-gtk3ui --enable-mcp-server --enable-cpuhistory
+        --enable-ethernet --enable-midi --enable-parsid --enable-catweasel
+        --disable-arch --disable-pdf-docs --disable-html-docs
+        --with-alsa --with-fastsid --with-flac --with-gif --with-lame
+        --with-libcurl --with-libieee1284 --with-mpg123 --with-png
+        --with-portaudio --with-pulse --with-resid --with-vorbis
+      - make -j$$(nproc) -s
+      - cd ..
+      # --- Headless + MCP combo ---
+      - mkdir -p build-headless && cd build-headless
+      - >-
+        ../configure --enable-option-checking=fatal
+        --enable-headlessui --enable-mcp-server --enable-cpuhistory
+        --enable-ethernet --enable-midi --enable-parsid --enable-catweasel
+        --disable-arch --disable-pdf-docs --disable-html-docs
+        --with-alsa --with-fastsid --with-flac --with-gif --with-lame
+        --with-libcurl --with-libieee1284 --with-mpg123 --with-png
+        --with-portaudio --with-pulse --with-resid --with-vorbis
+      - make -j$$(nproc) -s
+      - cd ..
+      - echo "ENGINE combo (gtk3ui + mcp-server, + headless) built green"

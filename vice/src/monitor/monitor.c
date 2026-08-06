@@ -76,6 +76,45 @@
 #include "monitor_binary.h"
 #include "montypes.h"
 
+#ifdef HAVE_MCP_SERVER
+/* MCP step mode flag - when set, monitor_check_icount() will use
+ * ui_pause_enable() instead of monitor_startup() when stepping completes.
+ * This prevents the monitor window from opening during MCP-controlled
+ * stepping operations. Defined here (not in libmcp) to avoid a circular
+ * link dependency between libmonitor.a and libmcp.a on GNU ld. */
+static int mcp_step_active = 0;
+
+int mcp_is_step_active(void)
+{
+    return mcp_step_active;
+}
+
+void mcp_clear_step_active(void)
+{
+    mcp_step_active = 0;
+}
+
+void mcp_set_step_active(int active)
+{
+    mcp_step_active = active;
+}
+
+/* When a checkpoint (breakpoint/watchpoint) fires and MCP is active,
+ * suppress the interactive monitor and pause instead. */
+static int mcp_checkpoint_active = 0;
+
+#include "resources.h"
+
+static void mcp_mark_checkpoint_if_active(void)
+{
+    int mcp_enabled = 0;
+    resources_get_int("MCPServerEnabled", &mcp_enabled);
+    if (mcp_enabled) {
+        mcp_checkpoint_active = 1;
+    }
+}
+#endif
+
 #include "userport_io_sim.h"
 #include "joyport_io_sim.h"
 #include "joyport.h"
@@ -1480,6 +1519,15 @@ void mon_stopwatch_reset(void)
     stopwatch_start_time[default_memspace] = *vice_interface->clk;
     mon_out("Stopwatch reset to 0.\n");
 }
+
+#ifdef HAVE_MCP_SERVER
+unsigned long mon_stopwatch_get_elapsed(void)
+{
+    monitor_interface_t *vice_interface;
+    vice_interface = mon_interfaces[default_memspace];
+    return (unsigned long)(*vice_interface->clk - stopwatch_start_time[default_memspace]);
+}
+#endif
 
 /* Local helper functions for building the lists */
 static monitor_cpu_type_t *find_monitor_cpu_type(CPU_TYPE_t cputype)
@@ -2925,6 +2973,16 @@ void monitor_check_icount(uint16_t pc)
         interrupt_monitor_trap_off(mon_interfaces[default_memspace]->int_status);
     }
 
+#ifdef HAVE_MCP_SERVER
+    /* If MCP step mode is active, use ui_pause_enable() instead of opening
+     * the monitor window. This allows MCP clients to step without UI popups. */
+    if (mcp_is_step_active()) {
+        mcp_clear_step_active();
+        ui_pause_enable();
+        return;
+    }
+#endif
+
     monitor_startup(e_default_space);
 }
 
@@ -2948,7 +3006,15 @@ void monitor_check_icount_interrupt(void)
  */
 int monitor_check_breakpoints(MEMSPACE mem, uint16_t addr)
 {
+#ifdef HAVE_MCP_SERVER
+    int hit = mon_breakpoint_check_checkpoint(mem, addr, 0, e_exec); /* FIXME */
+    if (hit) {
+        mcp_mark_checkpoint_if_active();
+    }
+    return hit;
+#else
     return mon_breakpoint_check_checkpoint(mem, addr, 0, e_exec); /* FIXME */
+#endif
 }
 
 /* called by macro DO_INTERRUPT() in 6510(dtv)core.c */
@@ -2958,10 +3024,16 @@ void monitor_check_watchpoints(unsigned int lastpc, unsigned int pc)
 
     if (watch_load_occurred) {
         if (watchpoints_check_loads(e_comp_space, lastpc, pc)) {
+#ifdef HAVE_MCP_SERVER
+            mcp_mark_checkpoint_if_active();
+#endif
             monitor_startup(e_comp_space);
         }
         for (dnr = 0; dnr < NUM_DISK_UNITS; dnr++) {
             if (watchpoints_check_loads(monitor_diskspace_mem(dnr), lastpc, pc)) {
+#ifdef HAVE_MCP_SERVER
+                mcp_mark_checkpoint_if_active();
+#endif
                 monitor_startup(monitor_diskspace_mem(dnr));
             }
         }
@@ -2970,10 +3042,16 @@ void monitor_check_watchpoints(unsigned int lastpc, unsigned int pc)
 
     if (watch_store_occurred) {
         if (watchpoints_check_stores(e_comp_space, lastpc, pc)) {
+#ifdef HAVE_MCP_SERVER
+            mcp_mark_checkpoint_if_active();
+#endif
             monitor_startup(e_comp_space);
         }
         for (dnr = 0; dnr < NUM_DISK_UNITS; dnr++) {
             if (watchpoints_check_stores(monitor_diskspace_mem(dnr), lastpc, pc)) {
+#ifdef HAVE_MCP_SERVER
+                mcp_mark_checkpoint_if_active();
+#endif
                 monitor_startup(monitor_diskspace_mem(dnr));
             }
         }
@@ -3321,6 +3399,14 @@ void monitor_startup(MEMSPACE mem)
          */
         return;
     }
+
+#ifdef HAVE_MCP_SERVER
+    if (mcp_checkpoint_active) {
+        mcp_checkpoint_active = 0;
+        ui_pause_enable();
+        return;
+    }
+#endif
 
     if (ui_pause_active()) {
         should_pause_on_exit_mon = true;
